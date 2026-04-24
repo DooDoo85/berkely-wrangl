@@ -42,21 +42,25 @@ export default function Home() {
 
   async function loadData() {
     const today = new Date().toISOString().slice(0,10)
-    const [custRes, ordersRes, activeRes, printedRes, followUpRes, recentRes] = await Promise.all([
+    const [custRes, ordersRes, activeRes, printedRes, lowStockRes, containersRes, followUpRes, recentRes] = await Promise.all([
       supabase.from('customers').select('id',{count:'exact',head:true}).eq('active',true),
       supabase.from('orders').select('id',{count:'exact',head:true}),
       supabase.from('orders').select('id',{count:'exact',head:true}).in('status',['submitted','printed','in_production']),
       supabase.from('orders').select('id',{count:'exact',head:true}).eq('status','printed'),
+      supabase.from('parts').select('id',{count:'exact',head:true}).eq('qty_on_hand',0).eq('active',true),
+      supabase.from('containers').select('id',{count:'exact',head:true}).eq('status','in_transit').eq('active',true),
       supabase.from('activities').select('*, customers(account_name), orders(order_number)')
         .lte('follow_up_date', today).eq('completed', false).order('follow_up_date').limit(5),
       supabase.from('activities').select('*, customers(account_name), orders(order_number), profiles(full_name)')
-        .order('activity_date',{ascending:false}).limit(6),
+        .order('activity_date',{ascending:false}).limit(5),
     ])
     setStats({
       customers:    custRes.count    || 0,
       totalOrders:  ordersRes.count  || 0,
       activeOrders: activeRes.count  || 0,
       printed:      printedRes.count || 0,
+      outOfStock:   lowStockRes.count || 0,
+      containers:   containersRes.count || 0,
     })
     setFollowUps(followUpRes.data || [])
     setRecent(recentRes.data || [])
@@ -72,10 +76,10 @@ export default function Home() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Customers"    value={stats.customers}    sub="Active accounts"  loading={loading} onClick={() => navigate('/customers')} />
-        <StatCard label="Total Orders" value={stats.totalOrders}  sub="Last 90 days"     loading={loading} onClick={() => navigate('/orders')} />
-        <StatCard label="Active Orders" value={stats.activeOrders} sub="In progress"    accent="text-amber-600" loading={loading} onClick={() => navigate('/orders')} />
-        <StatCard label="Printed"      value={stats.printed}      sub="In production"   accent="text-purple-600" loading={loading} onClick={() => navigate('/orders')} />
+        <StatCard label="Customers"    value={stats.customers}    sub="Active accounts"   loading={loading} onClick={() => navigate('/customers')} />
+        <StatCard label="Active Orders" value={stats.activeOrders} sub="In progress"      accent="text-amber-600" loading={loading} onClick={() => navigate('/orders')} />
+        <StatCard label="Out of Stock"  value={stats.outOfStock}   sub="Parts at zero qty" accent={stats.outOfStock > 0 ? "text-red-500" : "text-emerald-600"} loading={loading} onClick={() => navigate('/inventory')} />
+        <StatCard label="Containers"    value={stats.containers}   sub="In transit"        accent="text-blue-600" loading={loading} onClick={() => navigate('/inventory/containers')} />
       </div>
 
       <div className="grid grid-cols-3 gap-5 mb-6">
@@ -83,15 +87,14 @@ export default function Home() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="text-xs font-bold tracking-widest text-stone-400 uppercase">Follow-ups Due</div>
-            <button onClick={() => navigate('/activities')} className="text-xs text-brand-gold hover:text-amber-600 font-semibold">View all</button>
+            <button onClick={() => navigate('/activities')} className="text-xs text-brand-gold font-semibold">View all</button>
           </div>
           {followUps.length === 0 ? (
             <div className="text-center py-4 text-stone-400 text-sm">No follow-ups due 🎉</div>
           ) : (
             <div className="space-y-2">
               {followUps.map(a => (
-                <div key={a.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors"
-                  onClick={() => navigate('/activities')}>
+                <div key={a.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-stone-50 cursor-pointer" onClick={() => navigate('/activities')}>
                   <span className="text-sm mt-0.5">{TYPE_ICONS[a.activity_type]}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-stone-700 truncate">{a.subject || a.body?.slice(0,40) || 'Follow up'}</div>
@@ -110,7 +113,7 @@ export default function Home() {
         <div className="col-span-2 card p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="text-xs font-bold tracking-widest text-stone-400 uppercase">Recent Activity</div>
-            <button onClick={() => navigate('/activities')} className="text-xs text-brand-gold hover:text-amber-600 font-semibold">View all →</button>
+            <button onClick={() => navigate('/activities')} className="text-xs text-brand-gold font-semibold">View all →</button>
           </div>
           {recent.length === 0 ? (
             <div className="text-center py-6 text-stone-400 text-sm">No activities yet — log your first one!</div>
@@ -141,6 +144,7 @@ export default function Home() {
           <button onClick={() => navigate('/activities')} className="btn-primary text-sm">+ Log Activity</button>
           <button onClick={() => navigate('/orders/new')} className="btn-ghost text-sm">+ New Order</button>
           <button onClick={() => navigate('/customers/new')} className="btn-ghost text-sm">+ New Customer</button>
+          <button onClick={() => navigate('/inventory')} className="btn-ghost text-sm">View Inventory</button>
         </div>
       </div>
     </div>
