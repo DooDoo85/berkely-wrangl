@@ -19,6 +19,11 @@ import ReceiveStock from './pages/ops/ReceiveStock'
 import CommitMaterial from './pages/ops/CommitMaterial'
 import AdjustInventory from './pages/ops/AdjustInventory'
 import TransactionLog from './pages/ops/TransactionLog'
+import ReportsHub from './pages/reports/ReportsHub'
+import ProductionDashboard from './pages/reports/ProductionDashboard'
+import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
+import InventoryHealth from './pages/reports/InventoryHealth'
+import RepActivity from './pages/reports/RepActivity'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -60,10 +65,14 @@ function AppRoutes() {
         <Route path="ops/commit" element={<CommitMaterial />} />
         <Route path="ops/adjust" element={<AdjustInventory />} />
         <Route path="ops/log" element={<TransactionLog />} />
+        <Route path="reports" element={<ReportsHub />} />
+        <Route path="reports/production" element={<ProductionDashboard />} />
+        <Route path="reports/orders" element={<OrderStatusDashboard />} />
+        <Route path="reports/inventory" element={<InventoryHealth />} />
+        <Route path="reports/reps" element={<RepActivity />} />
         <Route path="pipeline" element={<Placeholder title="Pipeline" description="Sales pipeline with rep KPIs and deal tracking." icon="▤" />} />
         <Route path="tracker" element={<Placeholder title="Order Tracker" description="Track active orders, flag holds, and monitor production." icon="◉" />} />
         <Route path="freight" element={<Placeholder title="Freight" description="Freight management and container tracking." icon="▷" />} />
-        <Route path="reports" element={<Placeholder title="Reports" description="Executive dashboards, production reports, and sales analytics." icon="▣" />} />
         <Route path="settings" element={<Placeholder title="Settings" description="User management, roles, and system configuration." icon="◌" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
