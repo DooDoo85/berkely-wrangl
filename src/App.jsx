@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
+import ExecutiveHome from './pages/dashboard/ExecutiveHome'
 import CustomerList from './pages/customers/CustomerList'
 import CustomerDetail from './pages/customers/CustomerDetail'
 import CustomerForm from './pages/customers/CustomerForm'
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/signin" element={<SignIn />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Home />} />
+        <Route path="dashboard" element={<ExecutiveHome />} />
         <Route path="customers" element={<CustomerList />} />
         <Route path="customers/new" element={<CustomerForm />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
