@@ -22,6 +22,7 @@ const NAV = [
       { to: '/orders',    icon: '≡',  label: 'Orders' },
       { to: '/tracker',   icon: '◉',  label: 'Order Tracker' },
       { to: '/inventory', icon: '▦',  label: 'Inventory' },
+      { to: '/ops',       icon: '⚙️', label: 'Ops / Warehouse' },
       { to: '/freight',   icon: '▷',  label: 'Freight' },
     ]
   },
