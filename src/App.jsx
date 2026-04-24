@@ -11,6 +11,9 @@ import OrderList from './pages/orders/OrderList'
 import OrderDetail from './pages/orders/OrderDetail'
 import OrderForm from './pages/orders/OrderForm'
 import ActivityLog from './pages/activities/ActivityLog'
+import InventoryList from './pages/inventory/InventoryList'
+import PartDetail from './pages/inventory/PartDetail'
+import { ContainerList, ContainerDetail } from './pages/inventory/Containers'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -43,9 +46,12 @@ function AppRoutes() {
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/edit" element={<OrderForm />} />
         <Route path="activities" element={<ActivityLog />} />
+        <Route path="inventory" element={<InventoryList />} />
+        <Route path="inventory/containers" element={<ContainerList />} />
+        <Route path="inventory/containers/:id" element={<ContainerDetail />} />
+        <Route path="inventory/:id" element={<PartDetail />} />
         <Route path="pipeline" element={<Placeholder title="Pipeline" description="Sales pipeline with rep KPIs and deal tracking." icon="▤" />} />
         <Route path="tracker" element={<Placeholder title="Order Tracker" description="Track active orders, flag holds, and monitor production." icon="◉" />} />
-        <Route path="inventory" element={<Placeholder title="Inventory" description="Parts, fabric rolls, faux wood blinds, and stock tracking." icon="▦" />} />
         <Route path="freight" element={<Placeholder title="Freight" description="Freight management and container tracking." icon="▷" />} />
         <Route path="reports" element={<Placeholder title="Reports" description="Executive dashboards, production reports, and sales analytics." icon="▣" />} />
         <Route path="settings" element={<Placeholder title="Settings" description="User management, roles, and system configuration." icon="◌" />} />
