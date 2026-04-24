@@ -170,6 +170,25 @@ export default function OrderForm() {
         await supabase.from('order_items').insert(validItems)
       }
 
+      // Send to ePIC if status is submitted
+      if (form.status === 'submitted') {
+        try {
+          await fetch('/.netlify/functions/send-order-to-epic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order: { ...form, order_number: isEdit ? id : orderNumber, subtotal },
+              items: validItems,
+              repEmail: null,
+              repName: form.sales_rep || '',
+            })
+          })
+        } catch (emailErr) {
+          console.warn('Email send failed:', emailErr)
+          // Don't block navigation if email fails
+        }
+      }
+
       navigate(`/orders/${orderId}`)
     } catch (err) {
       setError(err.message)
