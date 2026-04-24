@@ -14,6 +14,11 @@ import ActivityLog from './pages/activities/ActivityLog'
 import InventoryList from './pages/inventory/InventoryList'
 import PartDetail from './pages/inventory/PartDetail'
 import { ContainerList, ContainerDetail } from './pages/inventory/Containers'
+import OpsHub from './pages/ops/OpsHub'
+import ReceiveStock from './pages/ops/ReceiveStock'
+import CommitMaterial from './pages/ops/CommitMaterial'
+import AdjustInventory from './pages/ops/AdjustInventory'
+import TransactionLog from './pages/ops/TransactionLog'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -50,6 +55,11 @@ function AppRoutes() {
         <Route path="inventory/containers" element={<ContainerList />} />
         <Route path="inventory/containers/:id" element={<ContainerDetail />} />
         <Route path="inventory/:id" element={<PartDetail />} />
+        <Route path="ops" element={<OpsHub />} />
+        <Route path="ops/receive" element={<ReceiveStock />} />
+        <Route path="ops/commit" element={<CommitMaterial />} />
+        <Route path="ops/adjust" element={<AdjustInventory />} />
+        <Route path="ops/log" element={<TransactionLog />} />
         <Route path="pipeline" element={<Placeholder title="Pipeline" description="Sales pipeline with rep KPIs and deal tracking." icon="▤" />} />
         <Route path="tracker" element={<Placeholder title="Order Tracker" description="Track active orders, flag holds, and monitor production." icon="◉" />} />
         <Route path="freight" element={<Placeholder title="Freight" description="Freight management and container tracking." icon="▷" />} />
