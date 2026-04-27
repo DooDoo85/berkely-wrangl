@@ -15,23 +15,6 @@ function startOfWeek() {
   return d.toISOString();
 }
 
-function KpiCard({ label, value, delta, status = "neutral" }) {
-  const styles = {
-    green:   { bg: "bg-emerald-50",  label: "text-emerald-700", value: "text-emerald-900",  delta: "text-emerald-600"  },
-    yellow:  { bg: "bg-amber-50",    label: "text-amber-700",   value: "text-amber-900",    delta: "text-amber-600"    },
-    red:     { bg: "bg-red-50",      label: "text-red-700",     value: "text-red-900",      delta: "text-red-600"      },
-    neutral: { bg: "bg-gray-50",     label: "text-gray-500",    value: "text-gray-900",     delta: "text-gray-400"     },
-  };
-  const s = styles[status];
-  return (
-    <div className={`${s.bg} rounded-lg p-4`}>
-      <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${s.label}`}>{label}</p>
-      <p className={`text-3xl font-medium ${s.value}`}>{value ?? "—"}</p>
-      {delta && <p className={`text-xs mt-1 ${s.delta}`}>{delta}</p>}
-    </div>
-  );
-}
-
 const STATUS_COLORS = {
   submitted:     { bg: "bg-blue-100",   text: "text-blue-800"   },
   printed:       { bg: "bg-purple-100", text: "text-purple-800" },
@@ -178,46 +161,17 @@ export default function RepHome() {
         </button>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <KpiCard
-          label="Submitted this week"
-          value={loading ? "—" : data.submittedWTD}
-          status="neutral"
-          delta="new orders"
-        />
-        <KpiCard
-          label="In production"
-          value={loading ? "—" : data.inProduction}
-          status="neutral"
-          delta="being built"
-        />
-        <KpiCard
-          label="Follow-ups due today"
-          value={loading ? "—" : data.followUpsDueToday}
-          status={data.followUpsDueToday > 0 ? "yellow" : "green"}
-          delta={data.overdueFollowUps > 0 ? `${data.overdueFollowUps} overdue` : "All clear"}
-        />
-        <KpiCard
-          label="Pipeline value"
-          value="—"
-          status="neutral"
-          delta="submitted + in production"
-        />
-      </div>
-
-      {/* orders + follow-ups */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* my orders */}
-        <div className="bg-white border border-gray-100 rounded-xl p-4">
+      {/* my active orders — full width */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-700">My orders in progress</p>
+            <p className="text-sm font-medium text-gray-700">My active orders</p>
             <button onClick={() => navigate("/orders")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
           </div>
           {loading && <p className="text-xs text-gray-400 py-4 text-center">Loading…</p>}
           {!loading && data.myOrders.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">No active orders</p>
+            <p className="text-xs text-gray-400 py-4 text-center">No active orders — time to submit one!</p>
           )}
+          <div className="grid grid-cols-2 gap-2">
           {data.myOrders.map((o) => {
             const days = daysSince(o.updated_at);
             const stuck = days > 5;
@@ -226,7 +180,7 @@ export default function RepHome() {
               <div
                 key={o.id}
                 onClick={() => navigate(`/orders/${o.id}`)}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1"
+                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2"
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{o.order_number ?? o.id}</p>
@@ -241,10 +195,11 @@ export default function RepHome() {
               </div>
             );
           })}
+          </div>
         </div>
 
-        {/* follow-ups */}
-        <div className="bg-white border border-gray-100 rounded-xl p-4">
+      {/* follow-ups — full width */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-gray-700">Follow-ups due</p>
             <button onClick={() => navigate("/activities")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
@@ -253,6 +208,7 @@ export default function RepHome() {
           {!loading && data.followUps.length === 0 && (
             <p className="text-xs text-gray-400 py-4 text-center">No follow-ups due 🎉</p>
           )}
+          <div className="grid grid-cols-2 gap-2">
           {data.followUps.map((f) => {
             const today = new Date().toISOString().slice(0, 10);
             const overdue = f.follow_up_date < today;
@@ -260,7 +216,7 @@ export default function RepHome() {
               <div
                 key={f.id}
                 onClick={() => navigate("/activities")}
-                className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1"
+                className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2"
               >
                 <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${overdue ? "bg-red-400" : "bg-emerald-400"}`} />
                 <div className="flex-1 min-w-0">
@@ -269,16 +225,14 @@ export default function RepHome() {
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">{f.customers?.account_name ?? "—"}</p>
                   <p className={`text-xs mt-0.5 ${overdue ? "text-red-500" : "text-gray-400"}`}>
-                    {overdue
-                      ? `Overdue · ${f.follow_up_date}`
-                      : `Due today`}
+                    {overdue ? `Overdue · ${f.follow_up_date}` : `Due today`}
                   </p>
                 </div>
               </div>
             );
           })}
+          </div>
         </div>
-      </div>
     </div>
   );
 }
