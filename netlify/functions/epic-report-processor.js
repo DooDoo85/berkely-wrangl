@@ -304,6 +304,49 @@ async function processCombinedCSV(csvText) {
   return shipped.length
 }
 
+// ROLLER SHADE WIP — full replacement of roller_wip table with latest data
+async function processRollerWIP(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  ROLLER SHADE WIP: ${rows.length} rows`)
+
+  // Delete existing rows and replace with fresh data
+  await fetch(`${SUPABASE_URL}/rest/v1/roller_wip?id=neq.00000000-0000-0000-0000-000000000000`, {
+    method:  'DELETE',
+    headers: {
+      apikey:        SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  })
+
+  const toInsert = []
+  for (const row of rows) {
+    const wo = (row.Wo || '').trim()
+    if (!wo) continue
+    toInsert.push({
+      wo,
+      order_no:       (row.OrderNo || '').trim(),
+      order_date:     row.OrderDate || null,
+      sidemark:       (row.Sidemark || '').trim(),
+      order_status:   (row.OrderStatus || '').trim(),
+      days_in_status: parseInt(row.DaysInStatus || 0) || 0,
+      customer:       (row.Customer || '').trim(),
+      total_units:    parseInt(row.TotalUnits || 0) || 0,
+      total_sales:    parseCurrency(row.TotalSales || 0),
+      updated_at:     new Date().toISOString(),
+    })
+  }
+
+  if (toInsert.length) await sbUpsert('roller_wip', toInsert)
+
+  const creditOK = toInsert.filter(r => r.order_status === 'CREDIT OK')
+  const printed  = toInsert.filter(r => r.order_status === 'PRINTED')
+  const creditUnits  = creditOK.reduce((s, r) => s + r.total_units, 0)
+  const printedUnits = printed.reduce((s, r) => s + r.total_units, 0)
+
+  console.log(`  WIP loaded — Credit OK: ${creditOK.length} orders / ${creditUnits} units | Printed: ${printed.length} orders / ${printedUnits} units`)
+  return toInsert.length
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 exports.handler = async function(event, context) {
   console.log('\n🤠 Berkely Wrangl — ePIC Report Processor')
@@ -397,6 +440,13 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCombinedCSV(csvText)
           await markProcessed(messageId, 'combined_report', count)
+          results.processed++
+
+        } else if (subject.includes('ROLLER SHADE WIP')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processRollerWIP(csvText)
+          await markProcessed(messageId, 'roller_wip', count)
           results.processed++
 
         } else {
