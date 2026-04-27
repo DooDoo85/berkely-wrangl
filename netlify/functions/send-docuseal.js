@@ -8,9 +8,7 @@ const TEMPLATE_ID       = 3190649
 const DOCUSEAL_API_URL  = 'https://api.docuseal.com/submissions'
 
 const CC_EMAILS = [
-  'parker@berkelydistribution.com',
-  'customerservice@berkelydistribution.com',
-  'abigail@berkelydistribution.com',
+  'douglasd1885@gmail.com',
 ]
 
 exports.handler = async function (event, context) {
