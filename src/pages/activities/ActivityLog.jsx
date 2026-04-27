@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
 import ActivityForm from './ActivityForm'
 
 const TYPE_STYLES = {
@@ -9,6 +10,58 @@ const TYPE_STYLES = {
   note:        { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝' },
   meeting:     { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝' },
   sample_book: { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  icon: '📚' },
+}
+
+const WEEKLY_TARGETS = {
+  meetings:     10,
+  new_customers: 5,
+  sample_books:  5,
+  new_orders:    0, // no fixed target — just show count
+}
+
+function startOfWeek() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1))
+  return d.toISOString()
+}
+
+function KpiScorecard({ label, icon, actual, target, loading }) {
+  const pct      = target > 0 ? Math.min(Math.round((actual / target) * 100), 100) : 100
+  const onTrack  = target === 0 || actual >= target
+  const behind   = target > 0 && actual >= target * 0.5 && actual < target
+  const critical = target > 0 && actual < target * 0.5
+
+  const valueColor = onTrack ? 'text-emerald-600' : behind ? 'text-amber-500' : 'text-red-500'
+  const barColor   = onTrack ? '#10b981'           : behind ? '#f59e0b'        : '#ef4444'
+  const bgColor    = onTrack ? 'bg-emerald-50'     : behind ? 'bg-amber-50'   : 'bg-red-50'
+  const borderColor= onTrack ? 'border-emerald-100': behind ? 'border-amber-100' : 'border-red-100'
+
+  return (
+    <div className={`${bgColor} border ${borderColor} rounded-xl p-4`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base">{icon}</span>
+          <span className="text-xs font-semibold text-stone-600">{label}</span>
+        </div>
+        <div className={`text-lg font-display font-bold ${valueColor}`}>
+          {loading ? '—' : actual}
+          {target > 0 && <span className="text-xs font-normal text-stone-400 ml-0.5">/{target}</span>}
+        </div>
+      </div>
+      {target > 0 && (
+        <div className="h-1.5 bg-white/60 rounded-full">
+          <div
+            className="h-1.5 rounded-full transition-all duration-500"
+            style={{ width: `${pct}%`, background: barColor }}
+          />
+        </div>
+      )}
+      {target === 0 && (
+        <div className="text-xs text-stone-400 mt-1">this week</div>
+      )}
+    </div>
+  )
 }
 
 function timeAgo(date) {
@@ -23,14 +76,59 @@ function timeAgo(date) {
 }
 
 export default function ActivityLog() {
-  const navigate  = useNavigate()
-  const [activities, setActivities] = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [showForm,   setShowForm]   = useState(false)
-  const [filter,     setFilter]     = useState('all')
-  const [search,     setSearch]     = useState('')
+  const navigate    = useNavigate()
+  const { profile } = useAuth()
+  const isSales     = profile?.role === 'sales'
+  const repId       = profile?.rep_id
+
+  const [activities,  setActivities]  = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [kpiLoading,  setKpiLoading]  = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [filter,      setFilter]      = useState('all')
+  const [search,      setSearch]      = useState('')
+  const [kpis,        setKpis]        = useState({ meetings: 0, sample_books: 0, new_customers: 0, new_orders: 0 })
 
   useEffect(() => { fetchActivities() }, [filter])
+
+  useEffect(() => {
+    if (isSales && repId) fetchKpis()
+  }, [isSales, repId])
+
+  async function fetchKpis() {
+    setKpiLoading(true)
+    try {
+      const weekStart = startOfWeek()
+      const weekStartDate = weekStart.slice(0, 10)
+
+      const [actsRes, customersRes, ordersRes] = await Promise.all([
+        supabase.from('activities')
+          .select('activity_type, activity_date, user_id, profiles(rep_id)')
+          .gte('activity_date', weekStart),
+        supabase.from('customers')
+          .select('id, created_at, sales_rep')
+          .eq('sales_rep', repId)
+          .gte('created_at', weekStart),
+        supabase.from('orders')
+          .select('id, created_at, sales_rep')
+          .eq('sales_rep', repId)
+          .gte('created_at', weekStart),
+      ])
+
+      const acts = (actsRes.data || []).filter(a => a.profiles?.rep_id === repId)
+
+      setKpis({
+        meetings:      acts.filter(a => a.activity_type === 'meeting').length,
+        sample_books:  acts.filter(a => a.activity_type === 'sample_book').length,
+        new_customers: (customersRes.data || []).length,
+        new_orders:    (ordersRes.data || []).length,
+      })
+    } catch (err) {
+      console.error('KPI fetch error:', err)
+    } finally {
+      setKpiLoading(false)
+    }
+  }
 
   async function fetchActivities() {
     setLoading(true)
@@ -83,6 +181,19 @@ export default function ActivityLog() {
               onSave={() => { setShowForm(false); fetchActivities() }}
               onCancel={() => setShowForm(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Weekly KPI Scorecard — sales reps only */}
+      {isSales && (
+        <div className="mb-6">
+          <div className="text-[10px] font-bold tracking-[0.12em] text-stone-400 uppercase mb-3">My week — scorecard</div>
+          <div className="grid grid-cols-4 gap-3">
+            <KpiScorecard label="Meetings"      icon="🤝" actual={kpis.meetings}      target={WEEKLY_TARGETS.meetings}      loading={kpiLoading} />
+            <KpiScorecard label="Sample Books"  icon="📚" actual={kpis.sample_books}  target={WEEKLY_TARGETS.sample_books}  loading={kpiLoading} />
+            <KpiScorecard label="New Customers" icon="👤" actual={kpis.new_customers} target={WEEKLY_TARGETS.new_customers} loading={kpiLoading} />
+            <KpiScorecard label="New Orders"    icon="📋" actual={kpis.new_orders}    target={WEEKLY_TARGETS.new_orders}    loading={kpiLoading} />
           </div>
         </div>
       )}
