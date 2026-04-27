@@ -97,7 +97,11 @@ export default function ExecutiveHome() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState(new Date());
+  const [wipModal, setWipModal] = useState(null); // 'CREDIT OK' | 'PRINTED' | null
   const [data, setData] = useState({
+    stuckOrders: [],
+    inProduction: null,
+    wip: { creditOK: [], printed: [] },
     shippedWTD: null,
     shippedMTD: null,
     inProduction: null,
@@ -159,6 +163,15 @@ export default function ExecutiveHome() {
       const avgDays = inProdOrders.length
         ? (inProdOrders.reduce((s, o) => s + daysSince(o.updated_at), 0) / inProdOrders.length).toFixed(1)
         : null;
+
+      // roller WIP
+      const { data: wipData } = await supabase
+        .from("roller_wip")
+        .select("*")
+        .order("days_in_status", { ascending: false });
+
+      const creditOK = (wipData ?? []).filter(r => r.order_status === "CREDIT OK");
+      const printed  = (wipData ?? []).filter(r => r.order_status === "PRINTED");
 
       // product line sales
       const { data: productLines } = await supabase
@@ -234,6 +247,7 @@ export default function ExecutiveHome() {
         lowStockTotal: (parts ?? []).length,
         repOrders, dailyShipped, weeklyThroughput,
         faux, roller,
+        wip: { creditOK, printed },
       });
       setRefreshedAt(new Date());
     } catch (err) {
@@ -281,21 +295,84 @@ export default function ExecutiveHome() {
         </div>
       </div>
 
-      {/* 2 KPI cards */}
+      {/* WIP Cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <KpiCard
-          label="In production"
-          value={data.inProduction}
-          status="neutral"
-          delta="across all reps"
-        />
-        <KpiCard
-          label="Stuck orders"
-          value={stuckTotal}
-          status={stuckTotal === 0 ? "green" : stuckTotal < 5 ? "yellow" : "red"}
-          delta={stuckTotal === 0 ? "All clear" : "Need attention"}
-        />
+        {[
+          { label: "Roller — Credit OK", key: "creditOK", color: "bg-blue-50 border-blue-100", valueColor: "text-blue-900", subColor: "text-blue-600" },
+          { label: "Roller — Printed",   key: "printed",  color: "bg-amber-50 border-amber-100", valueColor: "text-amber-900", subColor: "text-amber-600" },
+        ].map(card => {
+          const orders = data.wip?.[card.key] ?? [];
+          const units  = orders.reduce((s, r) => s + (r.total_units || 0), 0);
+          const sales  = orders.reduce((s, r) => s + (r.total_sales || 0), 0);
+          return (
+            <div
+              key={card.key}
+              onClick={() => setWipModal(card.key === "creditOK" ? "CREDIT OK" : "PRINTED")}
+              className={`${card.color} border rounded-xl p-5 cursor-pointer hover:shadow-md transition-all`}
+            >
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${card.subColor}`}>{card.label}</p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className={`text-3xl font-medium ${card.valueColor}`}>{loading ? "—" : units.toLocaleString()}</p>
+                  <p className={`text-xs mt-1 ${card.subColor}`}>{loading ? "" : `${orders.length} orders · $${(sales/1000).toFixed(0)}k`}</p>
+                </div>
+                <span className={`text-xs ${card.subColor}`}>View details →</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      {/* WIP Modal */}
+      {wipModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-semibold text-gray-900">Roller Shades — {wipModal}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {(data.wip?.[wipModal === "CREDIT OK" ? "creditOK" : "printed"] ?? []).length} orders ·{" "}
+                  {(data.wip?.[wipModal === "CREDIT OK" ? "creditOK" : "printed"] ?? [])
+                    .reduce((s, r) => s + (r.total_units || 0), 0).toLocaleString()} units
+                </p>
+              </div>
+              <button onClick={() => setWipModal(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase">Order</th>
+                    <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase">Customer</th>
+                    <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase">Sidemark</th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-gray-400 uppercase">Days</th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-gray-400 uppercase">Units</th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-gray-400 uppercase">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.wip?.[wipModal === "CREDIT OK" ? "creditOK" : "printed"] ?? []).map((r, i) => (
+                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="px-5 py-3 font-mono text-sm font-semibold text-indigo-600">#{r.order_no}</td>
+                      <td className="px-5 py-3 text-sm text-gray-700">{r.customer}</td>
+                      <td className="px-5 py-3 text-xs text-gray-400">{r.sidemark}</td>
+                      <td className="px-5 py-3 text-right">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          r.days_in_status > 5 ? "bg-red-100 text-red-700" :
+                          r.days_in_status > 2 ? "bg-amber-100 text-amber-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>{r.days_in_status}d</span>
+                      </td>
+                      <td className="px-5 py-3 text-right text-sm text-gray-700">{r.total_units}</td>
+                      <td className="px-5 py-3 text-right text-sm text-gray-500">${Number(r.total_sales).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* product line breakdown */}
       <SectionLabel>Product line performance</SectionLabel>
