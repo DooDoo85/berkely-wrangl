@@ -160,6 +160,14 @@ export default function ExecutiveHome() {
         ? (inProdOrders.reduce((s, o) => s + daysSince(o.updated_at), 0) / inProdOrders.length).toFixed(1)
         : null;
 
+      // product line sales
+      const { data: productLines } = await supabase
+        .from("product_line_sales")
+        .select("*");
+
+      const faux   = (productLines ?? []).find(p => p.product_line === "Faux Wood Blinds") ?? {};
+      const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
+
       // inventory risk
       const { data: parts } = await supabase
         .from("parts")
@@ -188,11 +196,11 @@ export default function ExecutiveHome() {
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count);
 
-      // daily shipped last 30 days (group by date)
+      // daily shipped last 15 days
       const { data: shippedRows } = await supabase
         .from("orders")
         .select("updated_at")
-        .in("status", ["shipped", "invoiced"])
+        .eq("status", "invoiced")
         .gte("updated_at", thirtyAgo)
         .order("updated_at", { ascending: true });
 
@@ -202,13 +210,11 @@ export default function ExecutiveHome() {
         const key = `${d.getMonth() + 1}/${d.getDate()}`;
         dayMap[key] = (dayMap[key] ?? 0) + 1;
       });
-      // build last 15 day labels for display
       const dailyShipped = Array.from({ length: 15 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - (14 - i));
         const key = `${d.getMonth() + 1}/${d.getDate()}`;
-        const lbl = i === 14 ? "Today" : `${d.getMonth() + 1}/${d.getDate()}`;
-        return { l: lbl.replace(/^\d+\//, ""), v: dayMap[key] ?? 0, highlight: i === 14 };
+        return { l: d.getDate().toString(), v: dayMap[key] ?? 0, highlight: i === 14 };
       });
 
       // weekly throughput (Mon–Fri this week)
@@ -227,6 +233,7 @@ export default function ExecutiveHome() {
         outOfStock, lowStock,
         lowStockTotal: (parts ?? []).length,
         repOrders, dailyShipped, weeklyThroughput,
+        faux, roller,
       });
       setRefreshedAt(new Date());
     } catch (err) {
@@ -303,6 +310,64 @@ export default function ExecutiveHome() {
         <div className="bg-white border border-gray-100 rounded-xl p-4">
           <p className="text-sm font-medium text-gray-700 mb-3">Production throughput — this week</p>
           <MiniBar data={data.weeklyThroughput} color="#6ee7b7" />
+        </div>
+      </div>
+
+      {/* product line breakdown */}
+      <SectionLabel>Product line performance</SectionLabel>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        {/* Faux Wood Blinds */}
+        <div
+          className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:border-gray-300 transition-colors"
+          onClick={() => navigate("/orders?product=faux")}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-800">Faux Wood Blinds</p>
+            <span className="text-xs text-indigo-500">View orders →</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-400 mb-1">Units WTD</p>
+              <p className="text-xl font-medium text-gray-900">{data.faux?.units_wtd ?? "—"}</p>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-amber-600 mb-1">Units MTD</p>
+              <p className="text-xl font-medium text-amber-900">{data.faux?.units_mtd ?? "—"}</p>
+              <p className="text-xs text-amber-600 mt-0.5">${((data.faux?.sales_mtd ?? 0) / 1000).toFixed(0)}k</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-400 mb-1">Units YTD</p>
+              <p className="text-xl font-medium text-gray-900">{data.faux?.units_ytd ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-0.5">${((data.faux?.sales_ytd ?? 0) / 1000).toFixed(0)}k</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Roller Shades */}
+        <div
+          className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:border-gray-300 transition-colors"
+          onClick={() => navigate("/orders?product=roller")}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-800">Roller Shades</p>
+            <span className="text-xs text-indigo-500">View orders →</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-400 mb-1">Units WTD</p>
+              <p className="text-xl font-medium text-gray-900">{data.roller?.units_wtd ?? "—"}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-blue-600 mb-1">Units MTD</p>
+              <p className="text-xl font-medium text-blue-900">{data.roller?.units_mtd ?? "—"}</p>
+              <p className="text-xs text-blue-600 mt-0.5">${((data.roller?.sales_mtd ?? 0) / 1000).toFixed(0)}k</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-400 mb-1">Units YTD</p>
+              <p className="text-xl font-medium text-gray-900">{data.roller?.units_ytd ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-0.5">${((data.roller?.sales_ytd ?? 0) / 1000).toFixed(0)}k</p>
+            </div>
+          </div>
         </div>
       </div>
 
