@@ -232,11 +232,20 @@ function parseCurrency(str) {
 
 // Upsert a single product line into product_line_sales
 async function upsertProductLine(productLine, fields) {
-  await sbUpsert('product_line_sales', [{
-    product_line: productLine,
-    ...fields,
-    updated_at: new Date().toISOString(),
-  }])
+  // Use PATCH to update existing row matched by product_line
+  const ok = await sbUpdate(
+    'product_line_sales',
+    `product_line=eq.${encodeURIComponent(productLine)}`,
+    { ...fields, updated_at: new Date().toISOString() }
+  )
+  if (!ok) {
+    // Row doesn't exist yet — insert it
+    await sbUpsert('product_line_sales', [{
+      product_line: productLine,
+      ...fields,
+      updated_at: new Date().toISOString(),
+    }])
+  }
 }
 
 // ROLLER SHADE INVOICE BY PRODUCT — writes per-product breakdown to roller_product_breakdown
