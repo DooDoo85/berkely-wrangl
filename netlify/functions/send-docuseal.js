@@ -4,12 +4,13 @@
 // CC's parker@, customerservice@, abigail@berkelydistribution.com
 
 const DOCUSEAL_API_KEY  = process.env.DOCUSEAL_API_KEY
-const TEMPLATE_UUID     = '7bb92732-1703-494b-aade-8fca3941c148'
+const TEMPLATE_ID       = 3190649
 const DOCUSEAL_API_URL  = 'https://api.docuseal.com/submissions'
 
 const CC_EMAILS = [
-  'david@berkelydistribution.com',
-  
+  'parker@berkelydistribution.com',
+  'customerservice@berkelydistribution.com',
+  'abigail@berkelydistribution.com',
 ]
 
 exports.handler = async function (event, context) {
@@ -45,8 +46,8 @@ exports.handler = async function (event, context) {
     ]
 
     const payload = {
-      template_uuid: TEMPLATE_UUID,
-      send_email:    true,
+      template_id: TEMPLATE_ID,
+      send_email:  true,
       submitters,
       metadata: {
         customer_name: customerName,
