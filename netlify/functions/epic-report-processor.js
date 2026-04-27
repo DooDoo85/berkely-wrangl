@@ -5,10 +5,11 @@
 // Reports handled:
 //   BERKELY ROLLER SHADE FULL SHIP  → orders.status = 'complete'
 //   BERKELY FAUX FULL SHIP          → orders.status = 'complete'
+//   BEREKLY FAUX FULL SHIP          → orders.status = 'complete' (typo variant)
 //   BERKELY ROLLER SHADE PRINTED    → orders.status = 'printed'
 //   BERKELY FAUX PRINTED            → orders.status = 'printed'
-//   COMBINED ROLLER/FAUX            → inventory dashboard (future)
-//   ROLLER SHADE INVOICE BY PRODUCT → st_roller_sales
+//   ROLLER SHADE INVOICE BY PRODUCT → product_line_sales (Roller Shades)
+//   COMBINED ROLLER/FAUX            → product_line_sales (both lines)
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
@@ -55,11 +56,32 @@ async function gmailGetAttachment(token, messageId, attachmentId) {
   return Buffer.from(b64, 'base64').toString('utf-8')
 }
 
+// Get plain text body of email (for emails without CSV attachments)
+function getEmailBody(msg) {
+  const parts = msg.payload?.parts || []
+
+  // Try multipart first
+  for (const part of parts) {
+    if (part.mimeType === 'text/plain' && part.body?.data) {
+      const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/')
+      return Buffer.from(b64, 'base64').toString('utf-8')
+    }
+  }
+
+  // Fallback to top-level body
+  if (msg.payload?.body?.data) {
+    const b64 = msg.payload.body.data.replace(/-/g, '+').replace(/_/g, '/')
+    return Buffer.from(b64, 'base64').toString('utf-8')
+  }
+
+  return ''
+}
+
 // ── Supabase helpers ──────────────────────────────────────────────────────────
 async function sbQuery(table, params) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: {
-      apikey: SUPABASE_KEY,
+      apikey:        SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
     },
   })
@@ -80,14 +102,14 @@ async function sbUpdate(table, match, body) {
   return res.ok
 }
 
-async function sbUpsert(table, rows, onConflict) {
+async function sbUpsert(table, rows) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:  'POST',
     headers: {
       apikey:        SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
-      Prefer:        `resolution=merge-duplicates,return=minimal`,
+      Prefer:        'resolution=merge-duplicates,return=minimal',
     },
     body: JSON.stringify(rows),
   })
@@ -109,7 +131,7 @@ async function markProcessed(messageId, reportType, count) {
     message_id:   messageId,
     payload:      { count },
     processed_at: new Date().toISOString(),
-  }], 'message_id')
+  }])
 }
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -171,10 +193,8 @@ async function processPrinted(csvText, orderType) {
     const orderNo = (row.OrderNo || row.Wo || '').trim()
     if (!orderNo) continue
 
-    // Only update if currently submitted (don't downgrade complete orders)
     const existing = await sbQuery('orders', `epic_id=eq.${orderNo}&select=id,status&limit=1`)
     if (!Array.isArray(existing) || !existing[0]) {
-      // Order doesn't exist yet — insert it
       await sbUpsert('orders', [{
         epic_id:       orderNo,
         order_number:  orderNo,
@@ -184,7 +204,7 @@ async function processPrinted(csvText, orderType) {
         sales_rep:     row.Salesperson || null,
         source:        'epic',
         read_only:     true,
-      }], 'epic_id')
+      }])
       updated++
       continue
     }
@@ -202,23 +222,79 @@ async function processPrinted(csvText, orderType) {
   return updated
 }
 
-// ROLLER SHADE INVOICE BY PRODUCT
-async function processRollerSales(csvText) {
+// ── Product line sales helpers ────────────────────────────────────────────────
+
+// Parse a currency string like "$1,234.56" or "1234.56" → float
+function parseCurrency(str) {
+  if (!str) return 0
+  return parseFloat(str.replace(/[$,]/g, '')) || 0
+}
+
+// Upsert a single product line into product_line_sales
+async function upsertProductLine(productLine, fields) {
+  await sbUpsert('product_line_sales', [{
+    product_line: productLine,
+    ...fields,
+    updated_at: new Date().toISOString(),
+  }])
+}
+
+// ROLLER SHADE INVOICE BY PRODUCT — CSV with roller shade product line data
+async function processRollerSalesCSV(csvText) {
   const rows = parseCSV(csvText)
-  const toUpsert = []
+  console.log(`  ROLLER SALES CSV: ${rows.length} rows`)
+  let count = 0
+
   for (const row of rows) {
-    if (!row.ProductLine) continue
-    toUpsert.push({
-      product_line: row.ProductLine,
-      units_mtd:    parseInt(row.UnitsMTD)   || 0,
-      sales_mtd:    parseFloat(row.SalesMTD) || 0,
-      units_ytd:    parseInt(row.UnitsYTD)   || 0,
-      sales_ytd:    parseFloat(row.SalesYTD) || 0,
-      updated_at:   new Date().toISOString(),
+    const line = (row.ProductLine || row.Product || row['Product Line'] || '').trim()
+    if (!line) continue
+
+    // Map to our canonical product lines
+    const productLine = line.toUpperCase().includes('ROLLER') ? 'Roller Shades' : 'Faux Wood Blinds'
+
+    await upsertProductLine(productLine, {
+      units_mtd: parseInt(row.UnitsMTD || row.Units_MTD || row['Units MTD']) || 0,
+      sales_mtd: parseCurrency(row.SalesMTD || row.Sales_MTD || row['Sales MTD']),
+      units_ytd: parseInt(row.UnitsYTD || row.Units_YTD || row['Units YTD']) || 0,
+      sales_ytd: parseCurrency(row.SalesYTD || row.Sales_YTD || row['Sales YTD']),
     })
+    count++
   }
-  if (toUpsert.length) await sbUpsert('st_roller_sales', toUpsert, 'product_line')
-  return toUpsert.length
+  return count
+}
+
+// COMBINED ROLLER/FAUX — typically an email body with summary numbers
+// Logs the raw content so we can see the format and parse it next iteration
+async function processCombinedReport(msg) {
+  const body = getEmailBody(msg)
+  console.log('  COMBINED ROLLER/FAUX body preview:')
+  console.log('  ' + body.slice(0, 500).replace(/\n/g, '\n  '))
+
+  // Try to extract numbers from common formats:
+  // "Faux Wood: 1234 units / $56,789"
+  // "Roller Shades: 456 units / $12,345"
+  const fauxUnits   = body.match(/faux[^:]*:\s*([\d,]+)\s*units?/i)
+  const fauxSales   = body.match(/faux[^:]*:.*?\$([\d,]+\.?\d*)/i)
+  const rollerUnits = body.match(/roller[^:]*:\s*([\d,]+)\s*units?/i)
+  const rollerSales = body.match(/roller[^:]*:.*?\$([\d,]+\.?\d*)/i)
+
+  if (fauxUnits || fauxSales) {
+    await upsertProductLine('Faux Wood Blinds', {
+      units_mtd: parseInt((fauxUnits?.[1] || '0').replace(/,/g, '')) || 0,
+      sales_mtd: parseCurrency(fauxSales?.[1] || '0'),
+    })
+    console.log('  Parsed Faux Wood data from email body')
+  }
+
+  if (rollerUnits || rollerSales) {
+    await upsertProductLine('Roller Shades', {
+      units_mtd: parseInt((rollerUnits?.[1] || '0').replace(/,/g, '')) || 0,
+      sales_mtd: parseCurrency(rollerSales?.[1] || '0'),
+    })
+    console.log('  Parsed Roller Shades data from email body')
+  }
+
+  return 1
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -228,7 +304,8 @@ exports.handler = async function(event, context) {
 
   try {
     const token    = await getAccessToken()
-    const query    = `from:${EPIC_SENDER} has:attachment newer_than:3d`
+    // Widen search to catch emails with or without attachments
+    const query    = `from:${EPIC_SENDER} newer_than:3d`
     const messages = await gmailSearch(token, query)
     console.log(`Found ${messages.length} emails from ${EPIC_SENDER}`)
 
@@ -242,47 +319,70 @@ exports.handler = async function(event, context) {
 
       const msg     = await gmailGetMessage(token, messageId)
       const headers = msg.payload?.headers || []
-      const subject = headers.find(h => h.name === 'Subject')?.value || ''
+      const subject = (headers.find(h => h.name === 'Subject')?.value || '').toUpperCase()
       console.log(`\n  Email: ${subject}`)
 
-      // Find CSV attachment
+      // Find CSV attachment if present
       const parts = msg.payload?.parts || []
       const att   = parts.find(p => p.filename?.endsWith('.csv') || p.mimeType === 'text/csv')
-      if (!att?.body?.attachmentId) {
-        console.log('    No CSV attachment')
-        continue
-      }
-
-      const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+      const hasCSV = !!(att?.body?.attachmentId)
 
       try {
         let count = 0
 
-        if (subject.includes('BERKELY ROLLER SHADE FULL SHIP')) {
+        // ── Order status updates ──
+        if (subject.includes('ROLLER SHADE FULL SHIP')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processFullShip(csvText, 'roller')
           await markProcessed(messageId, 'roller_full_ship', count)
           results.processed++
-        } else if (subject.includes('BERKELY FAUX FULL SHIP')) {
+
+        } else if (subject.includes('FAUX FULL SHIP')) {
+          // Matches both "BERKELY FAUX FULL SHIP" and "BEREKLY FAUX FULL SHIP" (typo)
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processFullShip(csvText, 'faux')
           await markProcessed(messageId, 'faux_full_ship', count)
           results.processed++
-        } else if (subject.includes('BERKELY ROLLER SHADE PRINTED')) {
+
+        } else if (subject.includes('ROLLER SHADE PRINTED')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processPrinted(csvText, 'roller')
           await markProcessed(messageId, 'roller_printed', count)
           results.processed++
-        } else if (subject.includes('BERKELY FAUX PRINTED')) {
+
+        } else if (subject.includes('FAUX PRINTED')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processPrinted(csvText, 'faux')
           await markProcessed(messageId, 'faux_printed', count)
           results.processed++
+
+        // ── Product line sales ──
         } else if (subject.includes('ROLLER SHADE INVOICE BY PRODUCT')) {
-          count = await processRollerSales(csvText)
+          if (hasCSV) {
+            const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+            count = await processRollerSalesCSV(csvText)
+          } else {
+            // No CSV — log body for inspection and try to parse
+            count = await processCombinedReport(msg)
+          }
           await markProcessed(messageId, 'roller_sales', count)
           results.processed++
+
+        } else if (subject.includes('COMBINED ROLLER') || subject.includes('COMBINED ROLLER/FAUX')) {
+          count = await processCombinedReport(msg)
+          await markProcessed(messageId, 'combined_report', count)
+          results.processed++
+
         } else {
-          console.log(`    Unrecognized subject: ${subject}`)
+          console.log(`  Unrecognized subject: ${subject}`)
         }
+
       } catch (err) {
-        console.error(`    Error processing ${subject}:`, err.message)
+        console.error(`  Error processing ${subject}:`, err.message)
       }
     }
 
