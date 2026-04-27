@@ -162,7 +162,7 @@ function parseCSV(csvText) {
 
 // ── Report processors ─────────────────────────────────────────────────────────
 
-// FULL SHIP — mark orders as invoiced
+// FULL SHIP — mark orders as invoiced + update daily shipment totals for roller
 async function processFullShip(csvText, orderType) {
   const rows = parseCSV(csvText)
   console.log(`  ${orderType.toUpperCase()} FULL SHIP: ${rows.length} rows`)
@@ -180,6 +180,39 @@ async function processFullShip(csvText, orderType) {
     if (ok) updated++
   }
   console.log(`  Updated ${updated} orders to invoiced`)
+
+  // For roller orders — aggregate by ship date and upsert into roller_shipments_daily
+  if (orderType === 'roller') {
+    const dayMap = {}
+    for (const row of rows) {
+      const date = (row.ShippedDate || '').trim().slice(0, 10)
+      if (!date) continue
+      if (!dayMap[date]) dayMap[date] = { orders: 0, units: 0, revenue: 0 }
+      dayMap[date].orders++
+      dayMap[date].units   += parseInt(row.TotalUnits || 0) || 0
+      dayMap[date].revenue += parseFloat(row.TotalSales || 0) || 0
+    }
+
+    for (const [ship_date, totals] of Object.entries(dayMap)) {
+      // Try update first, then insert if not exists
+      const ok = await sbUpdate(
+        'roller_shipments_daily',
+        `ship_date=eq.${ship_date}`,
+        { orders: totals.orders, units: totals.units, revenue: totals.revenue, updated_at: new Date().toISOString() }
+      )
+      if (!ok) {
+        await sbUpsert('roller_shipments_daily', [{
+          ship_date,
+          orders:   totals.orders,
+          units:    totals.units,
+          revenue:  totals.revenue,
+          updated_at: new Date().toISOString(),
+        }])
+      }
+    }
+    console.log(`  Updated roller_shipments_daily for ${Object.keys(dayMap).length} dates`)
+  }
+
   return updated
 }
 
