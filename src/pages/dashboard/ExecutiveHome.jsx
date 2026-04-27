@@ -69,7 +69,6 @@ export default function ExecutiveHome() {
     try {
       const weekStart  = startOfWeek();
       const monthStart = startOfMonth();
-      const thirtyAgo  = last30Days();
 
       const { count: shippedWTD } = await supabase.from("orders")
         .select("*",{count:"exact",head:true}).eq("status","invoiced").gte("updated_at",weekStart);
@@ -114,11 +113,21 @@ export default function ExecutiveHome() {
       (repRows??[]).forEach(r=>{ const n=r.sales_rep?.trim(); if(n) repMap[n]=(repMap[n]??0)+1; });
       const repOrders = Object.entries(repMap).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
 
-      const { data: shippedRows } = await supabase.from("orders").select("updated_at")
-        .eq("status","invoiced").gte("updated_at",thirtyAgo).order("updated_at",{ascending:true});
-      const dayMap = {};
-      (shippedRows??[]).forEach(r=>{ const d=new Date(r.updated_at); const k=`${d.getMonth()+1}/${d.getDate()}`; dayMap[k]=(dayMap[k]??0)+1; });
-      const dailyShipped = Array.from({length:15},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-(14-i)); const k=`${d.getMonth()+1}/${d.getDate()}`; return {l:d.getDate().toString(),v:dayMap[k]??0,highlight:i===14}; });
+      // roller shipments daily chart — last 15 days
+      const { data: shipmentRows } = await supabase
+        .from("roller_shipments_daily")
+        .select("ship_date, units")
+        .gte("ship_date", new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10))
+        .order("ship_date", { ascending: true });
+
+      const shipMap = {};
+      (shipmentRows ?? []).forEach(r => { shipMap[r.ship_date] = r.units; });
+      const dailyShipped = Array.from({ length: 15 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (14 - i));
+        const key = d.toISOString().slice(0, 10);
+        return { l: d.getDate().toString(), v: shipMap[key] ?? 0, highlight: i === 14 };
+      });
 
       setData({ shippedWTD, shippedMTD, inProduction, stuckOrders, productionLoad, avgDays,
         outOfStock, lowStock, lowStockTotal:(parts??[]).length, repOrders, dailyShipped, faux, roller,
