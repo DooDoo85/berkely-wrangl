@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 
-const NAV = [
+const NAV_EXECUTIVE = [
   {
     section: 'MAIN',
     items: [
@@ -35,6 +35,28 @@ const NAV = [
   },
 ]
 
+const NAV_SALES = [
+  {
+    section: 'MAIN',
+    items: [
+      { to: '/',          icon: '⌂',  label: 'Home' },
+    ]
+  },
+  {
+    section: 'SALES',
+    items: [
+      { to: '/customers', icon: '◎',  label: 'Customers' },
+      { to: '/activities',icon: '◈',  label: 'Activities' },
+    ]
+  },
+  {
+    section: 'OPERATIONS',
+    items: [
+      { to: '/orders',    icon: '≡',  label: 'Orders' },
+    ]
+  },
+]
+
 export default function Sidebar() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
@@ -44,9 +66,11 @@ export default function Sidebar() {
     navigate('/signin')
   }
 
-  const role = profile?.role || 'user'
-  const name = profile?.full_name || profile?.email?.split('@')[0] || 'User'
-  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)
+  const role     = profile?.role || 'user'
+  const isSales  = role === 'sales'
+  const NAV      = isSales ? NAV_SALES : NAV_EXECUTIVE
+  const name     = profile?.full_name || profile?.email?.split('@')[0] || 'User'
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
   return (
     <aside className="w-52 min-w-[208px] h-screen flex flex-col bg-brand-dark border-r border-white/[0.06] overflow-y-auto">
