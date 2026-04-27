@@ -281,36 +281,20 @@ export default function ExecutiveHome() {
         </div>
       </div>
 
-      {/* KPI row */}
-      <SectionLabel>Health snapshot</SectionLabel>
-      <div className="grid grid-cols-5 gap-3 mb-6">
-        <KpiCard label="Shipped this week"  value={data.shippedWTD}   status="green"   delta="invoiced or shipped" />
-        <KpiCard label="Shipped this month" value={data.shippedMTD}   status="green"   delta="month to date" />
-        <KpiCard label="In production"      value={data.inProduction} status="neutral" delta="across all reps" />
+      {/* 2 KPI cards */}
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <KpiCard
+          label="In production"
+          value={data.inProduction}
+          status="neutral"
+          delta="across all reps"
+        />
         <KpiCard
           label="Stuck orders"
           value={stuckTotal}
           status={stuckTotal === 0 ? "green" : stuckTotal < 5 ? "yellow" : "red"}
           delta={stuckTotal === 0 ? "All clear" : "Need attention"}
         />
-        <KpiCard
-          label="Low / out of stock"
-          value={lowStockTotal}
-          status={lowStockTotal === 0 ? "green" : lowStockTotal < 5 ? "yellow" : "red"}
-          delta={`${data.outOfStock?.length ?? 0} fully out`}
-        />
-      </div>
-
-      {/* charts */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-white border border-gray-100 rounded-xl p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Orders shipped — last 15 days</p>
-          <MiniBar data={data.dailyShipped} color="#a5b4fc" />
-        </div>
-        <div className="bg-white border border-gray-100 rounded-xl p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Production throughput — this week</p>
-          <MiniBar data={data.weeklyThroughput} color="#6ee7b7" />
-        </div>
       </div>
 
       {/* product line breakdown */}
@@ -318,54 +302,54 @@ export default function ExecutiveHome() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         {/* Faux Wood Blinds */}
         <div
-          className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:border-gray-300 transition-colors"
+          className="bg-white border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-gray-300 transition-colors"
           onClick={() => navigate("/orders?product=faux")}
         >
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold text-gray-800">Faux Wood Blinds</p>
+            <p className="text-base font-semibold text-gray-800">Faux Wood Blinds</p>
             <span className="text-xs text-indigo-500">View orders →</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-400 mb-1">Units WTD</p>
-              <p className="text-xl font-medium text-gray-900">{data.faux?.units_wtd ?? "—"}</p>
+              <p className="text-2xl font-medium text-gray-900">{data.faux?.units_wtd ?? "—"}</p>
             </div>
             <div className="bg-amber-50 rounded-lg p-3 text-center">
               <p className="text-xs text-amber-600 mb-1">Units MTD</p>
-              <p className="text-xl font-medium text-amber-900">{data.faux?.units_mtd ?? "—"}</p>
-              <p className="text-xs text-amber-600 mt-0.5">${((data.faux?.sales_mtd ?? 0) / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-medium text-amber-900">{data.faux?.units_mtd ?? "—"}</p>
+              <p className="text-xs text-amber-600 mt-1">${((data.faux?.sales_mtd ?? 0) / 1000).toFixed(0)}k revenue</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-400 mb-1">Units YTD</p>
-              <p className="text-xl font-medium text-gray-900">{data.faux?.units_ytd ?? "—"}</p>
-              <p className="text-xs text-gray-400 mt-0.5">${((data.faux?.sales_ytd ?? 0) / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-medium text-gray-900">{data.faux?.units_ytd ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-1">${((data.faux?.sales_ytd ?? 0) / 1000).toFixed(0)}k revenue</p>
             </div>
           </div>
         </div>
 
         {/* Roller Shades */}
         <div
-          className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:border-gray-300 transition-colors"
+          className="bg-white border border-gray-100 rounded-xl p-5 cursor-pointer hover:border-gray-300 transition-colors"
           onClick={() => navigate("/orders?product=roller")}
         >
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold text-gray-800">Roller Shades</p>
+            <p className="text-base font-semibold text-gray-800">Roller Shades</p>
             <span className="text-xs text-indigo-500">View orders →</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-400 mb-1">Units WTD</p>
-              <p className="text-xl font-medium text-gray-900">{data.roller?.units_wtd ?? "—"}</p>
+              <p className="text-2xl font-medium text-gray-900">{data.roller?.units_wtd ?? "—"}</p>
             </div>
             <div className="bg-blue-50 rounded-lg p-3 text-center">
               <p className="text-xs text-blue-600 mb-1">Units MTD</p>
-              <p className="text-xl font-medium text-blue-900">{data.roller?.units_mtd ?? "—"}</p>
-              <p className="text-xs text-blue-600 mt-0.5">${((data.roller?.sales_mtd ?? 0) / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-medium text-blue-900">{data.roller?.units_mtd ?? "—"}</p>
+              <p className="text-xs text-blue-600 mt-1">${((data.roller?.sales_mtd ?? 0) / 1000).toFixed(0)}k revenue</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-400 mb-1">Units YTD</p>
-              <p className="text-xl font-medium text-gray-900">{data.roller?.units_ytd ?? "—"}</p>
-              <p className="text-xs text-gray-400 mt-0.5">${((data.roller?.sales_ytd ?? 0) / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-medium text-gray-900">{data.roller?.units_ytd ?? "—"}</p>
+              <p className="text-xs text-gray-400 mt-1">${((data.roller?.sales_ytd ?? 0) / 1000).toFixed(0)}k revenue</p>
             </div>
           </div>
         </div>
