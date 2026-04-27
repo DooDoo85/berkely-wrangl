@@ -4,10 +4,11 @@ import { supabase } from '../../lib/supabase'
 import ActivityForm from './ActivityForm'
 
 const TYPE_STYLES = {
-  call:    { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞' },
-  email:   { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️' },
-  note:    { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝' },
-  meeting: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝' },
+  call:        { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞' },
+  email:       { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️' },
+  note:        { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝' },
+  meeting:     { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝' },
+  sample_book: { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  icon: '📚' },
 }
 
 function timeAgo(date) {
@@ -88,8 +89,8 @@ export default function ActivityLog() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <div className="flex gap-1">
-          {['all', 'call', 'email', 'note', 'meeting'].map(t => (
+        <div className="flex gap-1 flex-wrap">
+          {['all', 'call', 'email', 'note', 'meeting', 'sample_book'].map(t => (
             <button
               key={t}
               onClick={() => setFilter(t)}
@@ -100,7 +101,7 @@ export default function ActivityLog() {
               }`}
             >
               {t !== 'all' && <span>{TYPE_STYLES[t]?.icon}</span>}
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === 'sample_book' ? 'Sample Book' : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
