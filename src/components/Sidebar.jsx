@@ -1,4 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth } from './AuthProvider'
 
 const NAV_EXECUTIVE = [
@@ -59,11 +60,42 @@ const NAV_SALES = [
 
 export default function Sidebar() {
   const { profile, signOut } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const location  = useLocation()
+
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedback,     setFeedback]     = useState('')
+  const [sending,      setSending]      = useState(false)
+  const [sent,         setSent]         = useState(false)
 
   async function handleSignOut() {
     await signOut()
     navigate('/signin')
+  }
+
+  async function submitFeedback() {
+    if (!feedback.trim()) return
+    setSending(true)
+    try {
+      await fetch('/.netlify/functions/send-feedback', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message:  feedback.trim(),
+          repName:  name,
+          repEmail: profile?.email,
+          role:     role,
+          page:     location.pathname,
+        }),
+      })
+      setSent(true)
+      setFeedback('')
+      setTimeout(() => { setSent(false); setShowFeedback(false) }, 2000)
+    } catch (err) {
+      console.error('Feedback error:', err)
+    } finally {
+      setSending(false)
+    }
   }
 
   const role     = profile?.role || 'user'
@@ -129,6 +161,17 @@ export default function Sidebar() {
             <div className="text-stone-500 text-[10px] capitalize">{role}</div>
           </div>
         </div>
+
+        {/* Feedback button */}
+        <button
+          onClick={() => setShowFeedback(true)}
+          className="w-full text-left text-stone-400 hover:text-stone-200 text-xs
+                     py-1.5 px-2 rounded-lg hover:bg-white/5 transition-all duration-150 mb-1
+                     flex items-center gap-2"
+        >
+          <span>💬</span> Send Feedback
+        </button>
+
         <button
           onClick={handleSignOut}
           className="w-full text-left text-stone-500 hover:text-stone-300 text-xs
@@ -137,6 +180,55 @@ export default function Sidebar() {
           Sign out
         </button>
       </div>
+
+      {/* Feedback modal */}
+      {showFeedback && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-bold text-stone-800">Send Feedback</h3>
+              <button onClick={() => setShowFeedback(false)} className="text-stone-400 hover:text-stone-600 text-xl leading-none">✕</button>
+            </div>
+            <p className="text-xs text-stone-400 mb-4">
+              Share anything — bugs, ideas, confusing parts, or things you'd like to see. David will see this directly.
+            </p>
+            {sent ? (
+              <div className="text-center py-6">
+                <div className="text-3xl mb-2">✅</div>
+                <p className="text-sm font-semibold text-emerald-700">Feedback sent — thanks!</p>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  className="w-full border border-stone-200 rounded-xl p-3 text-sm text-stone-700
+                             focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold/50
+                             resize-none h-32"
+                  placeholder="What's on your mind?"
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => setShowFeedback(false)}
+                    className="flex-1 py-2 px-4 rounded-xl border border-stone-200 text-sm text-stone-500 hover:bg-stone-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitFeedback}
+                    disabled={sending || !feedback.trim()}
+                    className="flex-1 py-2 px-4 rounded-xl bg-brand-dark text-white text-sm font-semibold
+                               hover:bg-brand-dark/90 disabled:opacity-40 transition-colors"
+                  >
+                    {sending ? 'Sending...' : 'Send'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
