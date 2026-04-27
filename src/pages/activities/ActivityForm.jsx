@@ -3,10 +3,11 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 const TYPES = [
-  { value: 'call',    label: 'Call',    icon: '📞' },
-  { value: 'email',   label: 'Email',   icon: '✉️' },
-  { value: 'note',    label: 'Note',    icon: '📝' },
-  { value: 'meeting', label: 'Meeting', icon: '🤝' },
+  { value: 'call',        label: 'Call',        icon: '📞' },
+  { value: 'email',       label: 'Email',        icon: '✉️' },
+  { value: 'note',        label: 'Note',         icon: '📝' },
+  { value: 'meeting',     label: 'Meeting',      icon: '🤝' },
+  { value: 'sample_book', label: 'Sample Book',  icon: '📚' },
 ]
 
 export default function ActivityForm({
@@ -23,6 +24,7 @@ export default function ActivityForm({
   const [customerId,  setCustomerId]  = useState(defaultCustomerId || '')
   const [orderId,     setOrderId]     = useState(defaultOrderId || '')
   const [followUp,    setFollowUp]    = useState('')
+  const [quantity,    setQuantity]    = useState(1)
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
   const [customers,   setCustomers]   = useState([])
@@ -80,20 +82,32 @@ export default function ActivityForm({
     setSaving(true)
     setError('')
 
+    // For sample books auto-generate subject if not provided
+    const finalSubject = type === 'sample_book' && !subject.trim()
+      ? `Sample book sold — qty ${quantity}`
+      : subject.trim() || null
+
+    const finalBody = type === 'sample_book' && !body.trim()
+      ? `${quantity} sample book(s) sold`
+      : body.trim() || null
+
     const { error } = await supabase.from('activities').insert({
       activity_type:  type,
-      subject:        subject.trim() || null,
-      body:           body.trim() || null,
+      subject:        finalSubject,
+      body:           finalBody,
       customer_id:    customerId || null,
       order_id:       orderId    || null,
       user_id:        profile?.id,
       follow_up_date: followUp || null,
       activity_date:  new Date().toISOString(),
+      ...(type === 'sample_book' ? { quantity } : {}),
     })
 
     if (error) { setError(error.message); setSaving(false); return }
     onSave?.()
   }
+
+  const isSampleBook = type === 'sample_book'
 
   return (
     <div className="p-6">
@@ -106,7 +120,7 @@ export default function ActivityForm({
       </div>
 
       {/* Type selector */}
-      <div className="grid grid-cols-4 gap-2 mb-5">
+      <div className="grid grid-cols-5 gap-2 mb-5">
         {TYPES.map(t => (
           <button
             key={t.value}
@@ -125,12 +139,28 @@ export default function ActivityForm({
       </div>
 
       <div className="space-y-3">
+        {/* Sample book quantity */}
+        {isSampleBook && (
+          <div>
+            <label className="label">Quantity Sold</label>
+            <input
+              className="input"
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={e => setQuantity(parseInt(e.target.value) || 1)}
+            />
+          </div>
+        )}
+
         {/* Subject */}
         <div>
-          <label className="label">Subject <span className="text-stone-300 font-normal normal-case">(optional)</span></label>
+          <label className="label">
+            Subject <span className="text-stone-300 font-normal normal-case">(optional)</span>
+          </label>
           <input
             className="input"
-            placeholder="Quick summary..."
+            placeholder={isSampleBook ? 'e.g. Sold sample book to new prospect' : 'Quick summary...'}
             value={subject}
             onChange={e => setSubject(e.target.value)}
           />
@@ -138,13 +168,15 @@ export default function ActivityForm({
 
         {/* Body */}
         <div>
-          <label className="label">Notes *</label>
+          <label className="label">Notes {!isSampleBook && '*'}</label>
           <textarea
             className="input h-24 resize-none"
-            placeholder="What happened? What was discussed?"
+            placeholder={isSampleBook
+              ? 'Any additional notes...'
+              : 'What happened? What was discussed?'}
             value={body}
             onChange={e => setBody(e.target.value)}
-            autoFocus
+            autoFocus={!isSampleBook}
           />
         </div>
 
@@ -175,7 +207,7 @@ export default function ActivityForm({
         )}
 
         {/* Order */}
-        {!defaultOrderId && (
+        {!defaultOrderId && !isSampleBook && (
           <div className="relative">
             <label className="label">Order <span className="text-stone-300 font-normal normal-case">(optional)</span></label>
             <input
@@ -201,17 +233,19 @@ export default function ActivityForm({
           </div>
         )}
 
-        {/* Follow up */}
-        <div>
-          <label className="label">Follow-up Date <span className="text-stone-300 font-normal normal-case">(optional)</span></label>
-          <input
-            className="input"
-            type="date"
-            value={followUp}
-            onChange={e => setFollowUp(e.target.value)}
-            min={new Date().toISOString().slice(0,10)}
-          />
-        </div>
+        {/* Follow up — not shown for sample books */}
+        {!isSampleBook && (
+          <div>
+            <label className="label">Follow-up Date <span className="text-stone-300 font-normal normal-case">(optional)</span></label>
+            <input
+              className="input"
+              type="date"
+              value={followUp}
+              onChange={e => setFollowUp(e.target.value)}
+              min={new Date().toISOString().slice(0,10)}
+            />
+          </div>
+        )}
       </div>
 
       {error && (
