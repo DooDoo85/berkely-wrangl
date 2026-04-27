@@ -121,31 +121,31 @@ export default function ExecutiveHome() {
       const { count: shippedWTD } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
-        .in("status", ["shipped", "invoiced"])
+        .eq("status", "invoiced")
         .gte("updated_at", weekStart);
 
       // shipped MTD
       const { count: shippedMTD } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
-        .in("status", ["shipped", "invoiced"])
+        .eq("status", "invoiced")
         .gte("updated_at", monthStart);
 
-      // in production
+      // in production = submitted + printed + complete
       const { count: inProduction } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
-        .eq("status", "in_production");
+        .in("status", ["submitted", "printed", "complete"]);
 
       // all active orders to find stuck ones + production load
       const { data: activeOrders } = await supabase
         .from("orders")
         .select("id, order_number, customer_name, status, sales_rep, updated_at")
-        .in("status", ["submitted", "printed", "in_production"])
+        .in("status", ["submitted", "printed", "complete"])
         .order("updated_at", { ascending: true });
 
       const stuckOrders = (activeOrders ?? [])
-        .filter((o) => daysSince(o.updated_at) > 5)
+        .filter((o) => ["submitted", "printed"].includes(o.status) && daysSince(o.updated_at) > 5)
         .sort((a, b) => daysSince(b.updated_at) - daysSince(a.updated_at))
         .slice(0, 5);
 
@@ -154,8 +154,8 @@ export default function ExecutiveHome() {
         return acc;
       }, {});
 
-      // avg days in production this week
-      const inProdOrders = (activeOrders ?? []).filter((o) => o.status === "in_production");
+      // avg days for submitted + printed orders
+      const inProdOrders = (activeOrders ?? []).filter((o) => ["submitted", "printed"].includes(o.status));
       const avgDays = inProdOrders.length
         ? (inProdOrders.reduce((s, o) => s + daysSince(o.updated_at), 0) / inProdOrders.length).toFixed(1)
         : null;
@@ -171,11 +171,12 @@ export default function ExecutiveHome() {
       const outOfStock = (parts ?? []).filter((p) => p.qty_on_hand <= 0).slice(0, 3);
       const lowStock   = (parts ?? []).filter((p) => p.qty_on_hand > 0).slice(0, 3);
 
-      // rep orders WTD
+      // rep orders WTD (invoiced this week)
       const { data: repRows } = await supabase
         .from("orders")
         .select("sales_rep")
-        .gte("created_at", weekStart)
+        .eq("status", "invoiced")
+        .gte("updated_at", weekStart)
         .not("sales_rep", "is", null);
 
       const repMap = {};
@@ -389,9 +390,9 @@ export default function ExecutiveHome() {
               {data.inProduction ?? 0} active
             </span>
           </div>
-          <RiskRow primary="In production"  secondary="Actively being built"  badge={String(data.productionLoad?.in_production ?? 0)} badgeColor="gray" />
-          <RiskRow primary="Submitted"       secondary="Waiting to start"      badge={String(data.productionLoad?.submitted ?? 0)}     badgeColor="gray" />
-          <RiskRow primary="Printed"         secondary="On floor"              badge={String(data.productionLoad?.printed ?? 0)}       badgeColor="gray" />
+          <RiskRow primary="Submitted"  secondary="Waiting to start"   badge={String(data.productionLoad?.submitted ?? 0)}  badgeColor="gray" />
+          <RiskRow primary="Printed"    secondary="On floor"           badge={String(data.productionLoad?.printed ?? 0)}    badgeColor="gray" />
+          <RiskRow primary="Complete"   secondary="Awaiting invoice"   badge={String(data.productionLoad?.complete ?? 0)}   badgeColor="gray" />
           <RiskRow
             primary="Avg days in production"
             secondary="This week"
@@ -402,7 +403,7 @@ export default function ExecutiveHome() {
       </div>
 
       {/* team snapshot */}
-      <SectionLabel>Team — orders submitted this week</SectionLabel>
+      <SectionLabel>Team — orders invoiced this week</SectionLabel>
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
         {data.repOrders?.length === 0 && (
           <p className="text-xs text-gray-400 col-span-full">No orders submitted this week yet</p>
