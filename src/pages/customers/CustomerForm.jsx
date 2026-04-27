@@ -13,16 +13,18 @@ const EMPTY_CUSTOMER = {
 const EMPTY_CONTACT = { name: '', title: '', email: '', phone: '', is_primary: false }
 
 export default function CustomerForm() {
-  const { id }     = useParams()
-  const navigate   = useNavigate()
+  const { id }      = useParams()
+  const navigate    = useNavigate()
   const { profile } = useAuth()
-  const isEdit     = !!id
+  const isEdit      = !!id
 
-  const [form,     setForm]     = useState(EMPTY_CUSTOMER)
-  const [contacts, setContacts] = useState([{ ...EMPTY_CONTACT, is_primary: true }])
-  const [loading,  setLoading]  = useState(false)
-  const [saving,   setSaving]   = useState(false)
-  const [error,    setError]    = useState('')
+  const [form,         setForm]         = useState(EMPTY_CUSTOMER)
+  const [contacts,     setContacts]     = useState([{ ...EMPTY_CONTACT, is_primary: true }])
+  const [loading,      setLoading]      = useState(false)
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState('')
+  const [docusealSent, setDocusealSent] = useState(false)
+  const [docusealErr,  setDocusealErr]  = useState('')
 
   useEffect(() => {
     if (isEdit) loadCustomer()
@@ -75,13 +77,54 @@ export default function CustomerForm() {
     setContacts(cs => cs.map((c, idx) => ({ ...c, is_primary: idx === i })))
   }
 
+  async function sendDocuSeal(customerId, customerName, contact) {
+    try {
+      const res = await fetch('/.netlify/functions/send-docuseal', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName,
+          contactName:  contact.name,
+          contactEmail: contact.email,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'DocuSeal failed')
+
+      // Save submission ID to customer record
+      if (data.submissionId) {
+        await supabase
+          .from('customers')
+          .update({ docuseal_submission_id: String(data.submissionId) })
+          .eq('id', customerId)
+      }
+
+      // Log as activity
+      await supabase.from('activities').insert({
+        activity_type: 'note',
+        subject:       'New account agreement sent',
+        body:          `DocuSeal agreement sent to ${contact.name} (${contact.email})`,
+        customer_id:   customerId,
+        user_id:       profile?.id,
+        activity_date: new Date().toISOString(),
+      })
+
+      setDocusealSent(true)
+    } catch (err) {
+      console.error('DocuSeal error:', err)
+      setDocusealErr(`Agreement email failed: ${err.message}. Customer was saved.`)
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
     setError('')
+    setDocusealErr('')
 
     try {
       let customerId = id
+      const repId = profile?.rep_id || null
 
       if (isEdit) {
         const { error } = await supabase
@@ -92,11 +135,17 @@ export default function CustomerForm() {
       } else {
         const { data, error } = await supabase
           .from('customers')
-          .insert({ ...form, created_by: profile?.id })
+          .insert({ ...form, created_by: profile?.id, sales_rep: repId })
           .select()
           .single()
         if (error) throw error
         customerId = data.id
+
+        // Send DocuSeal to primary contact if they have an email
+        const primaryContact = contacts.find(c => c.is_primary) || contacts[0]
+        if (primaryContact?.email && primaryContact?.name) {
+          await sendDocuSeal(customerId, form.account_name, primaryContact)
+        }
       }
 
       // Save contacts
@@ -133,6 +182,22 @@ export default function CustomerForm() {
           {isEdit ? 'Edit Customer' : 'New Customer'}
         </h2>
       </div>
+
+      {/* DocuSeal notice for new customers */}
+      {!isEdit && (
+        <div className="card p-4 mb-5 bg-amber-50 border border-amber-200">
+          <div className="flex items-start gap-3">
+            <span className="text-lg">📋</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Account Agreement</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                When you create this customer, a DocuSeal account agreement will automatically be sent
+                to the primary contact's email. Parker, Customer Service, and Abigail will be copied.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
 
@@ -216,7 +281,12 @@ export default function CustomerForm() {
         {/* Contacts */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-stone-700">Contacts</h3>
+            <div>
+              <h3 className="font-semibold text-stone-700">Contacts</h3>
+              {!isEdit && (
+                <p className="text-xs text-stone-400 mt-0.5">Primary contact email is required to send the account agreement</p>
+              )}
+            </div>
             <button type="button" onClick={addContact} className="btn-ghost text-xs">+ Add Contact</button>
           </div>
           <div className="space-y-4">
@@ -255,7 +325,9 @@ export default function CustomerForm() {
                       placeholder="e.g. Buyer" />
                   </div>
                   <div>
-                    <label className="label">Email</label>
+                    <label className="label">
+                      Email {c.is_primary && !isEdit && <span className="text-amber-500">*</span>}
+                    </label>
                     <input className="input" type="email" value={c.email || ''}
                       onChange={e => setContact(i, 'email', e.target.value)}
                       placeholder="email@company.com" />
@@ -273,16 +345,17 @@ export default function CustomerForm() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
-            {error}
-          </div>
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">{error}</div>
+        )}
+        {docusealErr && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-3">{docusealErr}</div>
         )}
 
         {/* Actions */}
         <div className="flex items-center gap-3 justify-end pb-6">
           <button type="button" onClick={() => navigate(-1)} className="btn-ghost">Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary px-6">
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Customer'}
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Customer & Send Agreement'}
           </button>
         </div>
       </form>
