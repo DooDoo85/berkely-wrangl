@@ -75,7 +75,7 @@ function MiniBar({ data = [], color = '#a5b4fc' }) {
 }
 
 function ProductLineCard({ title, data, total, color, onClick, loading }) {
-  const pct = total > 0 ? Math.round(((data?.units_mtd || 0) / total) * 100) : 0
+  const pct = total > 0 ? Math.round(((data?.sales_ytd || 0) / total) * 100) : 0
   return (
     <div
       onClick={onClick}
@@ -113,7 +113,7 @@ function ProductLineCard({ title, data, total, color, onClick, loading }) {
       {/* % of total bar */}
       <div>
         <div className="flex justify-between text-[10px] text-stone-400 mb-1">
-          <span>% of total MTD</span>
+          <span>% of total revenue YTD</span>
           <span>{loading ? '—' : `${pct}%`}</span>
         </div>
         <div className="h-1.5 bg-stone-100 rounded-full">
@@ -210,7 +210,7 @@ export default function ProductionDashboard() {
       // product lines
       const faux   = (productLines.data || []).find(p => p.product_line === 'Faux Wood Blinds') ?? {}
       const roller = (productLines.data || []).find(p => p.product_line === 'Roller Shades') ?? {}
-      const totalMTD = (faux.units_mtd || 0) + (roller.units_mtd || 0)
+      const totalRevMTD = (faux.sales_ytd || 0) + (roller.sales_ytd || 0)
 
       // inventory value calculation
       const invData = inventoryValue.data || []
@@ -248,7 +248,7 @@ export default function ProductionDashboard() {
         printed:       printedRes.count || 0,
         submitted:     submittedRes.count || 0,
         avgPerDay,
-        faux, roller, totalMTD,
+        faux, roller, totalRevMTD,
         topFabrics:    topFabrics.data || [],
         topComponents: topComponents.data || [],
         fabricValue, componentValue, totalInvValue,
@@ -292,7 +292,7 @@ export default function ProductionDashboard() {
         <ProductLineCard
           title="Faux Wood Blinds"
           data={data.faux}
-          total={data.totalMTD}
+          total={data.totalRevMTD}
           color="#f59e0b"
           loading={loading}
           onClick={() => navigate('/orders?product=faux')}
@@ -300,7 +300,7 @@ export default function ProductionDashboard() {
         <ProductLineCard
           title="Roller Shades"
           data={data.roller}
-          total={data.totalMTD}
+          total={data.totalRevMTD}
           color="#6366f1"
           loading={loading}
           onClick={() => navigate('/orders?product=roller')}
