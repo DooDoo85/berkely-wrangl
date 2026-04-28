@@ -35,17 +35,33 @@ function Section({ label, children }) {
 
 function MiniBar({ data = [] }) {
   const max = Math.max(...data.map(d => d.v), 1);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   return (
-    <div className="flex items-end gap-0.5 h-10">
-      {data.map((d, i) => (
-        <div key={i} className="flex flex-col items-center flex-1 gap-1">
-          <div className="w-full rounded-sm"
-            style={{ height: `${Math.max((d.v/max)*36, 2)}px`, background: d.highlight ? "#94a3b8" : "#e2e8f0" }} />
-          {(i === 0 || i === 7 || i === 14) && (
-            <span className="text-stone-300" style={{ fontSize: 8 }}>{d.l}</span>
-          )}
-        </div>
-      ))}
+    <div className="flex items-end gap-1 h-20 px-1">
+      {data.map((d, i) => {
+        const pct = Math.max((d.v / max) * 72, d.v > 0 ? 4 : 2);
+        const date = new Date();
+        date.setDate(date.getDate() - (14 - i));
+        const label = `${date.getMonth()+1}/${date.getDate()}`;
+        return (
+          <div key={i} className="flex flex-col items-center flex-1 gap-1 group relative">
+            {/* tooltip */}
+            {d.v > 0 && (
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-stone-800 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                {d.v} units
+              </div>
+            )}
+            <div
+              className="w-full rounded-t transition-all"
+              style={{
+                height: `${pct}px`,
+                background: d.highlight ? '#1C2B1E' : d.v > 0 ? '#94a3b8' : '#e2e8f0',
+              }}
+            />
+            <span className="text-[9px] text-stone-400 leading-none">{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -260,7 +276,7 @@ export default function ExecutiveHome() {
 
         {/* ── Chart ────────────────────────────────────────────────────────── */}
         <Section label="Orders Shipped — Last 15 Days">
-          <div className="bg-white border border-stone-200 rounded-xl p-4">
+          <div className="bg-white border border-stone-200 rounded-xl p-5 pt-8">
             <MiniBar data={data.dailyShipped} />
           </div>
         </Section>
