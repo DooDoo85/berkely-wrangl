@@ -14,30 +14,30 @@ function AppRoutes() {
   if (!user) return <Routes><Route path="*" element={<SignIn />} /></Routes>
 
   return (
-    <Layout>
-      <Routes>
+    <Routes>
+      <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/dashboard" element={<Home />} />
 
         {/* Customers */}
-        <Route path="/customers" element={<Placeholder label="Customers" />} />
-        <Route path="/customers/new" element={<Placeholder label="New Customer" />} />
-        <Route path="/customers/:id" element={<Placeholder label="Customer Detail" />} />
+        <Route path="/customers" element={<Placeholder title="Customers" />} />
+        <Route path="/customers/new" element={<Placeholder title="New Customer" />} />
+        <Route path="/customers/:id" element={<Placeholder title="Customer Detail" />} />
 
         {/* Orders */}
-        <Route path="/orders" element={<Placeholder label="Orders" />} />
-        <Route path="/orders/new" element={<Placeholder label="New Order" />} />
-        <Route path="/orders/:id" element={<Placeholder label="Order Detail" />} />
+        <Route path="/orders" element={<Placeholder title="Orders" />} />
+        <Route path="/orders/new" element={<Placeholder title="New Order" />} />
+        <Route path="/orders/:id" element={<Placeholder title="Order Detail" />} />
 
         {/* Activities */}
-        <Route path="/activities" element={<Placeholder label="Activities" />} />
+        <Route path="/activities" element={<Placeholder title="Activities" />} />
 
         {/* Inventory */}
-        <Route path="/inventory" element={<Placeholder label="Inventory" />} />
-        <Route path="/inventory/:id" element={<Placeholder label="Part Detail" />} />
+        <Route path="/inventory" element={<Placeholder title="Inventory" />} />
+        <Route path="/inventory/:id" element={<Placeholder title="Part Detail" />} />
 
         {/* Ops */}
-        <Route path="/ops" element={<Placeholder label="Ops / Warehouse" />} />
+        <Route path="/ops" element={<Placeholder title="Ops / Warehouse" />} />
 
         {/* Purchasing */}
         <Route path="/purchasing" element={<PurchaseOrders />} />
@@ -45,13 +45,13 @@ function AppRoutes() {
         <Route path="/purchasing/po/:id" element={<PurchaseOrderDetail />} />
 
         {/* Reports */}
-        <Route path="/reports" element={<Placeholder label="Reports" />} />
-        <Route path="/reports/production" element={<Placeholder label="Production Dashboard" />} />
-        <Route path="/reports/rep-activity" element={<Placeholder label="Rep Activity" />} />
+        <Route path="/reports" element={<Placeholder title="Reports" />} />
+        <Route path="/reports/production" element={<Placeholder title="Production Dashboard" />} />
+        <Route path="/reports/rep-activity" element={<Placeholder title="Rep Activity" />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+      </Route>
+    </Routes>
   )
 }
 
