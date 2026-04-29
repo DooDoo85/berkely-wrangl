@@ -4,6 +4,41 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
+
+// Activities
+import ActivityLog from './pages/activities/ActivityLog'
+import ActivityForm from './pages/activities/ActivityForm'
+
+// Customers
+import CustomerList from './pages/customers/CustomerList'
+import CustomerDetail from './pages/customers/CustomerDetail'
+import CustomerForm from './pages/customers/CustomerForm'
+
+// Inventory
+import InventoryList from './pages/inventory/InventoryList'
+import PartDetail from './pages/inventory/PartDetail'
+import Containers from './pages/inventory/Containers'
+
+// Ops
+import OpsHub from './pages/ops/OpsHub'
+import AdjustInventory from './pages/ops/AdjustInventory'
+import CommitMaterial from './pages/ops/CommitMaterial'
+import ReceiveStock from './pages/ops/ReceiveStock'
+import TransactionLog from './pages/ops/TransactionLog'
+
+// Orders
+import OrderList from './pages/orders/OrderList'
+import OrderDetail from './pages/orders/OrderDetail'
+import OrderForm from './pages/orders/OrderForm'
+
+// Reports
+import ReportsHub from './pages/reports/ReportsHub'
+import ProductionDashboard from './pages/reports/ProductionDashboard'
+import RepActivity from './pages/reports/RepActivity'
+import InventoryHealth from './pages/reports/InventoryHealth'
+import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
+
+// Purchasing
 import PurchaseOrders from './pages/purchasing/PurchaseOrders'
 import ReorderQueue from './pages/purchasing/ReorderQueue'
 import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
@@ -20,24 +55,36 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Home />} />
 
         {/* Customers */}
-        <Route path="/customers" element={<Placeholder title="Customers" />} />
-        <Route path="/customers/new" element={<Placeholder title="New Customer" />} />
-        <Route path="/customers/:id" element={<Placeholder title="Customer Detail" />} />
-
-        {/* Orders */}
-        <Route path="/orders" element={<Placeholder title="Orders" />} />
-        <Route path="/orders/new" element={<Placeholder title="New Order" />} />
-        <Route path="/orders/:id" element={<Placeholder title="Order Detail" />} />
+        <Route path="/customers" element={<CustomerList />} />
+        <Route path="/customers/new" element={<CustomerForm />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
 
         {/* Activities */}
-        <Route path="/activities" element={<Placeholder title="Activities" />} />
+        <Route path="/activities" element={<ActivityLog />} />
+        <Route path="/activities/new" element={<ActivityForm />} />
+
+        {/* Pipeline */}
+        <Route path="/pipeline" element={<Placeholder title="Pipeline" />} />
+
+        {/* Orders */}
+        <Route path="/orders" element={<OrderList />} />
+        <Route path="/orders/new" element={<OrderForm />} />
+        <Route path="/orders/:id" element={<OrderDetail />} />
+
+        {/* Order Tracker */}
+        <Route path="/tracker" element={<Placeholder title="Order Tracker" />} />
 
         {/* Inventory */}
-        <Route path="/inventory" element={<Placeholder title="Inventory" />} />
-        <Route path="/inventory/:id" element={<Placeholder title="Part Detail" />} />
+        <Route path="/inventory" element={<InventoryList />} />
+        <Route path="/inventory/containers" element={<Containers />} />
+        <Route path="/inventory/:id" element={<PartDetail />} />
 
         {/* Ops */}
-        <Route path="/ops" element={<Placeholder title="Ops / Warehouse" />} />
+        <Route path="/ops" element={<OpsHub />} />
+        <Route path="/ops/adjust" element={<AdjustInventory />} />
+        <Route path="/ops/commit" element={<CommitMaterial />} />
+        <Route path="/ops/receive" element={<ReceiveStock />} />
+        <Route path="/ops/transactions" element={<TransactionLog />} />
 
         {/* Purchasing */}
         <Route path="/purchasing" element={<PurchaseOrders />} />
@@ -45,9 +92,15 @@ function AppRoutes() {
         <Route path="/purchasing/po/:id" element={<PurchaseOrderDetail />} />
 
         {/* Reports */}
-        <Route path="/reports" element={<Placeholder title="Reports" />} />
-        <Route path="/reports/production" element={<Placeholder title="Production Dashboard" />} />
-        <Route path="/reports/rep-activity" element={<Placeholder title="Rep Activity" />} />
+        <Route path="/reports" element={<ReportsHub />} />
+        <Route path="/reports/production" element={<ProductionDashboard />} />
+        <Route path="/reports/rep-activity" element={<RepActivity />} />
+        <Route path="/reports/inventory-health" element={<InventoryHealth />} />
+        <Route path="/reports/order-status" element={<OrderStatusDashboard />} />
+
+        {/* Freight / Settings */}
+        <Route path="/freight" element={<Placeholder title="Freight" />} />
+        <Route path="/settings" element={<Placeholder title="Settings" />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
