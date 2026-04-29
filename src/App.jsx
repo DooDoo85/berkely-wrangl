@@ -4,14 +4,14 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
-import PurchaseOrders from './pages/purchasing/PurchaseOrders'
-import ReorderQueue from './pages/purchasing/ReorderQueue'
-import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
+import PurchaseOrders from './purchasing/PurchaseOrders'
+import ReorderQueue from './purchasing/ReorderQueue'
+import PurchaseOrderDetail from './purchasing/PurchaseOrderDetail'
 
 function AppRoutes() {
-  const { session, loading } = useAuth()
+  const { user, loading } = useAuth()
   if (loading) return null
-  if (!session) return <Routes><Route path="*" element={<SignIn />} /></Routes>
+  if (!user) return <Routes><Route path="*" element={<SignIn />} /></Routes>
 
   return (
     <Layout>
