@@ -37,9 +37,7 @@ function AppRoutes() {
         <Route path="/ops" element={<Placeholder label="Ops / Warehouse" />} />
 
         {/* Purchasing */}
-        <Route path="/purchasing" element={<PurchaseOrders />} />
-        <Route path="/purchasing/queue" element={<ReorderQueue />} />
-        <Route path="/purchasing/po/:id" element={<PurchaseOrderDetail />} />
+
 
         {/* Reports */}
         <Route path="/reports" element={<Placeholder label="Reports" />} />
