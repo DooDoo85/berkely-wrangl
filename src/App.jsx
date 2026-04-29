@@ -4,6 +4,9 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
+import PurchaseOrders from './pages/purchasing/PurchaseOrders'
+import ReorderQueue from './pages/purchasing/ReorderQueue'
+import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
 
 function AppRoutes() {
   const { user, loading } = useAuth()
@@ -37,7 +40,9 @@ function AppRoutes() {
         <Route path="/ops" element={<Placeholder label="Ops / Warehouse" />} />
 
         {/* Purchasing */}
-
+        <Route path="/purchasing" element={<PurchaseOrders />} />
+        <Route path="/purchasing/queue" element={<ReorderQueue />} />
+        <Route path="/purchasing/po/:id" element={<PurchaseOrderDetail />} />
 
         {/* Reports */}
         <Route path="/reports" element={<Placeholder label="Reports" />} />
