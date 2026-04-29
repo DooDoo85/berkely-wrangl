@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import AddToReorderModal from '../../components/AddToReorderModal'
 
 const TYPE_CONFIG = {
   fabric:    { label: 'Fabrics',    icon: '🧻', color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' },
@@ -23,6 +24,7 @@ export default function InventoryList() {
   const [type,    setType]    = useState('all')
   const [search,  setSearch]  = useState('')
   const [counts,  setCounts]  = useState({})
+  const [reorderPart, setReorderPart] = useState(null)
 
   useEffect(() => { fetchParts() }, [type])
 
@@ -40,7 +42,6 @@ export default function InventoryList() {
     const { data } = await query
     setParts(data || [])
 
-    // Counts
     const { data: all } = await supabase.from('parts').select('part_type').eq('active', true)
     const c = { all: all?.length || 0 }
     all?.forEach(p => { c[p.part_type] = (c[p.part_type] || 0) + 1 })
@@ -74,9 +75,17 @@ export default function InventoryList() {
             {lowStock > 0 && <span className="text-amber-500 ml-2">· {lowStock} low stock</span>}
           </p>
         </div>
-        <button onClick={() => navigate('/inventory/containers')} className="btn-ghost text-sm">
-          🚢 Containers →
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/purchasing/queue')}
+            className="btn-ghost text-sm text-amber-700 border-amber-200 hover:bg-amber-50"
+          >
+            📦 Reorder Queue →
+          </button>
+          <button onClick={() => navigate('/inventory/containers')} className="btn-ghost text-sm">
+            🚢 Containers →
+          </button>
+        </div>
       </div>
 
       {/* Type tabs */}
@@ -144,36 +153,49 @@ export default function InventoryList() {
                 return (
                   <tr
                     key={p.id}
-                    onClick={() => navigate(`/inventory/${p.id}`)}
-                    className={`border-b border-stone-50 hover:bg-stone-50 cursor-pointer transition-colors ${
+                    className={`border-b border-stone-50 transition-colors ${
                       i === filtered.length - 1 ? 'border-b-0' : ''
                     } ${p.qty_on_hand <= 0 ? 'opacity-60' : ''}`}
                   >
-                    <td className="px-5 py-3.5">
+                    <td
+                      className="px-5 py-3.5 cursor-pointer hover:text-brand-dark"
+                      onClick={() => navigate(`/inventory/${p.id}`)}
+                    >
                       <div className="font-medium text-stone-800 text-sm">{p.name}</div>
                       {p.vendor_part_name && p.vendor_part_name !== p.name && (
                         <div className="text-xs text-stone-400 mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor_id
-                        ? <span className="font-mono text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded">{p.vendor_id}</span>
+                        ? <span className="font-mono text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded cursor-pointer">{p.vendor_id}</span>
                         : <span className="text-stone-300 text-xs">—</span>
                       }
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <span className="text-sm text-stone-500">{p.vendor || '—'}</span>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
                         {cfg.icon} {cfg.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="px-5 py-3.5 text-right cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <StockBadge qty={p.qty_on_hand} reorder={p.reorder_level} />
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <span className="text-stone-300 text-sm">→</span>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={e => { e.stopPropagation(); setReorderPart(p) }}
+                          className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                        >
+                          + Reorder
+                        </button>
+                        <span
+                          className="text-stone-300 text-sm cursor-pointer"
+                          onClick={() => navigate(`/inventory/${p.id}`)}
+                        >→</span>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -182,6 +204,15 @@ export default function InventoryList() {
           </table>
         )}
       </div>
+
+      {/* Reorder Modal */}
+      {reorderPart && (
+        <AddToReorderModal
+          part={reorderPart}
+          onClose={() => setReorderPart(null)}
+          onAdded={() => setReorderPart(null)}
+        />
+      )}
     </div>
   )
 }
