@@ -17,7 +17,9 @@ import CustomerForm from './pages/customers/CustomerForm'
 // Inventory
 import InventoryList from './pages/inventory/InventoryList'
 import PartDetail from './pages/inventory/PartDetail'
-
+import CommittedStockImport from './pages/inventory/CommittedStockImport'
+import MatchReview from './pages/inventory/MatchReview'
+import Containers from './pages/inventory/Containers'
 
 // Ops
 import OpsHub from './pages/ops/OpsHub'
@@ -76,7 +78,9 @@ function AppRoutes() {
 
         {/* Inventory */}
         <Route path="/inventory" element={<InventoryList />} />
-       
+        <Route path="/inventory/committed-import" element={<CommittedStockImport />} />
+        <Route path="/inventory/match-review" element={<MatchReview />} />
+        <Route path="/inventory/containers" element={<Containers />} />
         <Route path="/inventory/:id" element={<PartDetail />} />
 
         {/* Ops */}
