@@ -10,8 +10,6 @@ const STATUS_STYLES = {
   cancelled:  'bg-red-50 text-red-500',
 }
 
-const STATUS_FLOW = ['draft', 'submitted', 'exported', 'received']
-
 export default function PurchaseOrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -23,6 +21,7 @@ export default function PurchaseOrderDetail() {
   const [epicPOInput, setEpicPOInput] = useState('')
   const [addingItem, setAddingItem] = useState(false)
   const [newItem, setNewItem] = useState({ part_name: '', stock_number: '', qty_ordered: 1, unit_cost: 0, note: '' })
+  const [confirmSubmit, setConfirmSubmit] = useState(false)
 
   useEffect(() => { loadPO() }, [id])
 
@@ -38,10 +37,31 @@ export default function PurchaseOrderDetail() {
     setLoading(false)
   }
 
+  async function loadItems() {
+    const { data } = await supabase.from('purchase_order_items').select('*').eq('po_id', id).order('created_at')
+    setItems(data || [])
+  }
+
   async function updateStatus(status) {
     setSaving(true)
     await supabase.from('purchase_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
     setSaving(false)
+    loadPO()
+  }
+
+  async function handleSubmitAndExport() {
+    setSaving(true)
+    // Mark as submitted + exported
+    await supabase.from('purchase_orders').update({
+      status: 'exported',
+      updated_at: new Date().toISOString()
+    }).eq('id', id)
+
+    // Trigger CSV export
+    exportCSV()
+
+    setSaving(false)
+    setConfirmSubmit(false)
     loadPO()
   }
 
@@ -54,11 +74,6 @@ export default function PurchaseOrderDetail() {
   async function removeItem(itemId) {
     await supabase.from('purchase_order_items').delete().eq('id', itemId)
     loadItems()
-  }
-
-  async function loadItems() {
-    const { data } = await supabase.from('purchase_order_items').select('*').eq('po_id', id).order('created_at')
-    setItems(data || [])
   }
 
   async function addItem() {
@@ -103,10 +118,14 @@ export default function PurchaseOrderDetail() {
   if (!po) return <div className="p-8 text-red-500 text-sm">PO not found.</div>
 
   const isDraft = po.status === 'draft'
-  const currentStep = STATUS_FLOW.indexOf(po.status)
+  const isExported = po.status === 'exported'
+  const isReceived = po.status === 'received'
+  const isCancelled = po.status === 'cancelled'
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+
+      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <button onClick={() => navigate('/purchasing')} className="text-xs text-stone-400 hover:text-stone-600 transition-colors mb-2 block">
@@ -120,11 +139,43 @@ export default function PurchaseOrderDetail() {
           </div>
           <p className="text-sm text-stone-500 mt-1">{po.vendor_name} · Created {new Date(po.created_at).toLocaleDateString()}</p>
         </div>
+
+        {/* Action buttons */}
         <div className="flex items-center gap-2">
-          <button onClick={exportCSV} className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors">
-            Export CSV
-          </button>
-          {po.status !== 'cancelled' && po.status !== 'received' && (
+          {isDraft && (
+            <>
+              <button onClick={exportCSV} className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors">
+                Download CSV
+              </button>
+              <button
+                onClick={() => setConfirmSubmit(true)}
+                disabled={items.length === 0}
+                className="text-xs font-semibold bg-brand-dark text-white px-4 py-1.5 rounded hover:bg-brand-dark/90 transition-colors disabled:opacity-40"
+              >
+                Submit & Export to ePIC →
+              </button>
+            </>
+          )}
+          {isExported && (
+            <>
+              <button onClick={exportCSV} className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors">
+                Download CSV
+              </button>
+              <button
+                onClick={() => updateStatus('received')}
+                disabled={saving}
+                className="text-xs font-semibold bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700 transition-colors disabled:opacity-40"
+              >
+                ✓ Mark as Received
+              </button>
+            </>
+          )}
+          {isReceived && (
+            <span className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded">
+              ✓ Stock Received
+            </span>
+          )}
+          {!isCancelled && !isReceived && (
             <button
               onClick={() => updateStatus('cancelled')}
               className="text-xs border border-red-200 text-red-500 px-3 py-1.5 rounded hover:bg-red-50 transition-colors"
@@ -135,32 +186,42 @@ export default function PurchaseOrderDetail() {
         </div>
       </div>
 
-      <div className="card p-4 mb-5">
-        <div className="flex items-center gap-0">
-          {STATUS_FLOW.map((s, i) => (
-            <div key={s} className="flex items-center flex-1">
-              <button
-                onClick={() => i > currentStep && updateStatus(s)}
-                disabled={saving || i <= currentStep || po.status === 'cancelled'}
-                className={`flex-1 text-center py-2 text-xs font-semibold rounded transition-colors ${
-                  i < currentStep ? 'bg-brand-dark text-white' :
-                  i === currentStep ? 'bg-brand-light text-white' :
-                  'bg-stone-100 text-stone-400 hover:bg-stone-200 disabled:cursor-default'
-                }`}
-              >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-              {i < STATUS_FLOW.length - 1 && (
-                <div className={`h-0.5 w-4 ${i < currentStep ? 'bg-brand-dark' : 'bg-stone-200'}`} />
-              )}
-            </div>
-          ))}
+      {/* Status banner */}
+      {isDraft && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-amber-500 text-lg">✏️</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Draft — Review before submitting</p>
+            <p className="text-xs text-amber-600 mt-0.5">Add or remove items, update quantities, then click "Submit & Export to ePIC" when ready.</p>
+          </div>
         </div>
-        {po.status === 'cancelled' && (
-          <p className="text-xs text-red-500 text-center mt-2 font-semibold">This PO has been cancelled.</p>
-        )}
-      </div>
+      )}
+      {isExported && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-blue-500 text-lg">📤</span>
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Submitted & Exported to ePIC</p>
+            <p className="text-xs text-blue-600 mt-0.5">PO has been sent. Click "Mark as Received" when the stock arrives.</p>
+          </div>
+        </div>
+      )}
+      {isReceived && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-green-500 text-lg">✅</span>
+          <div>
+            <p className="text-sm font-semibold text-green-800">Stock Received</p>
+            <p className="text-xs text-green-600 mt-0.5">This PO is complete.</p>
+          </div>
+        </div>
+      )}
+      {isCancelled && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-red-400 text-lg">✕</span>
+          <p className="text-sm font-semibold text-red-700">This PO has been cancelled.</p>
+        </div>
+      )}
 
+      {/* ePIC PO Number */}
       <div className="card p-4 mb-5 flex items-center justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.1em] text-stone-400 uppercase mb-0.5">ePIC PO Number</p>
@@ -178,7 +239,9 @@ export default function PurchaseOrderDetail() {
               <button onClick={() => setEditingEpicPO(false)} className="text-xs text-stone-400 hover:underline">Cancel</button>
             </div>
           ) : (
-            <p className="text-sm font-mono text-stone-700">{po.epic_po_number || <span className="text-stone-400 italic">Not assigned yet</span>}</p>
+            <p className="text-sm font-mono text-stone-700">
+              {po.epic_po_number || <span className="text-stone-400 italic">Not assigned yet</span>}
+            </p>
           )}
         </div>
         {!editingEpicPO && (
@@ -188,6 +251,7 @@ export default function PurchaseOrderDetail() {
         )}
       </div>
 
+      {/* Line items */}
       <div className="card overflow-hidden mb-5">
         <div className="flex items-center justify-between px-5 py-3 bg-stone-50 border-b border-stone-100">
           <span className="text-sm font-semibold text-stone-700">{items.length} Line Item{items.length !== 1 ? 's' : ''}</span>
@@ -265,7 +329,7 @@ export default function PurchaseOrderDetail() {
           {totalValue > 0 && (
             <tfoot>
               <tr className="border-t border-stone-200 bg-stone-50">
-                <td colSpan={isDraft ? 4 : 4} className="px-5 py-3 text-right text-xs font-bold text-stone-500 uppercase tracking-wide">Total Estimated Value</td>
+                <td colSpan={4} className="px-5 py-3 text-right text-xs font-bold text-stone-500 uppercase tracking-wide">Total Estimated Value</td>
                 <td className="px-5 py-3 text-right font-bold text-stone-800">${totalValue.toFixed(2)}</td>
                 <td colSpan={isDraft ? 2 : 1}></td>
               </tr>
@@ -274,10 +338,41 @@ export default function PurchaseOrderDetail() {
         </table>
       </div>
 
+      {/* Notes */}
       {po.notes && (
         <div className="card p-5">
           <p className="text-[10px] font-bold tracking-[0.1em] text-stone-400 uppercase mb-2">Notes</p>
           <p className="text-sm text-stone-700">{po.notes}</p>
+        </div>
+      )}
+
+      {/* Confirm Submit Modal */}
+      {confirmSubmit && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-display font-bold text-stone-800 mb-2">Submit & Export to ePIC?</h3>
+            <p className="text-sm text-stone-500 mb-2">
+              This will:
+            </p>
+            <ul className="text-sm text-stone-600 space-y-1 mb-5 list-none">
+              <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Mark PO as submitted</li>
+              <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Download a CSV export file</li>
+              <li className="flex items-center gap-2"><span className="text-stone-300">○</span> <span className="text-stone-400">XML/ePIC auto-import (coming in Phase 2)</span></li>
+            </ul>
+            <p className="text-xs text-stone-400 mb-5">Once submitted, line items can no longer be edited.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmSubmit(false)} className="flex-1 py-2 px-4 rounded-xl border border-stone-200 text-sm text-stone-500 hover:bg-stone-50">
+                Go Back
+              </button>
+              <button
+                onClick={handleSubmitAndExport}
+                disabled={saving}
+                className="flex-1 py-2 px-4 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 disabled:opacity-40"
+              >
+                {saving ? 'Submitting...' : 'Submit & Export'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
