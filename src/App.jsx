@@ -17,7 +17,7 @@ import CustomerForm from './pages/customers/CustomerForm'
 // Inventory
 import InventoryList from './pages/inventory/InventoryList'
 import PartDetail from './pages/inventory/PartDetail'
-import Containers from './pages/inventory/Containers'
+
 
 // Ops
 import OpsHub from './pages/ops/OpsHub'
@@ -76,7 +76,7 @@ function AppRoutes() {
 
         {/* Inventory */}
         <Route path="/inventory" element={<InventoryList />} />
-        <Route path="/inventory/containers" element={<Containers />} />
+       
         <Route path="/inventory/:id" element={<PartDetail />} />
 
         {/* Ops */}
