@@ -4,9 +4,9 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
-import PurchaseOrders from './purchasing/PurchaseOrders'
-import ReorderQueue from './purchasing/ReorderQueue'
-import PurchaseOrderDetail from './purchasing/PurchaseOrderDetail'
+import PurchaseOrders from './pages/purchasing/PurchaseOrders'
+import ReorderQueue from './pages/purchasing/ReorderQueue'
+import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
 
 function AppRoutes() {
   const { session, loading } = useAuth()
