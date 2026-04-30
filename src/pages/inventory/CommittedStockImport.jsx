@@ -101,10 +101,10 @@ export default function CommittedStockImport() {
         if (i % 20 === 0) setProgress(`Processing row ${i} of ${partRows.length}...`)
 
         const wo          = (row.WorkOrder || '').trim()
-        const lineItem    = (row.LineItem || '').trim()
+        const lineItem    = (row.LineItem || row.WorkOrder || '').trim()
         const stockCode   = (row.StockCode || '').trim()
         const description = (row.ComponentDescription || '').trim()
-        const requiredQty = parseFloat(row.RequiredQty || 0) || 0
+        const requiredQty = parseFloat(row.TotalRequiredQty || row.RequiredQty || 0) || 0
         const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
 
         if (!wo || !lineItem || !description) continue
