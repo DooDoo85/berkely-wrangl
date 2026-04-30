@@ -26,14 +26,13 @@ export default function MatchReview() {
   async function approve(item) {
     setSaving(prev => ({ ...prev, [item.id]: 'approving' }))
     try {
-      // Save to mappings table
+      // Save to mappings table keyed by description
       await supabase.from('epic_part_mappings').upsert({
-        epic_stock_code:  item.stock_code,
         epic_description: item.component_description,
         wrangl_part_id:   item.part_id,
         wrangl_part_name: item.parts?.name,
         approved_at:      new Date().toISOString(),
-      }, { onConflict: 'epic_stock_code' })
+      }, { onConflict: 'epic_description' })
 
       // Mark as auto_matched
       await supabase.from('epic_committed_stock')
