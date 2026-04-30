@@ -25,6 +25,7 @@ const NAV_EXECUTIVE = [
         icon: '≡',
         collapsible: true,
         base: '/orders',
+        activePaths: ['/orders', '/tracker', '/ops/production'],
         children: [
           { to: '/orders', label: 'All Orders' },
           { to: '/tracker', label: 'Order Tracker' },
@@ -33,9 +34,18 @@ const NAV_EXECUTIVE = [
         ]
       },
       { to: '/inventory', icon: '▦', label: 'Inventory' },
-      { to: '/ops', icon: '⚙️', label: 'Ops / Warehouse' },
-      { to: '/purchasing', icon: '📦', label: 'Purchasing' },
-      { to: '/freight', icon: '▷', label: 'Freight' },
+      {
+        label: 'Ops / Warehouse',
+        icon: '⚙️',
+        collapsible: true,
+        base: '/ops',
+        activePaths: ['/ops', '/purchasing', '/freight'],
+        children: [
+          { to: '/ops', label: 'Warehouse' },
+          { to: '/purchasing', label: 'Purchasing' },
+          { to: '/freight', label: 'Freight' },
+        ]
+      },
     ]
   },
   {
@@ -70,9 +80,9 @@ const NAV_SALES = [
 ]
 
 function CollapsibleItem({ item, location }) {
-  const isActive = location.pathname.startsWith(item.base) ||
-    location.pathname.startsWith('/tracker') ||
-    location.pathname.startsWith('/ops/production')
+  const isActive = item.activePaths
+    ? item.activePaths.some(p => location.pathname.startsWith(p))
+    : location.pathname.startsWith(item.base)
   const [open, setOpen] = useState(isActive)
 
   return (
@@ -91,7 +101,7 @@ function CollapsibleItem({ item, location }) {
             <NavLink
               key={child.to}
               to={child.to}
-              end={child.to === '/orders'}
+              end={child.to === '/orders' || child.to === '/ops'}
               className={({ isActive }) =>
                 `block py-1.5 px-2 rounded-lg text-xs transition-colors ${
                   isActive
