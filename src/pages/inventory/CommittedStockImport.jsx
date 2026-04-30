@@ -75,13 +75,13 @@ export default function CommittedStockImport() {
       const partRows = rows.filter(r => (r.StockClass || '').trim() !== 'RS COMP')
       setProgress(`Found ${rows.length} rows, processing ${partRows.length} RS PART rows...`)
 
-      // Load approved mappings
+      // Load approved mappings keyed by epic_description
       setProgress('Loading approved mappings...')
       const { data: mappings } = await supabase
         .from('epic_part_mappings')
-        .select('epic_stock_code, wrangl_part_id, wrangl_part_name')
+        .select('epic_description, wrangl_part_id, wrangl_part_name')
       const mappingMap = {}
-      ;(mappings || []).forEach(m => { mappingMap[m.epic_stock_code] = m })
+      ;(mappings || []).forEach(m => { mappingMap[m.epic_description.toLowerCase().trim()] = m })
 
       // Load all active parts for fuzzy matching
       setProgress('Loading parts for matching...')
@@ -107,15 +107,15 @@ export default function CommittedStockImport() {
         const requiredQty = parseFloat(row.RequiredQty || 0) || 0
         const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
 
-        if (!wo || !lineItem || !stockCode) continue
+        if (!wo || !lineItem || !description) continue
 
-        // Check duplicate
+        // Duplicate check — keyed on WorkOrder + LineItem + Description
         const { data: existing } = await supabase
           .from('epic_committed_stock')
           .select('id')
           .eq('work_order', wo)
           .eq('line_item', lineItem)
-          .eq('stock_code', stockCode)
+          .eq('component_description', description)
           .limit(1)
 
         if (existing && existing.length > 0) {
@@ -125,13 +125,14 @@ export default function CommittedStockImport() {
 
         stats.new++
 
-        // Match
+        // Check approved mapping by description
         let partId = null
         let matchStatus = 'unmatched'
         let matchScore = 0
 
-        if (mappingMap[stockCode]) {
-          partId = mappingMap[stockCode].wrangl_part_id
+        const descKey = description.toLowerCase().trim()
+        if (mappingMap[descKey]) {
+          partId = mappingMap[descKey].wrangl_part_id
           matchStatus = 'auto_matched'
           matchScore = 1.0
           stats.auto_matched++
@@ -148,14 +149,13 @@ export default function CommittedStockImport() {
             matchStatus = 'auto_matched'
             matchScore = bestScore
             stats.auto_matched++
-            // Save approved mapping
+            // Save mapping keyed by description
             await supabase.from('epic_part_mappings').upsert({
-              epic_stock_code:  stockCode,
               epic_description: description,
               wrangl_part_id:   bestPart.id,
               wrangl_part_name: bestPart.name,
               approved_at:      new Date().toISOString(),
-            }, { onConflict: 'epic_stock_code' })
+            }, { onConflict: 'epic_description' })
           } else if (bestScore >= 0.85) {
             partId = bestPart.id
             matchStatus = 'pending_review'
