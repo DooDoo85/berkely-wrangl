@@ -14,7 +14,7 @@ function StockBadge({ qty, reorder }) {
   if (qty === null || qty === undefined) return <span className="text-stone-300 text-xs">—</span>
   if (qty <= 0)                return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">OUT</span>
   if (reorder && qty <= reorder) return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">LOW</span>
-  return <span className="text-sm font-semibold text-stone-700">{Number(qty).toLocaleString()}</span>
+  return <span className="text-sm font-semibold text-stone-700">{Math.ceil(Number(qty)).toLocaleString()}</span>
 }
 
 export default function InventoryList() {
@@ -189,14 +189,14 @@ export default function InventoryList() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {committed > 0
-                        ? <span className="font-semibold text-amber-600">{Number(committed).toLocaleString()}</span>
+                        ? <span className="font-semibold text-amber-600">{Math.ceil(committed).toLocaleString()}</span>
                         : <span className="text-stone-300">—</span>
                       }
                     </td>
                     <td className="px-4 py-3 text-right">
                       {committed > 0
                         ? <span className={`font-semibold ${available <= 0 ? 'text-red-600' : available <= 10 ? 'text-amber-600' : 'text-green-700'}`}>
-                            {Number(available).toLocaleString()}
+                            {Math.ceil(available).toLocaleString()}
                           </span>
                         : <span className="text-stone-300">—</span>
                       }
