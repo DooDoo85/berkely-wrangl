@@ -71,6 +71,11 @@ export default function CommittedStockImport() {
       const text = await file.text()
       const rows = parseCSV(text)
 
+      // FRESH SNAPSHOT — clear previous unrelieved lines and reset qty_committed
+      setProgress('Clearing previous committed stock snapshot...')
+      await supabase.from('epic_committed_stock').delete().eq('relieved', false)
+      await supabase.from('parts').update({ qty_committed: 0, updated_at: new Date().toISOString() }).gte('qty_committed', 0)
+
       // Skip RS COMP
       const partRows = rows.filter(r => (r.StockClass || '').trim() !== 'RS COMP')
       setProgress(`Found ${rows.length} rows, processing ${partRows.length} RS PART rows...`)
