@@ -452,7 +452,7 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
-// COMITTED STOCK — description-only fuzzy match, commit qty
+// COMITTED STOCK — fresh snapshot model, description-only matching
 async function processCommittedStock(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  COMITTED STOCK: ${rows.length} rows`)
@@ -460,6 +460,16 @@ async function processCommittedStock(csvText) {
   // Skip RS COMP (fabric/extrusions tracked separately)
   const partRows = rows.filter(r => (r.StockClass || '').trim() !== 'RS COMP')
   console.log(`  After skipping RS COMP: ${partRows.length} rows to process`)
+
+  // FRESH SNAPSHOT — clear all unrelieved committed lines and reset qty_committed
+  console.log('  Clearing previous committed stock snapshot...')
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_stock?relieved=eq.false`, {
+    method: 'DELETE',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  })
+  // Reset qty_committed on all parts
+  await sbUpdate('parts', 'qty_committed=gte.0', { qty_committed: 0, updated_at: new Date().toISOString() })
+  console.log('  Snapshot cleared — importing fresh data...')
 
   // Load all approved mappings keyed by epic_description
   const mappings = await sbQuery('epic_part_mappings', 'select=epic_description,wrangl_part_id,wrangl_part_name')
