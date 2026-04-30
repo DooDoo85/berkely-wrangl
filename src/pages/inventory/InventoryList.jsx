@@ -136,20 +136,24 @@ export default function InventoryList() {
             <div className="text-stone-400 text-sm">Try a different search or filter</div>
           </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-stone-100 bg-stone-50">
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Part</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Vendor ID</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Vendor</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Type</th>
-                <th className="text-right px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">On Hand</th>
-                <th className="px-5 py-3"></th>
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Part</th>
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor ID</th>
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor</th>
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Type</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">On Hand</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Committed</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Available</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p, i) => {
                 const cfg = TYPE_CONFIG[p.part_type] || TYPE_CONFIG.component
+                const committed = parseFloat(p.qty_committed) || 0
+                const available = (parseFloat(p.qty_on_hand) || 0) - committed
                 return (
                   <tr
                     key={p.id}
@@ -158,41 +162,55 @@ export default function InventoryList() {
                     } ${p.qty_on_hand <= 0 ? 'opacity-60' : ''}`}
                   >
                     <td
-                      className="px-5 py-3.5 cursor-pointer hover:text-brand-dark"
+                      className="px-4 py-3 cursor-pointer hover:text-brand-dark"
                       onClick={() => navigate(`/inventory/${p.id}`)}
                     >
-                      <div className="font-medium text-stone-800 text-sm">{p.name}</div>
+                      <div className="font-medium text-stone-800">{p.name}</div>
                       {p.vendor_part_name && p.vendor_part_name !== p.name && (
-                        <div className="text-xs text-stone-400 mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
+                        <div className="text-stone-400 mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
                       )}
                     </td>
-                    <td className="px-5 py-3.5" onClick={() => navigate(`/inventory/${p.id}`)}>
+                    <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor_id
-                        ? <span className="font-mono text-xs text-stone-600 bg-stone-100 px-2 py-0.5 rounded cursor-pointer">{p.vendor_id}</span>
-                        : <span className="text-stone-300 text-xs">—</span>
+                        ? <span className="font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">{p.vendor_id}</span>
+                        : <span className="text-stone-300">—</span>
                       }
                     </td>
-                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
-                      <span className="text-sm text-stone-500">{p.vendor || '—'}</span>
+                    <td className="px-4 py-3 cursor-pointer text-stone-500" onClick={() => navigate(`/inventory/${p.id}`)}>
+                      {p.vendor || '—'}
                     </td>
-                    <td className="px-5 py-3.5 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+                    <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
+                      <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${cfg.bg} ${cfg.color} ${cfg.border}`}>
                         {cfg.icon} {cfg.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-right cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
+                    <td className="px-4 py-3 text-right cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <StockBadge qty={p.qty_on_hand} reorder={p.reorder_level} />
                     </td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="px-4 py-3 text-right">
+                      {committed > 0
+                        ? <span className="font-semibold text-amber-600">{Number(committed).toLocaleString()}</span>
+                        : <span className="text-stone-300">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {committed > 0
+                        ? <span className={`font-semibold ${available <= 0 ? 'text-red-600' : available <= 10 ? 'text-amber-600' : 'text-green-700'}`}>
+                            {Number(available).toLocaleString()}
+                          </span>
+                        : <span className="text-stone-300">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={e => { e.stopPropagation(); setReorderPart(p) }}
-                          className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                          className="font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
                         >
                           + Reorder
                         </button>
                         <span
-                          className="text-stone-300 text-sm cursor-pointer"
+                          className="text-stone-300 cursor-pointer"
                           onClick={() => navigate(`/inventory/${p.id}`)}
                         >→</span>
                       </div>
