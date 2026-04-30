@@ -452,7 +452,7 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
-// COMITTED STOCK — fuzzy match components, commit qty
+// COMITTED STOCK — description-only fuzzy match, commit qty
 async function processCommittedStock(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  COMITTED STOCK: ${rows.length} rows`)
@@ -461,15 +461,15 @@ async function processCommittedStock(csvText) {
   const partRows = rows.filter(r => (r.StockClass || '').trim() !== 'RS COMP')
   console.log(`  After skipping RS COMP: ${partRows.length} rows to process`)
 
-  // Load all approved mappings once
-  const mappings = await sbQuery('epic_part_mappings', 'select=epic_stock_code,wrangl_part_id,wrangl_part_name')
+  // Load all approved mappings keyed by epic_description
+  const mappings = await sbQuery('epic_part_mappings', 'select=epic_description,wrangl_part_id,wrangl_part_name')
   const mappingMap = {}
   if (Array.isArray(mappings)) {
-    mappings.forEach(m => { mappingMap[m.epic_stock_code] = m })
+    mappings.forEach(m => { mappingMap[m.epic_description.toLowerCase().trim()] = m })
   }
 
   // Load all active parts once for fuzzy matching
-  const allParts = await sbQuery('parts', 'select=id,name,vendor_id&active=eq.true&limit=1000')
+  const allParts = await sbQuery('parts', 'select=id,name&active=eq.true&limit=1000')
   const partsList = Array.isArray(allParts) ? allParts : []
 
   const stats = { new: 0, skipped: 0, auto_matched: 0, pending_review: 0, unmatched: 0 }
@@ -483,12 +483,12 @@ async function processCommittedStock(csvText) {
     const requiredQty = parseFloat(row.RequiredQty || 0) || 0
     const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
 
-    if (!wo || !lineItem || !stockCode) continue
+    if (!wo || !lineItem || !description) continue
 
-    // Check if already processed (duplicate prevention)
+    // Duplicate prevention — keyed on WorkOrder + LineItem + Description
     const existing = await sbQuery(
       'epic_committed_stock',
-      `work_order=eq.${wo}&line_item=eq.${lineItem}&stock_code=eq.${encodeURIComponent(stockCode)}&select=id&limit=1`
+      `work_order=eq.${wo}&line_item=eq.${lineItem}&component_description=eq.${encodeURIComponent(description)}&select=id&limit=1`
     )
     if (Array.isArray(existing) && existing.length > 0) {
       stats.skipped++
@@ -497,18 +497,19 @@ async function processCommittedStock(csvText) {
 
     stats.new++
 
-    // Check approved mapping first
+    // Check approved mapping by description first
     let partId = null
     let matchStatus = 'unmatched'
     let matchScore = 0
 
-    if (mappingMap[stockCode]) {
-      partId = mappingMap[stockCode].wrangl_part_id
+    const descKey = description.toLowerCase().trim()
+    if (mappingMap[descKey]) {
+      partId = mappingMap[descKey].wrangl_part_id
       matchStatus = 'auto_matched'
       matchScore = 1.0
       stats.auto_matched++
     } else {
-      // Fuzzy match against part names
+      // Fuzzy match description against Wrangl part names
       let bestScore = 0
       let bestPart  = null
 
@@ -526,9 +527,8 @@ async function processCommittedStock(csvText) {
         matchScore = bestScore
         stats.auto_matched++
 
-        // Save to mappings table for future use
+        // Save mapping keyed by description for future imports
         await sbUpsert('epic_part_mappings', [{
-          epic_stock_code:  stockCode,
           epic_description: description,
           wrangl_part_id:   bestPart.id,
           wrangl_part_name: bestPart.name,
