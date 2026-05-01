@@ -2,61 +2,69 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 
-const NAV = [
+const EXEC_NAV = [
   { to: '/', icon: '🏠', label: 'Home', exact: true },
-
-  // Orders group
   {
-    label: 'Orders',
-    icon: '📋',
-    group: true,
+    label: 'Orders', icon: '📋', group: true,
     children: [
-      { to: '/orders',         label: 'All Orders'       },
-      { to: '/ops/production', label: 'Production'       },
-      { to: '/orders/on-hold', label: 'Orders on Hold'   },
+      { to: '/orders',         label: 'All Orders'     },
+      { to: '/ops/production', label: 'Production'     },
+      { to: '/orders/on-hold', label: 'Orders on Hold' },
     ],
   },
-
   { to: '/customers',  icon: '👥', label: 'Customers'  },
   { to: '/activities', icon: '📝', label: 'Activities' },
   { to: '/inventory',  icon: '📦', label: 'Inventory'  },
-
-  // Ops / Warehouse group
   {
-    label: 'Ops / Warehouse',
-    icon: '🏭',
-    group: true,
+    label: 'Ops / Warehouse', icon: '🏭', group: true,
     children: [
       { to: '/ops',        label: 'Warehouse'  },
       { to: '/purchasing', label: 'Purchasing' },
       { to: '/freight',    label: 'Freight'    },
     ],
   },
-
-  // Quotes group
   {
-    label: 'Quotes',
-    icon: '💬',
-    group: true,
+    label: 'Quotes', icon: '💬', group: true,
     children: [
       { to: '/quotes',     label: 'All Quotes' },
       { to: '/quotes/new', label: 'New Quote'  },
     ],
   },
-
   { to: '/reports', icon: '📊', label: 'Reports' },
+]
+
+const SALES_NAV = [
+  { to: '/', icon: '🏠', label: 'Home', exact: true },
+  {
+    label: 'Orders', icon: '📋', group: true,
+    children: [
+      { to: '/orders', label: 'All Orders' },
+    ],
+  },
+  { to: '/customers',  icon: '👥', label: 'Customers'  },
+  { to: '/activities', icon: '📝', label: 'Activities' },
+  {
+    label: 'Quotes', icon: '💬', group: true,
+    children: [
+      { to: '/quotes',     label: 'All Quotes' },
+      { to: '/quotes/new', label: 'New Quote'  },
+    ],
+  },
 ]
 
 export default function Sidebar() {
   const location = useLocation()
   const { profile, signOut } = useAuth()
+  const role = profile?.role
+  const NAV = (role === 'sales') ? SALES_NAV : EXEC_NAV
 
-  // Track which groups are open
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
     NAV.forEach(item => {
       if (item.group) {
-        initial[item.label] = item.children.some(c => location.pathname.startsWith(c.to))
+        initial[item.label] = item.children.some(c =>
+          location.pathname === c.to || location.pathname.startsWith(c.to + '/')
+        )
       }
     })
     return initial
@@ -70,13 +78,11 @@ export default function Sidebar() {
 
   return (
     <div className="w-56 bg-gray-900 text-white flex flex-col h-full flex-shrink-0">
-      {/* Logo */}
       <div className="px-4 py-4 border-b border-gray-700">
         <div className="text-lg font-bold text-white tracking-tight">🐄 Wrangl</div>
         <div className="text-xs text-gray-400">Berkely Distribution</div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
         {NAV.map((item) => {
           if (item.group) {
@@ -93,19 +99,16 @@ export default function Sidebar() {
                     <span>{item.icon}</span>
                     <span>{item.label}</span>
                   </span>
-                  <span className={`text-xs transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
+                  <span className={`text-xs transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>▶</span>
                 </button>
                 {open && (
                   <div className="ml-4 mt-0.5 space-y-0.5 border-l border-gray-700 pl-3">
                     {item.children.map(child => (
-                      <NavLink
-                        key={child.to}
-                        to={child.to}
+                      <NavLink key={child.to} to={child.to}
                         className={({ isActive }) =>
                           `block px-2 py-1.5 rounded text-xs transition-colors
                           ${isActive ? 'text-white bg-gray-600 font-medium' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`
-                        }
-                      >
+                        }>
                         {child.label}
                       </NavLink>
                     ))}
@@ -114,25 +117,19 @@ export default function Sidebar() {
               </div>
             )
           }
-
           return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.exact}
+            <NavLink key={item.to} to={item.to} end={item.exact}
               className={({ isActive }) =>
                 `flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
                 ${isActive ? 'bg-blue-600 text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-gray-800'}`
-              }
-            >
+              }>
               <span>{item.icon}</span>
               <span>{item.label}</span>
             </NavLink>
           )
         })}
 
-        {/* Inventory sub-links (always visible under Inventory) */}
-        {location.pathname.startsWith('/inventory') && (
+        {role !== 'sales' && location.pathname.startsWith('/inventory') && (
           <div className="ml-4 mt-0.5 space-y-0.5 border-l border-gray-700 pl-3">
             <NavLink to="/inventory/committed-import"
               className={({ isActive }) => `block px-2 py-1.5 rounded text-xs transition-colors
@@ -153,13 +150,11 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* User footer */}
       <div className="px-3 py-3 border-t border-gray-700">
-        <div className="text-xs text-gray-400 truncate mb-2">{profile?.email}</div>
-        <button
-          onClick={signOut}
-          className="w-full text-xs text-gray-400 hover:text-white text-left transition-colors"
-        >
+        <div className="text-xs text-gray-400 truncate mb-1">{profile?.email}</div>
+        <div className="text-xs text-gray-600 mb-2 capitalize">{role}</div>
+        <button onClick={signOut}
+          className="w-full text-xs text-gray-400 hover:text-white text-left transition-colors">
           Sign out
         </button>
       </div>
