@@ -14,6 +14,7 @@ const EXEC_NAV = [
   },
   { to: '/customers',  icon: '👥', label: 'Customers'  },
   { to: '/activities', icon: '📝', label: 'Activities' },
+  { to: '/calendar',   icon: '📅', label: 'Calendar'   },
   { to: '/inventory',  icon: '📦', label: 'Inventory'  },
   {
     label: 'Ops / Warehouse', icon: '🏭', group: true,
@@ -43,6 +44,7 @@ const SALES_NAV = [
   },
   { to: '/customers',  icon: '👥', label: 'Customers'  },
   { to: '/activities', icon: '📝', label: 'Activities' },
+  { to: '/calendar',   icon: '📅', label: 'Calendar'   },
   {
     label: 'Quotes', icon: '💬', group: true,
     children: [
