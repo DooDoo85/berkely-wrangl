@@ -25,9 +25,12 @@ function fmt$(n) {
 
 // ─── Compact tracker (top-right Credit OK / Printed) ────────────────────────
 
-function StatusTracker({ label, count, total, ordersLabel, color, icon, loading }) {
+function StatusTracker({ label, count, total, ordersLabel, color, icon, loading, onClick }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 transition-shadow hover:shadow-sm min-w-[180px]">
+    <button
+      onClick={onClick}
+      className="bg-white border border-gray-200 rounded-xl px-5 py-4 transition-all hover:shadow-sm hover:-translate-y-px hover:border-gray-300 min-w-[180px] text-left"
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`text-xs font-semibold ${color.label}`}>{label}</div>
@@ -40,7 +43,7 @@ function StatusTracker({ label, count, total, ordersLabel, color, icon, loading 
           <span className={color.icon}>{icon}</span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -138,6 +141,8 @@ export default function ExecutiveHome() {
   const [loading, setLoading] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState(new Date());
   const [wipModal, setWipModal] = useState(null);
+  const [creditOkModal, setCreditOkModal] = useState(false);
+  const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     shippedWTD: null, shippedMTD: null, inProduction: null,
     stuckOrders: [], productionLoad: {}, avgDays: null,
@@ -181,11 +186,15 @@ export default function ExecutiveHome() {
       const printed  = (wipData??[]).filter(r=>r.order_status==="PRINTED");
 
       // Credit OK from email-imported table
-      const { data: creditOkRows } = await supabase.from("credit_ok_orders").select("order_no, order_amount");
+      const { data: creditOkRows } = await supabase
+        .from("credit_ok_orders")
+        .select("order_no, salesperson, customer_name, order_amount, entered_date")
+        .order("entered_date", { ascending: false });
       const creditOk = {
         count: (creditOkRows ?? []).length,
         total: (creditOkRows ?? []).reduce((s, r) => s + Number(r.order_amount || 0), 0),
       };
+      setCreditOkRows(creditOkRows ?? []);
 
       // Printed counts (units from roller_wip + total order count)
       const printedTotal = {
@@ -277,6 +286,7 @@ export default function ExecutiveHome() {
             color={{ label: "text-emerald-700", bg: "bg-emerald-50", icon: "text-emerald-600" }}
             icon={Icon.shield}
             loading={loading}
+            onClick={() => setCreditOkModal(true)}
           />
           <StatusTracker
             label="Printed"
@@ -285,6 +295,7 @@ export default function ExecutiveHome() {
             color={{ label: "text-amber-600", bg: "bg-amber-50", icon: "text-amber-500" }}
             icon={Icon.printer}
             loading={loading}
+            onClick={() => setWipModal("PRINTED")}
           />
         </div>
 
@@ -471,6 +482,56 @@ export default function ExecutiveHome() {
                       <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units}</td>
                       <td className="px-5 py-3 text-right text-sm text-gray-500">
                         ${Number(r.total_sales).toLocaleString("en-US",{maximumFractionDigits:0})}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit OK Modal */}
+      {creditOkModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-900">Credit OK Orders</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {creditOkRows.length} orders · ${creditOkRows.reduce((s,r)=>s+Number(r.order_amount||0),0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                </p>
+              </div>
+              <button onClick={()=>setCreditOkModal(false)}
+                className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
+                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
+                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Salesperson</th>
+                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Date</th>
+                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditOkRows.length === 0 ? (
+                    <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No orders</td></tr>
+                  ) : creditOkRows.map((r,i)=>(
+                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_no}</td>
+                      <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{r.salesperson}</td>
+                      <td className="px-5 py-3 text-right text-xs text-gray-500">
+                        {r.entered_date ? new Date(r.entered_date + "T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—"}
+                      </td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                        ${Number(r.order_amount).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
                       </td>
                     </tr>
                   ))}
