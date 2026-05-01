@@ -1,50 +1,84 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_STYLES = {
   draft:         'bg-stone-50 text-stone-500 border-stone-200',
+  quote:         'bg-purple-50 text-purple-700 border-purple-200',
+  credit_hold:   'bg-red-50 text-red-700 border-red-200',
+  credit_ok:     'bg-emerald-50 text-emerald-700 border-emerald-200',
+  po_sent:       'bg-cyan-50 text-cyan-700 border-cyan-200',
   submitted:     'bg-blue-50 text-blue-700 border-blue-200',
   printed:       'bg-amber-50 text-amber-700 border-amber-200',
-  in_production: 'bg-purple-50 text-purple-700 border-purple-200',
+  in_production: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   complete:      'bg-emerald-50 text-emerald-700 border-emerald-200',
   invoiced:      'bg-teal-50 text-teal-700 border-teal-200',
   cancelled:     'bg-red-50 text-red-400 border-red-200',
 }
 
 const STATUS_LABELS = {
-  draft: 'Draft', submitted: 'Submitted', printed: 'Printed',
-  in_production: 'In Production', complete: 'Complete',
-  invoiced: 'Invoiced', cancelled: 'Cancelled'
+  draft: 'Draft',
+  quote: 'Quote',
+  credit_hold: 'Credit Hold',
+  credit_ok: 'Credit OK',
+  po_sent: 'PO Sent',
+  submitted: 'Submitted',
+  printed: 'Printed',
+  in_production: 'In Production',
+  complete: 'Complete',
+  invoiced: 'Invoiced',
+  cancelled: 'Cancelled'
 }
 
 export default function OrderList() {
   const navigate = useNavigate()
-  const [orders,  setOrders]  = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search,  setSearch]  = useState('')
-  const [status,  setStatus]  = useState('all')
-  const [counts,  setCounts]  = useState({})
+  const { profile } = useAuth()
+  const isSalesRep = profile?.role === 'sales'
 
-  useEffect(() => { fetchOrders() }, [status])
+  const [orders,   setOrders]   = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [search,   setSearch]   = useState('')
+  const [status,   setStatus]   = useState('all')
+  const [counts,   setCounts]   = useState({})
+  const [repName,  setRepName]  = useState(null)
+
+  useEffect(() => {
+    if (!profile) return
+    if (isSalesRep) {
+      // Look up rep name from email map
+      supabase.from('rep_email_map').select('rep_name').eq('email', profile.email).single()
+        .then(({ data }) => setRepName(data?.rep_name || null))
+    } else {
+      setRepName(null)
+    }
+  }, [profile, isSalesRep])
+
+  useEffect(() => {
+    if (!profile) return
+    if (isSalesRep && !repName) return // wait for rep name to load
+    fetchOrders()
+  }, [status, profile, repName])
 
   async function fetchOrders() {
     setLoading(true)
     let query = supabase
       .from('orders')
-      .select('id, order_number, customer_name, status, order_date, sales_rep, subtotal, sidemark, source, read_only')
-      .order('order_date', { ascending: false })
+      .select('id, order_number, customer_name, status, order_date, sales_rep, subtotal, order_amount, total_units, sidemark, source, read_only')
+      .order('order_date', { ascending: false, nullsFirst: false })
       .limit(200)
 
     if (status !== 'all') query = query.eq('status', status)
+    if (isSalesRep && repName) query = query.eq('sales_rep', repName)
 
     const { data } = await query
     setOrders(data || [])
 
-    // Get counts for all statuses
-    const { data: allOrders } = await supabase
-      .from('orders')
-      .select('status')
+    // Get counts for all statuses (filtered by rep if sales)
+    let countQuery = supabase.from('orders').select('status')
+    if (isSalesRep && repName) countQuery = countQuery.eq('sales_rep', repName)
+
+    const { data: allOrders } = await countQuery
     const c = { all: allOrders?.length || 0 }
     allOrders?.forEach(o => { c[o.status] = (c[o.status] || 0) + 1 })
     setCounts(c)
@@ -62,7 +96,7 @@ export default function OrderList() {
     )
   })
 
-  const statusTabs = ['all', 'draft', 'submitted', 'printed', 'in_production', 'complete', 'invoiced']
+  const statusTabs = ['all', 'quote', 'credit_hold', 'credit_ok', 'po_sent', 'printed', 'in_production', 'invoiced']
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -70,7 +104,9 @@ export default function OrderList() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-display font-bold text-stone-800">Orders</h2>
-          <p className="text-stone-400 text-sm mt-0.5">{counts.all || 0} total orders</p>
+          <p className="text-stone-400 text-sm mt-0.5">
+            {isSalesRep ? `Your orders · ${counts.all || 0} total` : `${counts.all || 0} total orders`}
+          </p>
         </div>
         <button onClick={() => navigate('/orders/new')} className="btn-primary flex items-center gap-2">
           <span className="text-lg leading-none">+</span> New Order
@@ -163,7 +199,7 @@ export default function OrderList() {
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <span className="text-sm font-semibold text-stone-700">
-                      {o.subtotal ? '$' + Number(o.subtotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
+                      {(o.subtotal || o.order_amount) ? '$' + Number(o.subtotal || o.order_amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
