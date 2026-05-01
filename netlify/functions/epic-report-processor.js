@@ -467,8 +467,8 @@ async function processCommittedStock(csvText) {
     method: 'DELETE',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
-  // Reset qty_committed on all parts
-  await sbUpdate('parts', 'qty_committed=gte.0', { qty_committed: 0, updated_at: new Date().toISOString() })
+  // Reset qty_committed on ALL active parts (including those with NULL)
+  await sbUpdate('parts', 'active=eq.true', { qty_committed: 0, updated_at: new Date().toISOString() })
   console.log('  Snapshot cleared — importing fresh data...')
 
   // Load all approved mappings keyed by epic_description
@@ -578,13 +578,10 @@ async function processCommittedStock(csvText) {
     }
   }
 
-  // Update qty_committed on parts
+  // Update qty_committed on parts — set directly since we already reset to 0
   for (const [partId, qty] of Object.entries(toCommit)) {
-    const parts = await sbQuery('parts', `id=eq.${partId}&select=qty_committed`)
-    if (!Array.isArray(parts) || !parts[0]) continue
-    const current = parseFloat(parts[0].qty_committed) || 0
     await sbUpdate('parts', `id=eq.${partId}`, {
-      qty_committed: current + qty,
+      qty_committed: qty,
       updated_at:    new Date().toISOString(),
     })
   }
