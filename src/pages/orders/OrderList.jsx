@@ -74,13 +74,25 @@ export default function OrderList() {
     const { data } = await query
     setOrders(data || [])
 
-    // Get counts for all statuses (filtered by rep if sales)
-    let countQuery = supabase.from('orders').select('status')
-    if (isSalesRep && repName) countQuery = countQuery.eq('sales_rep', repName)
+    // Get counts per status using head:true (no row limit issue)
+    const statusList = ['quote', 'credit_hold', 'credit_ok', 'po_sent', 'printed', 'in_production', 'invoiced']
+    const countPromises = statusList.map(async (s) => {
+      let q = supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', s)
+      if (isSalesRep && repName) q = q.eq('sales_rep', repName)
+      const { count } = await q
+      return [s, count || 0]
+    })
 
-    const { data: allOrders } = await countQuery
-    const c = { all: allOrders?.length || 0 }
-    allOrders?.forEach(o => { c[o.status] = (c[o.status] || 0) + 1 })
+    let allCountQuery = supabase.from('orders').select('*', { count: 'exact', head: true })
+    if (isSalesRep && repName) allCountQuery = allCountQuery.eq('sales_rep', repName)
+
+    const [{ count: allCount }, ...statusCounts] = await Promise.all([
+      allCountQuery,
+      ...countPromises,
+    ])
+
+    const c = { all: allCount || 0 }
+    statusCounts.forEach(([s, n]) => { c[s] = n })
     setCounts(c)
     setLoading(false)
   }
