@@ -98,6 +98,7 @@ export default function QuoteBuilder() {
   const [product, setProduct]   = useState(null)
   const [fabrics, setFabrics]   = useState([])
   const [fabric, setFabric]     = useState(null)
+  const [colors, setColors]     = useState([])
   const [config, setConfig]     = useState(DEFAULT_CONFIG)
   const [lineItems, setLineItems] = useState([])
   const [header, setHeader]     = useState({ customer_name: '', customer_email: '', sales_rep: profile?.email || '', notes: '' })
@@ -111,6 +112,12 @@ export default function QuoteBuilder() {
     loadFabrics()
   }, [product])
 
+  // Load colors when fabric changes
+  useEffect(() => {
+    if (!fabric) return
+    loadColors()
+  }, [fabric])
+
   // Recalc price when config/product changes
   useEffect(() => {
     if (step === 3 && product && config.width && config.height) {
@@ -120,6 +127,18 @@ export default function QuoteBuilder() {
       config.light_block, config.wall_switch, config.wall_switch_qty,
       config.power_panel, config.power_panel_qty, config.connection_harnesses,
       config.harness_qty, config.quantity, step])
+
+  const loadColors = async () => {
+    const { data } = await supabase
+      .from('fabric_colors')
+      .select('color_name')
+      .eq('product_group', 'ANABELLE')
+      .eq('fabric_type', fabric.name.toUpperCase())
+      .eq('active', true)
+      .order('sort_order')
+    setColors(data?.map(d => d.color_name) || [])
+    setConfig(c => ({ ...c, color: '' }))
+  }
 
   const loadFabrics = async () => {
     const { data } = await supabase
@@ -434,9 +453,17 @@ export default function QuoteBuilder() {
                 className="w-20 border border-gray-300 rounded px-2 py-1 text-sm" />
             </Row>
             <Row label="Color">
-              <input type="text" placeholder="e.g. Bordeaux LF - Beige"
-                value={config.color} onChange={e => cfg('color', e.target.value)}
-                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
+              {colors.length > 0 ? (
+                <select value={config.color} onChange={e => cfg('color', e.target.value)}
+                  className={`flex-1 border rounded px-2 py-1 text-sm ${!config.color ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
+                  <option value="">Select color…</option>
+                  {colors.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <input type="text" placeholder="e.g. Bordeaux LF - Beige"
+                  value={config.color} onChange={e => cfg('color', e.target.value)}
+                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
+              )}
             </Row>
             <Row label="Color Number">
               <input type="text" placeholder="e.g. BD-10110"
