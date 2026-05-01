@@ -3,280 +3,342 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../components/AuthProvider";
 import { supabase } from "../../lib/supabase";
 
-function daysSince(dateStr) {
-  if (!dateStr) return 0;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
-}
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-function startOfWeek() {
+function startOfWeekISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
   return d.toISOString();
 }
 
-const STATUS_COLORS = {
-  submitted:     { bg: "bg-blue-100",   text: "text-blue-800"   },
-  printed:       { bg: "bg-purple-100", text: "text-purple-800" },
-  in_production: { bg: "bg-violet-100", text: "text-violet-800" },
-  complete:      { bg: "bg-emerald-100",text: "text-emerald-800"},
-  invoiced:      { bg: "bg-gray-100",   text: "text-gray-600"   },
-};
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ─── Components ─────────────────────────────────────────────────────────────
+
+function KpiTile({ label, value, loading }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5 transition-shadow duration-200 hover:shadow-sm">
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-gray-900 tabular-nums">
+        {loading ? "—" : value}
+      </div>
+    </div>
+  );
+}
+
+function PipelineCard({ label, count, color, onClick, loading }) {
+  return (
+    <button
+      onClick={onClick}
+      className="bg-white border border-gray-200 rounded-lg p-5 text-left transition-all duration-200 hover:shadow-sm hover:-translate-y-px hover:border-gray-300"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`w-2 h-2 rounded-full ${color}`} />
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-2xl font-semibold text-gray-900 tabular-nums">
+        {loading ? "—" : count}
+      </div>
+    </button>
+  );
+}
+
+function QuickAction({ icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3 transition-all duration-200 hover:shadow-sm hover:border-gray-300 text-left"
+    >
+      <div className="w-8 h-8 rounded-md bg-gray-50 border border-gray-100 flex items-center justify-center text-sm flex-shrink-0">
+        {icon}
+      </div>
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+    </button>
+  );
+}
+
+// ─── Main ───────────────────────────────────────────────────────────────────
 
 export default function RepHome() {
   const { profile } = useAuth();
   const navigate = useNavigate();
-  const repName = profile?.rep_id;
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = repName?.split(" ")[0] || profile?.email?.split("@")[0] || "there";
+  const firstName = profile?.full_name?.split(" ")[0]
+    || profile?.email?.split("@")[0]
+    || "there";
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
-    submittedWTD: null,
-    inProduction: null,
-    followUpsDueToday: null,
-    overdueFollowUps: null,
-    myOrders: [],
+    kpis:     { newCustomers: 0, meetings: 0, quotesSent: 0, ordersSubmitted: 0 },
+    pipeline: { quotesDraft: 0, quotesSent: 0, ordersSubmitted: 0, inProduction: 0 },
     followUps: [],
-    myQuotes: [],
   });
 
   const load = useCallback(async () => {
-    if (!repName) return;
+    if (!profile) return;
     setLoading(true);
     try {
-      const weekStart = startOfWeek();
-      const today = new Date().toISOString().slice(0, 10);
+      const weekStart = startOfWeekISO();
+      const weekStartDate = weekStart.slice(0, 10);
+      const today = todayISO();
 
-      const [submittedRes, inProdRes, ordersRes, followUpsRes, quotesRes] = await Promise.all([
-        // orders submitted this week
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("sales_rep", repName)
-          .eq("status", "submitted")
-          .gte("created_at", weekStart),
+      // Look up rep name for filtering (orders/customers store name strings)
+      const { data: repRow } = await supabase
+        .from("rep_email_map")
+        .select("rep_name")
+        .eq("email", profile.email)
+        .single();
+      const repName = repRow?.rep_name;
 
-        // orders in production
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("sales_rep", repName)
-          .eq("status", "in_production"),
+      const [
+        newCustomersRes,
+        meetingsRes,
+        quotesSentWTDRes,
+        ordersSubmittedWTDRes,
+        quotesDraftRes,
+        quotesSentRes,
+        ordersSubRes,
+        inProdRes,
+        followUpsRes,
+      ] = await Promise.all([
+        // KPI 1: New Customers WTD
+        repName
+          ? supabase.from("customers")
+              .select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .gte("created_at", weekStart)
+          : Promise.resolve({ count: 0 }),
 
-        // active orders for this rep
-        supabase
-          .from("orders")
-          .select("id, order_number, customer_name, status, updated_at")
-          .eq("sales_rep", repName)
-          .in("status", ["submitted", "printed", "in_production"])
-          .order("updated_at", { ascending: true })
-          .limit(8),
+        // KPI 2: Meetings WTD
+        supabase.from("activities")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id)
+          .eq("activity_type", "meeting")
+          .gte("activity_date", weekStartDate),
 
-        // follow-ups
-        supabase
-          .from("activities")
-          .select("*, customers(account_name)")
+        // KPI 3: Quotes Sent WTD
+        supabase.from("quotes")
+          .select("id", { count: "exact", head: true })
+          .eq("sales_rep", profile.email)
+          .eq("status", "sent")
+          .gte("updated_at", weekStart),
+
+        // KPI 4: Orders Submitted WTD
+        repName
+          ? supabase.from("orders")
+              .select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .eq("status", "submitted")
+              .gte("created_at", weekStart)
+          : Promise.resolve({ count: 0 }),
+
+        // Pipeline: Quotes Draft
+        supabase.from("quotes")
+          .select("id", { count: "exact", head: true })
+          .eq("sales_rep", profile.email)
+          .eq("status", "draft"),
+
+        // Pipeline: Quotes Sent (all)
+        supabase.from("quotes")
+          .select("id", { count: "exact", head: true })
+          .eq("sales_rep", profile.email)
+          .eq("status", "sent"),
+
+        // Pipeline: Orders Submitted (all)
+        repName
+          ? supabase.from("orders")
+              .select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .eq("status", "submitted")
+          : Promise.resolve({ count: 0 }),
+
+        // Pipeline: In Production
+        repName
+          ? supabase.from("orders")
+              .select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .eq("status", "in_production")
+          : Promise.resolve({ count: 0 }),
+
+        // Follow-ups due (today or earlier)
+        supabase.from("activities")
+          .select("id, subject, body, follow_up_date, customer_id, customers(account_name, phone)")
+          .eq("user_id", profile.id)
           .eq("completed", false)
           .lte("follow_up_date", today)
           .order("follow_up_date", { ascending: true })
-          .limit(6),
-
-        // my recent quotes
-        supabase
-          .from("quotes")
-          .select("id, quote_number, customer_name, status, subtotal, created_at")
-          .eq("sales_rep", profile?.email)
-          .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(8),
       ]);
 
-      const orders = ordersRes.data ?? [];
-      const followUps = followUpsRes.data ?? [];
-      const overdue = followUps.filter((f) => f.follow_up_date < today).length;
-      const dueToday = followUps.filter((f) => f.follow_up_date === today).length;
-
       setData({
-        submittedWTD: submittedRes.count ?? 0,
-        inProduction: inProdRes.count ?? 0,
-        followUpsDueToday: dueToday,
-        overdueFollowUps: overdue,
-        myOrders: orders,
-        followUps,
-        myQuotes: quotesRes.data ?? [],
+        kpis: {
+          newCustomers:    newCustomersRes.count ?? 0,
+          meetings:        meetingsRes.count ?? 0,
+          quotesSent:      quotesSentWTDRes.count ?? 0,
+          ordersSubmitted: ordersSubmittedWTDRes.count ?? 0,
+        },
+        pipeline: {
+          quotesDraft:     quotesDraftRes.count ?? 0,
+          quotesSent:      quotesSentRes.count ?? 0,
+          ordersSubmitted: ordersSubRes.count ?? 0,
+          inProduction:    inProdRes.count ?? 0,
+        },
+        followUps: followUpsRes.data ?? [],
       });
     } catch (err) {
-      console.error("RepHome load error:", err);
+      console.error("RepHome load:", err);
     } finally {
       setLoading(false);
     }
-  }, [repName]);
+  }, [profile]);
 
   useEffect(() => { load(); }, [load]);
 
-  const TYPE_ICONS = { call: "📞", email: "✉️", note: "📝", meeting: "🤝" };
+  const completeFollowUp = async (id) => {
+    await supabase.from("activities").update({ completed: true }).eq("id", id);
+    load();
+  };
+
+  const today = todayISO();
 
   return (
-    <div className="p-6 max-w-screen-xl mx-auto">
-      {/* header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-medium text-gray-900">{greeting}, {firstName}</h1>
-        <p className="text-sm text-gray-400 mt-0.5">
-          Week of {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+    <div className="p-8 max-w-screen-xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+          {greeting}, {firstName}
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </p>
       </div>
 
-      {/* quick actions */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <button
-          onClick={() => navigate("/orders/new")}
-          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center text-sm flex-shrink-0">＋</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">New order</p>
-            <p className="text-xs text-gray-400">Create &amp; submit</p>
-          </div>
-        </button>
-        <button
-          onClick={() => navigate("/quotes/new")}
-          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-sm flex-shrink-0">💬</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">New quote</p>
-            <p className="text-xs text-gray-400">Build &amp; send</p>
-          </div>
-        </button>
-        <button
-          onClick={() => navigate("/customers/new")}
-          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-sm flex-shrink-0">👤</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">New customer</p>
-            <p className="text-xs text-gray-400">Add account</p>
-          </div>
-        </button>
-        <button
-          onClick={() => navigate("/activities")}
-          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-sm flex-shrink-0">📋</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">Log activity</p>
-            <p className="text-xs text-gray-400">Call, email, note</p>
-          </div>
-        </button>
+      {/* Weekly KPI Strip */}
+      <div className="mb-8">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">This Week</h2>
+        <div className="grid grid-cols-4 gap-4">
+          <KpiTile label="New Customers"    value={data.kpis.newCustomers}    loading={loading} />
+          <KpiTile label="Meetings"         value={data.kpis.meetings}        loading={loading} />
+          <KpiTile label="Quotes Sent"      value={data.kpis.quotesSent}      loading={loading} />
+          <KpiTile label="Orders Submitted" value={data.kpis.ordersSubmitted} loading={loading} />
+        </div>
       </div>
 
-      {/* my active orders — full width */}
-      <div className="bg-white border border-gray-100 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-700">My active orders</p>
-            <button onClick={() => navigate("/orders")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
-          </div>
-          {loading && <p className="text-xs text-gray-400 py-4 text-center">Loading…</p>}
-          {!loading && data.myOrders.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">No active orders — time to submit one!</p>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-          {data.myOrders.map((o) => {
-            const days = daysSince(o.updated_at);
-            const stuck = days > 5;
-            const sc = STATUS_COLORS[o.status] ?? STATUS_COLORS.submitted;
-            return (
-              <div
-                key={o.id}
-                onClick={() => navigate(`/orders/${o.id}`)}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2"
-              >
-                <div>
-                  <p className="text-xs font-medium text-gray-800">{o.order_number ?? o.id}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{o.customer_name ?? "—"}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stuck ? "bg-red-100 text-red-700" : `${sc.bg} ${sc.text}`}`}>
-                    {stuck ? `Stuck day ${days}` : o.status.replace(/_/g, " ")}
-                  </span>
-                  <p className="text-xs text-gray-400 mt-0.5">Day {days}</p>
-                </div>
-              </div>
-            );
-          })}
-          </div>
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-4 gap-3">
+          <QuickAction icon="📋" label="New Order"     onClick={() => navigate("/orders/new")} />
+          <QuickAction icon="💬" label="New Quote"     onClick={() => navigate("/quotes/new")} />
+          <QuickAction icon="👥" label="New Customer"  onClick={() => navigate("/customers/new")} />
+          <QuickAction icon="📝" label="Log Activity"  onClick={() => navigate("/activities")} />
         </div>
+      </div>
 
-      {/* my quotes */}
-      <div className="bg-white border border-gray-100 rounded-xl p-4 mb-4">
+      {/* Follow-ups */}
+      <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-gray-700">My quotes</p>
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/quotes/new")} className="text-xs text-amber-600 hover:text-amber-800 font-medium">+ New</button>
-            <button onClick={() => navigate("/quotes")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
-          </div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Follow-ups</h2>
+          <button onClick={() => navigate("/activities")} className="text-xs font-medium text-blue-600 hover:text-blue-700">
+            View all →
+          </button>
         </div>
-        {loading && <p className="text-xs text-gray-400 py-4 text-center">Loading…</p>}
-        {!loading && data.myQuotes.length === 0 && (
-          <p className="text-xs text-gray-400 py-4 text-center">No quotes yet — <button onClick={() => navigate("/quotes/new")} className="text-amber-600 hover:underline">create your first one</button></p>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          {data.myQuotes.map((q) => {
-            const STATUS_Q = { draft: "bg-gray-100 text-gray-600", sent: "bg-blue-100 text-blue-700", accepted: "bg-green-100 text-green-700", declined: "bg-red-100 text-red-600" }
-            const sc = STATUS_Q[q.status] || STATUS_Q.draft
-            return (
-              <div key={q.id} onClick={() => navigate(`/quotes/${q.id}`)}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2">
-                <div>
-                  <p className="text-xs font-medium text-gray-800 font-mono">{q.quote_number}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{q.customer_name || "—"}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc}`}>{q.status}</span>
-                  <p className="text-xs text-gray-500 mt-0.5 font-medium">${Number(q.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-            )
-          })}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          {loading && <div className="p-6 text-sm text-gray-400 text-center">Loading…</div>}
+          {!loading && data.followUps.length === 0 && (
+            <div className="p-8 text-sm text-gray-400 text-center">
+              <span className="text-2xl block mb-2">✓</span>
+              No follow-ups due. Nice work.
+            </div>
+          )}
+          {!loading && data.followUps.length > 0 && (
+            <div className="divide-y divide-gray-100">
+              {data.followUps.map(f => {
+                const overdue = f.follow_up_date < today;
+                const phone = f.customers?.phone;
+                return (
+                  <div key={f.id} className="p-4 hover:bg-gray-50 transition-colors duration-150 flex items-center gap-4">
+                    <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${overdue ? "bg-red-500" : "bg-emerald-500"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {f.customers?.account_name || "—"}
+                        </p>
+                        {overdue && (
+                          <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Overdue</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">
+                        {f.subject || f.body?.slice(0, 80) || "Follow up"}
+                      </p>
+                      <p className={`text-xs mt-1 ${overdue ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                        Due {new Date(f.follow_up_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {phone && (
+                        <a
+                          href={`tel:${phone.replace(/\D/g, "")}`}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          title={phone}
+                        >
+                          📞 Call
+                        </a>
+                      )}
+                      <button
+                        onClick={() => completeFollowUp(f.id)}
+                        className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        ✓ Done
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* follow-ups — full width */}
-      <div className="bg-white border border-gray-100 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-700">Follow-ups due</p>
-            <button onClick={() => navigate("/activities")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
-          </div>
-          {loading && <p className="text-xs text-gray-400 py-4 text-center">Loading…</p>}
-          {!loading && data.followUps.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">No follow-ups due 🎉</p>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-          {data.followUps.map((f) => {
-            const today = new Date().toISOString().slice(0, 10);
-            const overdue = f.follow_up_date < today;
-            return (
-              <div
-                key={f.id}
-                onClick={() => navigate("/activities")}
-                className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2"
-              >
-                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${overdue ? "bg-red-400" : "bg-emerald-400"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-800 truncate">
-                    {TYPE_ICONS[f.activity_type]} {f.subject || f.body?.slice(0, 40) || "Follow up"}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{f.customers?.account_name ?? "—"}</p>
-                  <p className={`text-xs mt-0.5 ${overdue ? "text-red-500" : "text-gray-400"}`}>
-                    {overdue ? `Overdue · ${f.follow_up_date}` : `Due today`}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-          </div>
+      {/* My Pipeline */}
+      <div className="mb-8">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">My Pipeline</h2>
+        <div className="grid grid-cols-4 gap-4">
+          <PipelineCard
+            label="Quotes Draft"
+            count={data.pipeline.quotesDraft}
+            color="bg-gray-400"
+            loading={loading}
+            onClick={() => navigate("/quotes")}
+          />
+          <PipelineCard
+            label="Quotes Sent"
+            count={data.pipeline.quotesSent}
+            color="bg-blue-500"
+            loading={loading}
+            onClick={() => navigate("/quotes")}
+          />
+          <PipelineCard
+            label="Orders Submitted"
+            count={data.pipeline.ordersSubmitted}
+            color="bg-amber-500"
+            loading={loading}
+            onClick={() => navigate("/orders")}
+          />
+          <PipelineCard
+            label="In Production"
+            count={data.pipeline.inProduction}
+            color="bg-emerald-500"
+            loading={loading}
+            onClick={() => navigate("/orders")}
+          />
         </div>
+      </div>
     </div>
   );
 }
