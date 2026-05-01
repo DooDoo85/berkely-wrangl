@@ -44,6 +44,7 @@ import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 // Quotes
 import QuotesList from './pages/quotes/QuotesList'
 import QuoteBuilder from './pages/quotes/QuoteBuilder'
+import QuoteDetail from './pages/quotes/QuoteDetail'
 
 // Price Grids
 import PriceGridImport from './pages/inventory/PriceGridImport'
@@ -117,6 +118,7 @@ function AppRoutes() {
         {/* Quotes */}
         <Route path="/quotes" element={<QuotesList />} />
         <Route path="/quotes/new" element={<QuoteBuilder />} />
+        <Route path="/quotes/:id" element={<QuoteDetail />} />
 
         {/* Freight / Settings */}
         <Route path="/freight" element={<Placeholder title="Freight" />} />
