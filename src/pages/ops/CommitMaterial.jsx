@@ -20,6 +20,10 @@ export default function CommitMaterial() {
   const [saving,       setSaving]       = useState(false)
   const [success,      setSuccess]      = useState(null)
   const [error,        setError]        = useState('')
+  const [showHoldModal, setShowHoldModal] = useState(false)
+  const [holdReason,    setHoldReason]    = useState('')
+  const [holdNote,      setHoldNote]      = useState('')
+  const [statusSaving,  setStatusSaving]  = useState(false)
   const qtyRef = useRef(null)
 
   async function searchOrders(q) {
@@ -42,6 +46,73 @@ export default function CommitMaterial() {
     if (search) q = q.ilike('name', `%${search}%`)
     const { data } = await q
     setParts(data || [])
+  }
+
+  async function markInProduction() {
+    if (!selOrder) return
+    setStatusSaving(true)
+    setError('')
+    try {
+      const { error: err } = await supabase.from('orders').update({
+        status:               'in_production',
+        wrangl_status:        'in_production',
+        wrangl_status_set_at: new Date().toISOString(),
+        wrangl_status_set_by: profile?.id,
+        // Clear any active hold
+        hold_status:          null,
+        hold_reason:          null,
+        hold_note:            null,
+        hold_released_at:     new Date().toISOString(),
+        updated_at:           new Date().toISOString(),
+      }).eq('id', selOrder.id)
+      if (err) throw err
+
+      setSuccess({
+        type:  'production',
+        order: selOrder.order_number,
+        msg:   `Marked Order #${selOrder.order_number} as In Production`,
+      })
+      setSelOrder(null); setOrderSearch('')
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setStatusSaving(false)
+    }
+  }
+
+  async function placeOnHold() {
+    if (!selOrder || !holdReason) {
+      setError('Select a hold reason')
+      return
+    }
+    setStatusSaving(true)
+    setError('')
+    try {
+      const { error: err } = await supabase.from('orders').update({
+        hold_status:      'on_hold',
+        hold_reason:      holdReason,
+        hold_note:        holdNote || null,
+        hold_started_at:  new Date().toISOString(),
+        hold_released_at: null,
+        updated_at:       new Date().toISOString(),
+      }).eq('id', selOrder.id)
+      if (err) throw err
+
+      setSuccess({
+        type:  'hold',
+        order: selOrder.order_number,
+        msg:   `Order #${selOrder.order_number} placed on hold`,
+      })
+      setShowHoldModal(false)
+      setHoldReason(''); setHoldNote('')
+      setSelOrder(null); setOrderSearch('')
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setStatusSaving(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -99,11 +170,23 @@ export default function CommitMaterial() {
       </div>
 
       {success && (
-        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-          <span className="text-xl">✂️</span>
+        <div className={`mb-4 p-4 border rounded-xl flex items-center gap-3 ${
+          success.type === 'production' ? 'bg-indigo-50 border-indigo-200 text-indigo-800' :
+          success.type === 'hold'       ? 'bg-red-50 border-red-200 text-red-800' :
+                                           'bg-amber-50 border-amber-200'
+        }`}>
+          <span className="text-xl">
+            {success.type === 'production' ? '🏭' : success.type === 'hold' ? '⏸' : '✂️'}
+          </span>
           <div>
-            <div className="text-sm font-semibold text-amber-700">Committed {success.qty} {success.unit} to Order #{success.order}</div>
-            <div className="text-xs text-amber-600">{success.part} — remaining qty: {success.newQty}</div>
+            {success.msg ? (
+              <div className="text-sm font-semibold">{success.msg}</div>
+            ) : (
+              <>
+                <div className="text-sm font-semibold text-amber-700">Committed {success.qty} {success.unit} to Order #{success.order}</div>
+                <div className="text-xs text-amber-600">{success.part} — remaining qty: {success.newQty}</div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -130,6 +213,21 @@ export default function CommitMaterial() {
                 {selOrder.sidemark && <span className="text-stone-400">· {selOrder.sidemark}</span>}
                 <button type="button" onClick={() => { setSelOrder(null); setOrderSearch('') }}
                   className="text-stone-300 hover:text-stone-500 ml-1">✕</button>
+              </div>
+            )}
+
+            {selOrder && (
+              <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-2">
+                <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide mr-1">Status:</span>
+                <button type="button" onClick={markInProduction} disabled={statusSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                  🏭 Mark In Production
+                </button>
+                <button type="button" onClick={() => setShowHoldModal(true)} disabled={statusSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-white border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  ⏸ Place on Hold
+                </button>
+                <span className="text-xs text-stone-400 ml-auto">Or commit material below ↓</span>
               </div>
             )}
             {showOrderDrop && orders.length > 0 && !selOrder && (
@@ -220,6 +318,51 @@ export default function CommitMaterial() {
           </div>
         </form>
       </div>
+
+      {/* Hold Modal */}
+      {showHoldModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-5 py-4 border-b border-stone-100">
+              <h3 className="font-bold text-stone-900">Place Order on Hold</h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Order #{selOrder?.order_number} — {selOrder?.customer_name}
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1.5">Reason *</label>
+                <select value={holdReason} onChange={e => setHoldReason(e.target.value)}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+                  <option value="">Select reason...</option>
+                  <option value="missing_part">Missing Part</option>
+                  <option value="missing_fabric">Missing Fabric</option>
+                  <option value="missing_component">Missing Component</option>
+                  <option value="quality_issue">Quality Issue</option>
+                  <option value="customer_request">Customer Request</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1.5">Notes</label>
+                <textarea value={holdNote} onChange={e => setHoldNote(e.target.value)} rows={3}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="What part? When expected? Any other details..." autoFocus />
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-stone-100 flex justify-end gap-2">
+              <button onClick={() => { setShowHoldModal(false); setHoldReason(''); setHoldNote('') }}
+                className="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">
+                Cancel
+              </button>
+              <button onClick={placeOnHold} disabled={statusSaving || !holdReason}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium">
+                {statusSaving ? 'Placing on hold…' : 'Place on Hold'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
