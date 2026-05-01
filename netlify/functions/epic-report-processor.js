@@ -452,6 +452,134 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
+// SALES REPORT — daily 6am report with all orders + statuses
+// This is the master source of truth for order status (except "In Production" which is manual)
+async function processSalesReport(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  SALES REPORT: ${rows.length} rows total`)
+
+  // ePIC status → Wrangl status mapping
+  // Returns null for statuses we don't want to track
+  const mapStatus = (s) => {
+    const upper = (s || '').trim().toUpperCase()
+    if (upper === 'QUOTE')        return 'quote'
+    if (upper === 'CREDIT HOLD')  return 'credit_hold'
+    if (upper === 'CREDIT OK')    return 'credit_ok'
+    if (upper === 'PO SENT')      return 'po_sent'
+    if (upper === 'PRINTED')      return 'printed'
+    if (upper === 'INVOICED')     return 'invoiced'
+    if (upper === 'PAID')         return 'invoiced' // bucket together
+    return null // ignore: REVIEW HOLD, MANUAL HOLD, PARTIAL SHIP, UNPACKED, FULL PACK
+  }
+
+  let upserted = 0
+  let skipped  = 0
+  const toUpsert = []
+
+  for (const row of rows) {
+    if ((row.RowType || '').trim().toUpperCase() !== 'DETAIL') {
+      skipped++
+      continue
+    }
+
+    const epicStatus = (row.OrderStatus || '').trim().toUpperCase()
+    const wranglStatus = mapStatus(epicStatus)
+
+    if (!wranglStatus) {
+      skipped++
+      continue // Not a status we track
+    }
+
+    const orderNo = (row.OrderNo || '').trim()
+    if (!orderNo) {
+      skipped++
+      continue
+    }
+
+    toUpsert.push({
+      order_number:    orderNo,
+      customer_name:   (row.CustomerName || '').trim(),
+      sales_rep:       (row.Salesperson || '').trim(),
+      epic_status:     epicStatus,
+      epic_status_date: row.StatusDate || null,
+      status:          wranglStatus,
+      total_units:     parseInt(row.TotalUnits || 0) || 0,
+      order_amount:    parseCurrency(row.OrderAmount || 0),
+      updated_at:      new Date().toISOString(),
+    })
+  }
+
+  // Upsert in batches of 500
+  const batchSize = 500
+  for (let i = 0; i < toUpsert.length; i += batchSize) {
+    const batch = toUpsert.slice(i, i + batchSize)
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=order_number`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(batch),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error(`  Batch ${i / batchSize + 1} error: ${res.status} ${errText}`)
+    } else {
+      upserted += batch.length
+    }
+  }
+
+  // CRITICAL: For orders manually marked "in_production" in Wrangl, override the status
+  // back to in_production — UNLESS ePIC has now moved them to invoiced (which means
+  // production is done and the order shipped).
+  // Logic: if wrangl_status='in_production' AND epic_status NOT IN ('INVOICED','PAID'),
+  // set status back to 'in_production'
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=not.in.(INVOICED,PAID)`, {
+    method:  'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'in_production' }),
+  })
+
+  // Clear wrangl_status when ePIC has moved the order to invoiced
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=in.(INVOICED,PAID)`, {
+    method:  'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ wrangl_status: null }),
+  })
+
+  // Log the import
+  await fetch(`${SUPABASE_URL}/rest/v1/sales_report_log`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      total_rows:    rows.length,
+      rows_upserted: upserted,
+      rows_skipped:  skipped,
+    }),
+  })
+
+  console.log(`  Sales report processed — upserted: ${upserted}, skipped: ${skipped}`)
+  return upserted
+}
+
 // CREDIT HOLD/OK ORDERS — only capture CREDIT OK rows, fresh snapshot model
 async function processCreditOk(csvText) {
   const rows = parseCSV(csvText)
@@ -732,6 +860,13 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processRollerWIP(csvText)
           await markProcessed(messageId, 'roller_wip', count)
+          results.processed++
+
+        } else if (subject.includes('SALES REPORT')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processSalesReport(csvText)
+          await markProcessed(messageId, 'sales_report', count)
           results.processed++
 
         } else if (subject.includes('CREDIT HOLD/OK ORDERS') || subject.includes('CREDIT HOLD') || subject.includes('CREDIT OK ORDERS')) {
