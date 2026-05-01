@@ -4,32 +4,74 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 // ─── Product definitions ────────────────────────────────────────────────────
-const PRODUCTS = [
+const PRODUCT_GROUPS = [
   {
-    code: '10100',
-    name: 'Anabelle Cordless Roller Shade',
-    short: 'Cordless',
-    desc: 'Spring-loaded cordless mechanism',
-    icon: '🔒',
-    mechCode: 'CORDLESS',
+    group: 'ANABELLE',
+    label: 'Anabelle Roller Shades',
+    icon: '🌿',
+    products: [
+      { code: '10100', name: 'Anabelle Cordless Roller Shade',   short: 'Cordless',  mechCode: 'CORDLESS' },
+      { code: '10200', name: 'Anabelle Clutch Roller Shade',     short: 'Clutch',    mechCode: null       },
+      { code: '10300', name: 'Anabelle Motorized Roller Shade',  short: 'Motorized', mechCode: 'MOTOR'    },
+    ],
+    fabrics: [
+      { id: 'LF',  name: 'Light Filtering Decorative Fabric' },
+      { id: 'BO',  name: 'Black Out Decorative Fabric'       },
+      { id: 'SC1', name: 'Screen Fabric 1%'                  },
+      { id: 'SC3', name: 'Screen Fabric 3%'                  },
+      { id: 'SC5', name: 'Screen Fabric 5%'                  },
+      { id: 'SC8', name: 'Screen Fabric 8%'                  },
+      { id: 'SC10',name: 'Screen Fabric 10%'                 },
+      { id: 'SC0', name: 'Screen Fabric 0%'                  },
+    ],
+    widths:  [12,18,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,78,84,90,96,102,108,114,118],
+    heights: [36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144],
+    pricingType: 'anabelle',
   },
   {
-    code: '10200',
-    name: 'Anabelle Clutch Roller Shade',
-    short: 'Clutch',
-    desc: 'Chain-driven clutch control',
-    icon: '⛓️',
-    mechCode: null,
+    group: 'BERKELY_DESIGNER',
+    label: 'Berkely Designer Roller Shades',
+    icon: '✨',
+    products: [
+      { code: '20100', name: 'Designer Cordless Roller Shade USA',   short: 'Cordless',  mechCode: 'CORDLESS' },
+      { code: '20200', name: 'Designer Clutch Roller Shade USA',     short: 'Clutch',    mechCode: null       },
+      { code: '20300', name: 'Designer Motorized Roller Shade USA',  short: 'Motorized', mechCode: 'MOTOR'    },
+    ],
+    fabrics: [
+      { id: 'LF',  name: 'Light Filtering Decorative Fabric' },
+      { id: 'BO',  name: 'Black Out Decorative Fabric'       },
+      { id: 'SC1', name: 'Screen Fabric 1%'                  },
+      { id: 'SC3', name: 'Screen Fabric 3%'                  },
+      { id: 'SC5', name: 'Screen Fabric 5%'                  },
+    ],
+    widths:  [16,18,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,78,84,90,96],
+    heights: [18,24,30,36,42,48,54,60,66,72,78,84,90,96],
+    pricingType: 'anabelle', // same price tables as Anabelle
+    hasChannel: true,
+    hemBarOptions: ['INTERNAL HEM BAR'],
   },
   {
-    code: '10300',
-    name: 'Anabelle Motorized Roller Shade',
-    short: 'Motorized',
-    desc: 'Electric motor with remote control',
+    group: 'BERKELY_EXPRESS',
+    label: 'Berkely Express Roller Shades',
     icon: '⚡',
-    mechCode: 'MOTOR',
+    products: [
+      { code: '30100', name: 'Berkely Express Cordless Roller Shade',  short: 'Cordless',  mechCode: 'CORDLESS' },
+      { code: '30200', name: 'Berkely Express Clutch Roller Shade',    short: 'Clutch',    mechCode: null       },
+      { code: '30300', name: 'Berkely Express Motorized Roller Shade', short: 'Motorized', mechCode: 'MOTOR'    },
+    ],
+    fabrics: [
+      { id: 'BX', name: 'Berkely Express' },
+    ],
+    widths:  [16,18,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,78,84,90,96,102,108,115,118],
+    heights: [18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,120],
+    pricingType: 'express',
+    hasExtensionPole: true,
+    hemBarOptions: ['INTERNAL HEMBAR'],
   },
 ]
+
+// Flat list for backward compat
+const PRODUCTS = PRODUCT_GROUPS.flatMap(g => g.products.map(p => ({ ...p, group: g.group })))
 
 const TOP_TREATMENTS = [
   { value: 'OPEN_ROLL',               label: 'Open Roll',                          pg: 'G1', addon: false },
@@ -94,12 +136,13 @@ export default function QuoteBuilder() {
   const navigate = useNavigate()
   const { profile } = useAuth()
 
-  const [step, setStep]         = useState(1)  // 1=product 2=fabric 3=config 4=review
-  const [product, setProduct]   = useState(null)
-  const [fabrics, setFabrics]   = useState([])
-  const [fabric, setFabric]     = useState(null)
-  const [colors, setColors]     = useState([])
-  const [config, setConfig]     = useState(DEFAULT_CONFIG)
+  const [step, setStep]           = useState(1)  // 1=group 2=product 3=fabric 4=config 5=review
+  const [productGroup, setProductGroup] = useState(null)
+  const [product, setProduct]     = useState(null)
+  const [fabrics, setFabrics]     = useState([])
+  const [fabric, setFabric]       = useState(null)
+  const [colors, setColors]       = useState([])
+  const [config, setConfig]       = useState(DEFAULT_CONFIG)
   const [lineItems, setLineItems] = useState([])
   const [header, setHeader]     = useState({ customer_name: '', customer_email: '', sales_rep: profile?.email || '', notes: '' })
   const [price, setPrice]       = useState({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: false })
@@ -132,7 +175,7 @@ export default function QuoteBuilder() {
     const { data } = await supabase
       .from('fabric_colors')
       .select('color_name')
-      .eq('product_group', 'ANABELLE')
+      .eq('product_group', productGroup?.group || 'ANABELLE')
       .eq('fabric_type', fabric.name.toUpperCase())
       .eq('active', true)
       .order('sort_order')
@@ -141,21 +184,8 @@ export default function QuoteBuilder() {
   }
 
   const loadFabrics = async () => {
-    const { data } = await supabase
-      .from('products')
-      .select('id, name, model_code, pattern')
-      .ilike('group_name', '%ANABELLE%')
-      .order('name')
-    if (data?.length) {
-      setFabrics(data)
-    } else {
-      setFabrics([
-        { id: 'LF',  name: 'Light Filtering Decorative Fabric', model_code: 'LF'  },
-        { id: 'BO',  name: 'Black Out Decorative Fabric',       model_code: 'BO'  },
-        { id: 'SC5', name: 'Screen Fabric 5%',                  model_code: 'SC5' },
-        { id: 'SC3', name: 'Screen Fabric 3%',                  model_code: 'SC3' },
-        { id: 'SC1', name: 'Screen Fabric 1%',                  model_code: 'SC1' },
-      ])
+    if (productGroup) {
+      setFabrics(productGroup.fabrics)
     }
   }
 
@@ -163,39 +193,65 @@ export default function QuoteBuilder() {
     setPrice(p => ({ ...p, loading: true }))
     try {
       const treatment = TOP_TREATMENTS.find(t => t.value === config.top_treatment)
-      const baseTable = `ANAB_DESIGN_${treatment?.pg || 'G1'}_2026`
       const w = parseFloat(config.width)
       const h = parseFloat(config.height)
       const qty = parseInt(config.quantity) || 1
+      const isExpress = productGroup?.pricingType === 'express'
 
-      // Base price lookup
-      const { data: baseRows } = await supabase
-        .from('price_matrix')
-        .select('price')
-        .eq('table_name', baseTable)
-        .gte('width', w)
-        .gte('height', h)
-        .order('width', { ascending: true })
-        .order('height', { ascending: true })
-        .limit(1)
-
-      if (!baseRows?.length) {
-        setPrice({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: true })
-        return
-      }
-
-      const msrp = baseRows[0].price
+      let msrp = null
       const addons = []
 
-      // Fabric insert addon
-      if (treatment?.addon) {
-        const { data: ai } = await supabase.from('price_matrix').select('price')
-          .eq('table_name', 'ANAB_DESIGN_TOP_TRMTS_2026')
-          .gte('width', w).order('width', { ascending: true }).limit(1)
-        if (ai?.[0]) addons.push({ label: 'Fabric Insert', amount: ai[0].price })
+      if (isExpress) {
+        // Express: base price from BERKELY_RS_MSRP_A (width x height)
+        const { data: baseRows } = await supabase
+          .from('price_matrix')
+          .select('price')
+          .eq('table_name', 'BERKELY_RS_MSRP_A')
+          .gte('width', w).gte('height', h)
+          .order('width', { ascending: true }).order('height', { ascending: true })
+          .limit(1)
+        if (!baseRows?.length) {
+          setPrice({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: true })
+          return
+        }
+        msrp = baseRows[0].price
+
+        // Top treatment add-on for Express cassettes
+        if (config.top_treatment !== 'OPEN_ROLL') {
+          const { data: tt } = await supabase.from('price_matrix').select('price')
+            .eq('table_name', 'ANAB_DESIGN_TOP_TRMTS_2026')
+            .gte('width', w).order('width', { ascending: true }).limit(1)
+          if (tt?.[0]) addons.push({ label: 'Top Treatment', amount: tt[0].price })
+        }
+
+        // Extension pole
+        if (config.extension_pole) addons.push({ label: 'Extension Pole', amount: 60 })
+
+      } else {
+        // Anabelle / Designer: base price from G1/G2/G3
+        const baseTable = `ANAB_DESIGN_${treatment?.pg || 'G1'}_2026`
+        const { data: baseRows } = await supabase
+          .from('price_matrix').select('price')
+          .eq('table_name', baseTable)
+          .gte('width', w).gte('height', h)
+          .order('width', { ascending: true }).order('height', { ascending: true })
+          .limit(1)
+        if (!baseRows?.length) {
+          setPrice({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: true })
+          return
+        }
+        msrp = baseRows[0].price
+
+        // Fabric insert addon
+        if (treatment?.addon) {
+          const { data: ai } = await supabase.from('price_matrix').select('price')
+            .eq('table_name', 'ANAB_DESIGN_TOP_TRMTS_2026')
+            .gte('width', w).order('width', { ascending: true }).limit(1)
+          if (ai?.[0]) addons.push({ label: 'Fabric Insert', amount: ai[0].price })
+        }
       }
 
-      // Side channels
+      // Side channels (both product lines)
       if (config.light_block === 'SIDE_CHANNELS') {
         const { data: si } = await supabase.from('price_matrix').select('price')
           .eq('table_name', 'ANAB_SIDE_CH_2026')
@@ -203,7 +259,7 @@ export default function QuoteBuilder() {
         if (si?.[0]) addons.push({ label: 'Side Channels', amount: si[0].price })
       }
 
-      // Sill
+      // Sill (both product lines)
       if (config.light_block === 'SILL') {
         const { data: sl } = await supabase.from('price_matrix').select('price')
           .eq('table_name', 'ANAB_SILL_2026')
@@ -213,36 +269,31 @@ export default function QuoteBuilder() {
 
       // Mechanism
       let mech = null
-      if (product.code === '10100') {
+      const pCode = product?.code
+      if (['10100','20100','30100'].includes(pCode)) {
         mech = { label: 'Cordless Mechanism', amount: 135 }
-      } else if (product.code === '10300' && config.motor_type) {
+      } else if (['10300','20300','30300'].includes(pCode) && config.motor_type) {
         const m = MOTORS.find(x => x.value === config.motor_type)
         if (m) {
           mech = { label: m.label, amount: m.price }
-          // DC accessories
           if (config.motor_type === 'MOTOR_ROLLEASE_DC') {
-            if (config.wall_switch && config.wall_switch_qty > 0) {
-              addons.push({ label: `Wall RF Switch (5CH) ×${config.wall_switch_qty}`, amount: 115 * config.wall_switch_qty })
-            }
-            if (config.power_panel && config.power_panel_qty > 0) {
-              addons.push({ label: `DC Power Panel (18CH) ×${config.power_panel_qty}`, amount: 700 * config.power_panel_qty })
-            }
-            if (config.connection_harnesses && config.harness_qty > 0) {
-              addons.push({ label: `DC Connection Harness ×${config.harness_qty}`, amount: 35 * config.harness_qty })
-            }
+            if (config.wall_switch && config.wall_switch_qty > 0)
+              addons.push({ label: `Wall RF Switch ×${config.wall_switch_qty}`, amount: 115 * config.wall_switch_qty })
+            if (config.power_panel && config.power_panel_qty > 0)
+              addons.push({ label: `DC Power Panel ×${config.power_panel_qty}`, amount: 700 * config.power_panel_qty })
+            if (config.connection_harnesses && config.harness_qty > 0)
+              addons.push({ label: `DC Harness ×${config.harness_qty}`, amount: 35 * config.harness_qty })
           }
         }
       }
 
       const unitPrice = msrp + (mech?.amount || 0) + addons.reduce((s, a) => s + a.amount, 0)
-      const total = unitPrice * qty
-
-      setPrice({ msrp, mechanism: mech, addons, total, loading: false, noData: false })
+      setPrice({ msrp, mechanism: mech, addons, total: unitPrice * qty, loading: false, noData: false })
     } catch (e) {
       console.error(e)
       setPrice({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: true })
     }
-  }, [config, product])
+  }, [config, product, productGroup])
 
   const cfg = (field, val) => setConfig(c => ({ ...c, [field]: val }))
 
@@ -263,13 +314,14 @@ export default function QuoteBuilder() {
       id: Date.now(),
       product_code: product.code,
       product_name: product.name,
+      product_group: productGroup?.group,
       fabric_name: fabric?.name || '',
       ...config,
       price_detail: { ...price },
       line_total: price.total || 0,
     }])
     // Reset for next item
-    setStep(1); setProduct(null); setFabric(null); setConfig(DEFAULT_CONFIG)
+    setStep(1); setProductGroup(null); setProduct(null); setFabric(null); setConfig(DEFAULT_CONFIG)
     setPrice({ msrp: null, mechanism: null, addons: [], total: null, loading: false, noData: false })
   }
 
@@ -299,7 +351,7 @@ export default function QuoteBuilder() {
     <div className="flex items-center gap-2 mb-6">
       {['Product','Fabric','Configure','Review'].map((s, i) => {
         const n = i + 1
-        const active  = step === n
+        const active  = step === n || (n === 4 && step === 5)
         const done    = step > n
         return (
           <div key={s} className="flex items-center gap-2">
@@ -365,35 +417,42 @@ export default function QuoteBuilder() {
 
   // ─── Steps ──────────────────────────────────────────────────────────────────
 
-  // Step 1: Select product
+  // Step 1: Select product group + product
   if (step === 1) return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">New Quote</h1>
-        <p className="text-sm text-gray-500">Build a quote line by line. Start by selecting a product.</p>
+        <p className="text-sm text-gray-500">Select a product line to get started.</p>
       </div>
 
       {lineItems.length > 0 && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
           <span className="font-medium text-blue-800">{lineItems.length} line{lineItems.length > 1 ? 's' : ''} added.</span>
-          <span className="text-blue-600"> Add more items or </span>
-          <button onClick={() => setStep(4)} className="text-blue-700 font-medium underline">review & save quote →</button>
+          <span className="text-blue-600"> Add more or </span>
+          <button onClick={() => setStep(5)} className="text-blue-700 font-medium underline">review & save →</button>
         </div>
       )}
 
       <StepIndicator />
 
-      <div className="grid grid-cols-3 gap-4">
-        {PRODUCTS.map(p => (
-          <button
-            key={p.code}
-            onClick={() => { setProduct(p); setStep(2) }}
-            className="border-2 border-gray-200 rounded-xl p-5 text-left hover:border-blue-400 hover:bg-blue-50 transition-all group"
-          >
-            <div className="text-3xl mb-3">{p.icon}</div>
-            <div className="font-bold text-gray-900 group-hover:text-blue-700 text-sm">{p.name}</div>
-            <div className="text-xs text-gray-500 mt-1">{p.desc}</div>
-          </button>
+      <div className="space-y-4">
+        {PRODUCT_GROUPS.map(pg => (
+          <div key={pg.group} className="border-2 border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-50 px-4 py-3 flex items-center gap-2 border-b border-gray-200">
+              <span className="text-xl">{pg.icon}</span>
+              <span className="font-bold text-gray-800">{pg.label}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 p-3">
+              {pg.products.map(p => (
+                <button key={p.code}
+                  onClick={() => { setProductGroup(pg); setProduct(p); setStep(2) }}
+                  className="border-2 border-gray-200 rounded-lg p-3 text-left hover:border-blue-400 hover:bg-blue-50 transition-all group">
+                  <div className="font-semibold text-sm text-gray-900 group-hover:text-blue-700">{p.short}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{p.name}</div>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -409,7 +468,7 @@ export default function QuoteBuilder() {
       </div>
       <StepIndicator />
       <div className="grid grid-cols-1 gap-2">
-        {fabrics.map(f => (
+        {(productGroup?.fabrics || []).map(f => (
           <button
             key={f.id}
             onClick={() => { setFabric(f); setStep(3) }}
@@ -417,7 +476,6 @@ export default function QuoteBuilder() {
               ${fabric?.id === f.id ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'}`}
           >
             <span className="font-medium">{f.name}</span>
-            {f.model_code && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{f.model_code}</span>}
           </button>
         ))}
       </div>
@@ -426,6 +484,253 @@ export default function QuoteBuilder() {
 
   // Step 3: Configuration
   if (step === 3) return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="mb-4">
+        <button onClick={() => setStep(2)} className="text-sm text-blue-600 hover:underline mb-1">← Back</button>
+        <h1 className="text-lg font-bold text-gray-900">{product.name}</h1>
+        <p className="text-sm text-gray-500">{fabric?.name}</p>
+      </div>
+      <StepIndicator />
+
+      {errors.length > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="text-red-700 text-xs font-bold mb-1">Errors</div>
+          {errors.map((e, i) => <div key={i} className="text-red-600 text-xs">• {e}</div>)}
+        </div>
+      )}
+
+      <div className="flex gap-5">
+        <div className="flex-1 space-y-4">
+
+          {/* Quantity + Color */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+            <Row label="Quantity">
+              <input type="number" min="1" value={config.quantity}
+                onChange={e => cfg('quantity', e.target.value)}
+                className="w-20 border border-gray-300 rounded px-2 py-1 text-sm" />
+            </Row>
+            <Row label="Color">
+              {colors.length > 0 ? (
+                <select value={config.color} onChange={e => cfg('color', e.target.value)}
+                  className={`flex-1 border rounded px-2 py-1 text-sm ${!config.color ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
+                  <option value="">Select color…</option>
+                  {colors.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <input type="text" placeholder="Color name"
+                  value={config.color} onChange={e => cfg('color', e.target.value)}
+                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
+              )}
+            </Row>
+            <Row label="Color Number">
+              <input type="text" placeholder="e.g. BD-10110"
+                value={config.color_number} onChange={e => cfg('color_number', e.target.value)}
+                className="w-32 border border-gray-300 rounded px-2 py-1 text-sm" />
+            </Row>
+            <Row label="Room Location">
+              <input type="text" placeholder="Optional"
+                value={config.room_location} onChange={e => cfg('room_location', e.target.value)}
+                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
+            </Row>
+          </div>
+
+          {/* Dimensions */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Dimensions</div>
+            <Row label="Width">
+              <select value={config.width} onChange={e => cfg('width', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm w-24">
+                <option value="">Select</option>
+                {(productGroup?.widths || []).map(w => <option key={w} value={w}>{w}"</option>)}
+              </select>
+            </Row>
+            <Row label="Height">
+              <select value={config.height} onChange={e => cfg('height', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm w-24">
+                <option value="">Select</option>
+                {(productGroup?.heights || []).map(h => <option key={h} value={h}>{h}"</option>)}
+              </select>
+            </Row>
+            <Row label="Mount">
+              <select value={config.mount} onChange={e => cfg('mount', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                <option>INSIDE MOUNT</option>
+                <option>OUTSIDE MOUNT</option>
+              </select>
+            </Row>
+            <Row label="Shade Style">
+              <select value={config.shade_style} onChange={e => cfg('shade_style', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                <option>SINGLE</option>
+              </select>
+            </Row>
+          </div>
+
+          {/* Top Treatment */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Top Treatment</div>
+            <Row label="Top Treatment">
+              <select value={config.top_treatment} onChange={e => cfg('top_treatment', e.target.value)}
+                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                {TOP_TREATMENTS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Row>
+            <Row label="Treatment Color">
+              <select value={config.top_treatment_color} onChange={e => cfg('top_treatment_color', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                {TREATMENT_COLORS.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Row>
+            <Row label="Fabric Roll Direction">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="radio" name="frd" value="STANDARD ROLL"
+                  checked={config.fabric_roll_direction === 'STANDARD ROLL'}
+                  onChange={() => cfg('fabric_roll_direction', 'STANDARD ROLL')} />
+                Standard Roll
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer ml-4">
+                <input type="radio" name="frd" value="REVERSE ROLL"
+                  checked={config.fabric_roll_direction === 'REVERSE ROLL'}
+                  onChange={() => cfg('fabric_roll_direction', 'REVERSE ROLL')} />
+                Reverse Roll
+              </label>
+            </Row>
+          </div>
+
+          {/* Motor options */}
+          {['10300','20300','30300'].includes(product.code) && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Motor Options</div>
+              <Row label="Control Type">
+                <select value={config.control_type} onChange={e => cfg('control_type', e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <option>REMOTE CONTROL</option>
+                </select>
+              </Row>
+              <Row label="Control Location">
+                <select value={config.control_location} onChange={e => cfg('control_location', e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <option>RIGHT</option><option>LEFT</option>
+                </select>
+              </Row>
+              <Row label="Motor Type">
+                <select value={config.motor_type} onChange={e => cfg('motor_type', e.target.value)}
+                  className={`flex-1 border rounded px-2 py-1 text-sm ${!config.motor_type ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}>
+                  <option value="">PLEASE SELECT</option>
+                  {MOTORS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </Row>
+              <Row label="Remote Needed">
+                <select value={config.remote_needed} onChange={e => cfg('remote_needed', e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  {REMOTES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </Row>
+              {config.motor_type === 'MOTOR_ROLLEASE_DC' && (
+                <div className="border-t pt-3 space-y-2">
+                  <div className="text-xs font-medium text-gray-600">DC Accessories</div>
+                  <Row label="Wall RF Switch (5 CH)?">
+                    <input type="checkbox" checked={config.wall_switch} onChange={e => cfg('wall_switch', e.target.checked)} />
+                    {config.wall_switch && (
+                      <div className="flex items-center gap-1 ml-3">
+                        <span className="text-xs text-gray-500">Qty</span>
+                        <input type="number" min="1" value={config.wall_switch_qty}
+                          onChange={e => cfg('wall_switch_qty', parseInt(e.target.value) || 1)}
+                          className="w-14 border border-gray-300 rounded px-2 py-0.5 text-sm" />
+                      </div>
+                    )}
+                  </Row>
+                  <Row label="DC Power Panel (18CH)?">
+                    <input type="checkbox" checked={config.power_panel} onChange={e => cfg('power_panel', e.target.checked)} />
+                    {config.power_panel && (
+                      <div className="flex items-center gap-1 ml-3">
+                        <span className="text-xs text-gray-500">Qty</span>
+                        <input type="number" min="1" value={config.power_panel_qty}
+                          onChange={e => cfg('power_panel_qty', parseInt(e.target.value) || 1)}
+                          className="w-14 border border-gray-300 rounded px-2 py-0.5 text-sm" />
+                      </div>
+                    )}
+                  </Row>
+                  <Row label="DC Harnesses?">
+                    <input type="checkbox" checked={config.connection_harnesses} onChange={e => cfg('connection_harnesses', e.target.checked)} />
+                    {config.connection_harnesses && (
+                      <div className="flex items-center gap-1 ml-3">
+                        <span className="text-xs text-gray-500">Qty</span>
+                        <input type="number" min="1" value={config.harness_qty}
+                          onChange={e => cfg('harness_qty', parseInt(e.target.value) || 1)}
+                          className="w-14 border border-gray-300 rounded px-2 py-0.5 text-sm" />
+                      </div>
+                    )}
+                  </Row>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Finishing */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Finishing</div>
+            <Row label="Hem Bar Style">
+              <select value={config.hem_bar_style} onChange={e => cfg('hem_bar_style', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                {(productGroup?.hemBarOptions || ['UNWRAPPED HEM BAR','WRAPPED HEM BAR']).map(o => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
+            </Row>
+            <Row label="Hem Bar Color">
+              <select value={config.hem_bar_color} onChange={e => cfg('hem_bar_color', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                {HEM_COLORS.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Row>
+            <Row label="Light Block">
+              <select value={config.light_block} onChange={e => cfg('light_block', e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm">
+                <option value="NO">No</option>
+                <option value="SIDE_CHANNELS">Side Channels</option>
+                <option value="SILL">Sill</option>
+                <option value="BOTH">Both</option>
+              </select>
+            </Row>
+            {productGroup?.hasChannel && (
+              <Row label="Channel">
+                <select value={config.channel || 'NO'} onChange={e => cfg('channel', e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <option>NO</option><option>YES</option>
+                </select>
+              </Row>
+            )}
+            {productGroup?.hasExtensionPole && (
+              <Row label="Extension Pole?">
+                <input type="checkbox" checked={!!config.extension_pole}
+                  onChange={e => cfg('extension_pole', e.target.checked)} />
+                <span className="text-xs text-gray-500 ml-2">+$60.00</span>
+              </Row>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button onClick={addLine}
+              className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-lg hover:bg-blue-700 text-sm">
+              Add to Quote →
+            </button>
+            {lineItems.length > 0 && (
+              <button onClick={() => setStep(5)}
+                className="px-4 bg-green-600 text-white font-semibold py-2.5 rounded-lg hover:bg-green-700 text-sm">
+                Review ({lineItems.length}) →
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="w-52 flex-shrink-0">
+          <PricePanel />
+        </div>
+      </div>
+    </div>
+  )
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-4">
         <button onClick={() => setStep(2)} className="text-sm text-blue-600 hover:underline mb-1">← Back</button>
@@ -616,58 +921,8 @@ export default function QuoteBuilder() {
             </div>
           )}
 
-          {/* Hem Bar + Light Block */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Finishing</div>
-            <Row label="Hem Bar Style">
-              <select value={config.hem_bar_style} onChange={e => cfg('hem_bar_style', e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm">
-                <option>UNWRAPPED HEM BAR</option>
-                <option>WRAPPED HEM BAR</option>
-              </select>
-            </Row>
-            <Row label="Hem Bar Color">
-              <select value={config.hem_bar_color} onChange={e => cfg('hem_bar_color', e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm">
-                {HEM_COLORS.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </Row>
-            <Row label="Light Block">
-              <select value={config.light_block} onChange={e => cfg('light_block', e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm">
-                <option value="NO">No</option>
-                <option value="SIDE_CHANNELS">Side Channels</option>
-                <option value="SILL">Sill</option>
-                <option value="BOTH">Both</option>
-              </select>
-            </Row>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button onClick={addLine}
-              className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-lg hover:bg-blue-700 text-sm">
-              Add to Quote →
-            </button>
-            {lineItems.length > 0 && (
-              <button onClick={() => setStep(4)}
-                className="px-4 bg-green-600 text-white font-semibold py-2.5 rounded-lg hover:bg-green-700 text-sm">
-                Review ({lineItems.length}) →
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Price panel */}
-        <div className="w-52 flex-shrink-0">
-          <PricePanel />
-        </div>
-      </div>
-    </div>
-  )
-
-  // Step 4: Review & Save
-  if (step === 4) return (
+  // Step 5: Review & Save
+  if (step === 5) return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-5">
         <button onClick={() => setStep(1)} className="text-sm text-blue-600 hover:underline mb-1">← Add more items</button>
