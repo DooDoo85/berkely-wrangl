@@ -164,22 +164,22 @@ export default function ExecutiveHome() {
       const { count: shippedMTD } = await supabase.from("orders")
         .select("*",{count:"exact",head:true}).eq("status","invoiced").gte("updated_at",monthStart);
       const { count: inProduction } = await supabase.from("orders")
-        .select("*",{count:"exact",head:true}).in("status",["submitted","printed","in_production"]);
+        .select("*",{count:"exact",head:true}).in("status",["credit_hold","credit_ok","po_sent","printed","in_production"]);
 
       const { data: activeOrders } = await supabase.from("orders")
-        .select("id,order_number,customer_name,status,sales_rep,updated_at")
-        .in("status",["submitted","printed","in_production"])
-        .order("updated_at",{ascending:true});
+        .select("id,order_number,customer_name,status,sales_rep,updated_at,epic_status_date")
+        .in("status",["credit_hold","credit_ok","po_sent","printed","in_production"])
+        .order("epic_status_date",{ascending:true});
 
       const stuckOrders = (activeOrders??[])
-        .filter(o => ["submitted","printed"].includes(o.status) && daysSince(o.updated_at) > 5)
-        .sort((a,b) => daysSince(b.updated_at)-daysSince(a.updated_at)).slice(0,5);
+        .filter(o => ["credit_hold","credit_ok","po_sent","printed"].includes(o.status) && daysSince(o.epic_status_date || o.updated_at) > 5)
+        .sort((a,b) => daysSince(b.epic_status_date || b.updated_at)-daysSince(a.epic_status_date || a.updated_at)).slice(0,5);
       const productionLoad = (activeOrders??[]).reduce((acc,o) => {
         acc[o.status]=(acc[o.status]??0)+1; return acc;
       },{});
-      const inProdOrders = (activeOrders??[]).filter(o => ["submitted","printed"].includes(o.status));
+      const inProdOrders = (activeOrders??[]).filter(o => ["credit_ok","po_sent","printed"].includes(o.status));
       const avgDays = inProdOrders.length
-        ? (inProdOrders.reduce((s,o)=>s+daysSince(o.updated_at),0)/inProdOrders.length).toFixed(1) : null;
+        ? (inProdOrders.reduce((s,o)=>s+daysSince(o.epic_status_date || o.updated_at),0)/inProdOrders.length).toFixed(1) : null;
 
       const { data: wipData } = await supabase.from("roller_wip").select("*").order("days_in_status",{ascending:false});
       const creditOK = (wipData??[]).filter(r=>r.order_status==="CREDIT OK");
@@ -346,7 +346,7 @@ export default function ExecutiveHome() {
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
-                  const days = daysSince(o.updated_at);
+                  const days = daysSince(o.epic_status_date || o.updated_at);
                   return (
                     <div key={o.id} onClick={()=>navigate(`/orders/${o.id}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-red-100/40 rounded-lg px-2 transition-colors">
@@ -373,9 +373,10 @@ export default function ExecutiveHome() {
               </span>
             </div>
             {[
-              { label: "Submitted",     key: "submitted",     color: "bg-blue-500"   },
-              { label: "Printed",       key: "printed",       color: "bg-amber-500"  },
-              { label: "In Production", key: "in_production", color: "bg-emerald-500"},
+              { label: "Credit OK",     key: "credit_ok",     color: "bg-emerald-500" },
+              { label: "PO Sent",       key: "po_sent",       color: "bg-cyan-500"    },
+              { label: "Printed",       key: "printed",       color: "bg-amber-500"   },
+              { label: "In Production", key: "in_production", color: "bg-indigo-500"  },
             ].map(s => {
               const count = data.productionLoad?.[s.key] ?? 0;
               const total = (data.inProduction ?? 0) || 1;
