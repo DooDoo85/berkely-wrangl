@@ -39,6 +39,7 @@ export default function RepHome() {
     overdueFollowUps: null,
     myOrders: [],
     followUps: [],
+    myQuotes: [],
   });
 
   const load = useCallback(async () => {
@@ -48,7 +49,7 @@ export default function RepHome() {
       const weekStart = startOfWeek();
       const today = new Date().toISOString().slice(0, 10);
 
-      const [submittedRes, inProdRes, ordersRes, followUpsRes] = await Promise.all([
+      const [submittedRes, inProdRes, ordersRes, followUpsRes, quotesRes] = await Promise.all([
         // orders submitted this week
         supabase
           .from("orders")
@@ -81,6 +82,14 @@ export default function RepHome() {
           .lte("follow_up_date", today)
           .order("follow_up_date", { ascending: true })
           .limit(6),
+
+        // my recent quotes
+        supabase
+          .from("quotes")
+          .select("id, quote_number, customer_name, status, subtotal, created_at")
+          .eq("sales_rep", profile?.email)
+          .order("created_at", { ascending: false })
+          .limit(5),
       ]);
 
       const orders = ordersRes.data ?? [];
@@ -95,6 +104,7 @@ export default function RepHome() {
         overdueFollowUps: overdue,
         myOrders: orders,
         followUps,
+        myQuotes: quotesRes.data ?? [],
       });
     } catch (err) {
       console.error("RepHome load error:", err);
@@ -130,6 +140,16 @@ export default function RepHome() {
           </div>
         </button>
         <button
+          onClick={() => navigate("/quotes/new")}
+          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
+        >
+          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-sm flex-shrink-0">💬</div>
+          <div>
+            <p className="text-sm font-medium text-gray-800">New quote</p>
+            <p className="text-xs text-gray-400">Build &amp; send</p>
+          </div>
+        </button>
+        <button
           onClick={() => navigate("/customers/new")}
           className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
         >
@@ -147,16 +167,6 @@ export default function RepHome() {
           <div>
             <p className="text-sm font-medium text-gray-800">Log activity</p>
             <p className="text-xs text-gray-400">Call, email, note</p>
-          </div>
-        </button>
-        <button
-          onClick={() => navigate("/customers")}
-          className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors text-left"
-        >
-          <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-sm flex-shrink-0">🔍</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">Search customer</p>
-            <p className="text-xs text-gray-400">Find account</p>
           </div>
         </button>
       </div>
@@ -197,6 +207,40 @@ export default function RepHome() {
           })}
           </div>
         </div>
+
+      {/* my quotes */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-medium text-gray-700">My quotes</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate("/quotes/new")} className="text-xs text-amber-600 hover:text-amber-800 font-medium">+ New</button>
+            <button onClick={() => navigate("/quotes")} className="text-xs text-indigo-500 hover:text-indigo-700">View all</button>
+          </div>
+        </div>
+        {loading && <p className="text-xs text-gray-400 py-4 text-center">Loading…</p>}
+        {!loading && data.myQuotes.length === 0 && (
+          <p className="text-xs text-gray-400 py-4 text-center">No quotes yet — <button onClick={() => navigate("/quotes/new")} className="text-amber-600 hover:underline">create your first one</button></p>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {data.myQuotes.map((q) => {
+            const STATUS_Q = { draft: "bg-gray-100 text-gray-600", sent: "bg-blue-100 text-blue-700", accepted: "bg-green-100 text-green-700", declined: "bg-red-100 text-red-600" }
+            const sc = STATUS_Q[q.status] || STATUS_Q.draft
+            return (
+              <div key={q.id} onClick={() => navigate(`/quotes/${q.id}`)}
+                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded px-2">
+                <div>
+                  <p className="text-xs font-medium text-gray-800 font-mono">{q.quote_number}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{q.customer_name || "—"}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc}`}>{q.status}</span>
+                  <p className="text-xs text-gray-500 mt-0.5 font-medium">${Number(q.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       {/* follow-ups — full width */}
       <div className="bg-white border border-gray-100 rounded-xl p-4">
