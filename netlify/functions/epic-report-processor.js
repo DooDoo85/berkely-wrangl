@@ -452,6 +452,43 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
+// CREDIT HOLD/OK ORDERS — only capture CREDIT OK rows, fresh snapshot model
+async function processCreditOk(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  CREDIT HOLD/OK ORDERS: ${rows.length} rows total`)
+
+  // Wipe table — fresh snapshot each run
+  await fetch(`${SUPABASE_URL}/rest/v1/credit_ok_orders?order_no=neq.__never__`, {
+    method:  'DELETE',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  })
+
+  const toInsert = []
+  for (const row of rows) {
+    const status = (row.OrderStatus || '').trim().toUpperCase()
+    if (status !== 'CREDIT OK') continue
+
+    const orderNo = (row.OrderNo || '').trim()
+    if (!orderNo) continue
+
+    toInsert.push({
+      order_no:      orderNo,
+      salesperson:   (row.Salesperson || '').trim(),
+      customer_name: (row.CustomerName || '').trim(),
+      order_amount:  parseCurrency(row.OrderAmount || 0),
+      entered_date:  row.EnteredDate || null,
+      order_status:  'CREDIT OK',
+      imported_at:   new Date().toISOString(),
+    })
+  }
+
+  if (toInsert.length) await sbUpsert('credit_ok_orders', toInsert)
+
+  const totalAmount = toInsert.reduce((s, r) => s + r.order_amount, 0)
+  console.log(`  Credit OK loaded: ${toInsert.length} orders / $${totalAmount.toFixed(2)}`)
+  return toInsert.length
+}
+
 // COMITTED STOCK — fresh snapshot model, description-only matching
 async function processCommittedStock(csvText) {
   const rows = parseCSV(csvText)
@@ -695,6 +732,13 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processRollerWIP(csvText)
           await markProcessed(messageId, 'roller_wip', count)
+          results.processed++
+
+        } else if (subject.includes('CREDIT HOLD/OK ORDERS') || subject.includes('CREDIT HOLD') || subject.includes('CREDIT OK ORDERS')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCreditOk(csvText)
+          await markProcessed(messageId, 'credit_ok_orders', count)
           results.processed++
 
         } else if (subject.includes('COMITTED STOCK')) {
