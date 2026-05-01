@@ -314,12 +314,6 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Orders Shipped Chart ──────────────────────────────────────────── */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Orders Shipped — Last 15 Days</h2>
-          <ShippedChart data={data.dailyShipped} />
-        </div>
-
         {/* ── Stuck Orders + Production Load ─────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           {/* Stuck Orders */}
