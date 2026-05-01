@@ -242,12 +242,20 @@ export default function QuoteBuilder() {
         }
         msrp = baseRows[0].price
 
-        // Fabric insert addon
+        // Fabric insert addon (Anabelle only — fabric insert variants)
         if (treatment?.addon) {
           const { data: ai } = await supabase.from('price_matrix').select('price')
             .eq('table_name', 'ANAB_DESIGN_TOP_TRMTS_2026')
             .gte('width', w).order('width', { ascending: true }).limit(1)
           if (ai?.[0]) addons.push({ label: 'Fabric Insert', amount: ai[0].price })
+        }
+
+        // Designer always adds Top Treatment for any cassette/fascia
+        if (productGroup?.group === 'BERKELY_DESIGNER' && config.top_treatment !== 'OPEN_ROLL') {
+          const { data: tt } = await supabase.from('price_matrix').select('price')
+            .eq('table_name', 'ANAB_DESIGN_TOP_TRMTS_2026')
+            .gte('width', w).order('width', { ascending: true }).limit(1)
+          if (tt?.[0]) addons.push({ label: 'Top Treatment', amount: tt[0].price })
         }
       }
 
