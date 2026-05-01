@@ -228,11 +228,15 @@ export default function QuoteBuilder() {
         if (config.extension_pole) addons.push({ label: 'Extension Pole', amount: 60 })
 
       } else {
-        // Anabelle / Designer: base price from G1/G2/G3
-        const baseTable = `ANAB_DESIGN_${treatment?.pg || 'G1'}_2026`
+        // Anabelle / Designer: base price
+        // Designer always uses G1 (cassette handled via Top Treatment add-on)
+        // Anabelle uses G1/G2/G3 based on top treatment
+        const baseTableName = productGroup?.group === 'BERKELY_DESIGNER'
+          ? 'ANAB_DESIGN_G1_2026'
+          : `ANAB_DESIGN_${treatment?.pg || 'G1'}_2026`
         const { data: baseRows } = await supabase
           .from('price_matrix').select('price')
-          .eq('table_name', baseTable)
+          .eq('table_name', baseTableName)
           .gte('width', w).gte('height', h)
           .order('width', { ascending: true }).order('height', { ascending: true })
           .limit(1)
