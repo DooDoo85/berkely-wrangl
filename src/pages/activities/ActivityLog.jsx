@@ -89,7 +89,7 @@ export default function ActivityLog() {
   const [search,      setSearch]      = useState('')
   const [kpis,        setKpis]        = useState({ meetings: 0, sample_books: 0, new_customers: 0, new_orders: 0 })
 
-  useEffect(() => { fetchActivities() }, [filter])
+  useEffect(() => { fetchActivities() }, [filter, profile])
 
   useEffect(() => {
     if (isSales && repId) fetchKpis()
@@ -143,6 +143,11 @@ export default function ActivityLog() {
       .limit(100)
 
     if (filter !== 'all') query = query.eq('activity_type', filter)
+
+    // Sales reps only see their own activities
+    if (profile?.role === 'sales') {
+      query = query.eq('user_id', profile.id)
+    }
 
     const { data } = await query
     setActivities(data || [])
