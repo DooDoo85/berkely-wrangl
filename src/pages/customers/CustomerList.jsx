@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_COLORS = {
   active:   'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -11,20 +12,48 @@ const STATUS_COLORS = {
 
 export default function CustomerList() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const isSalesRep = profile?.role === 'sales'
+  const repName = profile?.full_name || profile?.email?.split('@')[0]
+
   const [customers, setCustomers] = useState([])
   const [loading,   setLoading]   = useState(true)
   const [search,    setSearch]    = useState('')
   const [status,    setStatus]    = useState('all')
 
-  useEffect(() => { fetchCustomers() }, [])
+  useEffect(() => { fetchCustomers() }, [profile])
 
   async function fetchCustomers() {
+    if (!profile) return
     setLoading(true)
-    const { data } = await supabase
+
+    let query = supabase
       .from('customers')
       .select(`*, customer_contacts(id, name, email, is_primary)`)
       .eq('active', true)
       .order('account_name')
+
+    // Sales reps only see their own customers
+    // Match customers.sales_rep against rep_email_map using the logged-in email
+    if (isSalesRep) {
+      // Look up rep name from email map
+      const { data: repRow } = await supabase
+        .from('rep_email_map')
+        .select('rep_name')
+        .eq('email', profile.email)
+        .single()
+
+      if (repRow?.rep_name) {
+        query = query.eq('sales_rep', repRow.rep_name)
+      } else {
+        // Fallback — no customers if rep not found in map
+        setCustomers([])
+        setLoading(false)
+        return
+      }
+    }
+
+    const { data } = await query
     setCustomers(data || [])
     setLoading(false)
   }
@@ -51,7 +80,9 @@ export default function CustomerList() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-display font-bold text-stone-800">Customers</h2>
-          <p className="text-stone-400 text-sm mt-0.5">{counts.all} total accounts</p>
+          <p className="text-stone-400 text-sm mt-0.5">
+            {isSalesRep ? `Your accounts · ${counts.all} total` : `${counts.all} total accounts`}
+          </p>
         </div>
         <button
           onClick={() => navigate('/customers/new')}
