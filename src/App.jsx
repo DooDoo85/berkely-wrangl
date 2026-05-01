@@ -46,6 +46,9 @@ import QuotesList from './pages/quotes/QuotesList'
 import QuoteBuilder from './pages/quotes/QuoteBuilder'
 import QuoteDetail from './pages/quotes/QuoteDetail'
 
+// Calendar
+import CalendarPage from './pages/calendar/CalendarPage'
+
 // Price Grids
 import PriceGridImport from './pages/inventory/PriceGridImport'
 
@@ -119,6 +122,9 @@ function AppRoutes() {
         <Route path="/quotes" element={<QuotesList />} />
         <Route path="/quotes/new" element={<QuoteBuilder />} />
         <Route path="/quotes/:id" element={<QuoteDetail />} />
+
+        {/* Calendar */}
+        <Route path="/calendar" element={<CalendarPage />} />
 
         {/* Freight / Settings */}
         <Route path="/freight" element={<Placeholder title="Freight" />} />
