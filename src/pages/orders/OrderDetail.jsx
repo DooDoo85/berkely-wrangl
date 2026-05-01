@@ -5,21 +5,33 @@ import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_STYLES = {
   draft:         'bg-stone-50 text-stone-500 border-stone-200',
+  quote:         'bg-purple-50 text-purple-700 border-purple-200',
+  credit_hold:   'bg-red-50 text-red-700 border-red-200',
+  credit_ok:     'bg-emerald-50 text-emerald-700 border-emerald-200',
+  po_sent:       'bg-cyan-50 text-cyan-700 border-cyan-200',
   submitted:     'bg-blue-50 text-blue-700 border-blue-200',
   printed:       'bg-amber-50 text-amber-700 border-amber-200',
-  in_production: 'bg-purple-50 text-purple-700 border-purple-200',
+  in_production: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   complete:      'bg-emerald-50 text-emerald-700 border-emerald-200',
   invoiced:      'bg-teal-50 text-teal-700 border-teal-200',
   cancelled:     'bg-red-50 text-red-400 border-red-200',
 }
 
 const STATUS_LABELS = {
-  draft: 'Draft', submitted: 'Submitted', printed: 'Printed',
-  in_production: 'In Production', complete: 'Complete',
-  invoiced: 'Invoiced', cancelled: 'Cancelled'
+  draft: 'Draft',
+  quote: 'Quote',
+  credit_hold: 'Credit Hold',
+  credit_ok: 'Credit OK',
+  po_sent: 'PO Sent',
+  submitted: 'Submitted',
+  printed: 'Printed',
+  in_production: 'In Production',
+  complete: 'Complete',
+  invoiced: 'Invoiced',
+  cancelled: 'Cancelled'
 }
 
-const STATUS_FLOW = ['draft', 'submitted', 'printed', 'in_production', 'complete', 'invoiced']
+const STATUS_FLOW = ['quote', 'credit_hold', 'credit_ok', 'po_sent', 'printed', 'in_production', 'invoiced']
 
 export default function OrderDetail() {
   const { id }      = useParams()
@@ -30,6 +42,9 @@ export default function OrderDetail() {
   const [timeline,  setTimeline]  = useState([])
   const [loading,   setLoading]   = useState(true)
   const [updating,  setUpdating]  = useState(false)
+  const [showHoldModal, setShowHoldModal] = useState(false)
+  const [holdReason,    setHoldReason]    = useState('')
+  const [holdNote,      setHoldNote]      = useState('')
 
   useEffect(() => { loadOrder() }, [id])
 
@@ -54,6 +69,68 @@ export default function OrderDetail() {
       order_id: id, event_type: 'status_change',
       from_status: oldStatus, to_status: newStatus,
       user_id: profile?.id, note: `Status changed to ${STATUS_LABELS[newStatus]}`
+    })
+    await loadOrder()
+    setUpdating(false)
+  }
+
+  async function markInProduction() {
+    setUpdating(true)
+    const oldStatus = order.status
+    await supabase.from('orders').update({
+      status:               'in_production',
+      wrangl_status:        'in_production',
+      wrangl_status_set_at: new Date().toISOString(),
+      wrangl_status_set_by: profile?.id,
+      hold_status:          null,
+      hold_reason:          null,
+      hold_note:            null,
+      hold_released_at:     new Date().toISOString(),
+      updated_at:           new Date().toISOString(),
+    }).eq('id', id)
+    await supabase.from('order_timeline').insert({
+      order_id: id, event_type: 'status_change',
+      from_status: oldStatus, to_status: 'in_production',
+      user_id: profile?.id, note: 'Marked In Production'
+    })
+    await loadOrder()
+    setUpdating(false)
+  }
+
+  async function placeOnHold() {
+    if (!holdReason) return
+    setUpdating(true)
+    await supabase.from('orders').update({
+      hold_status:      'on_hold',
+      hold_reason:      holdReason,
+      hold_note:        holdNote || null,
+      hold_started_at:  new Date().toISOString(),
+      hold_released_at: null,
+      updated_at:       new Date().toISOString(),
+    }).eq('id', id)
+    await supabase.from('order_timeline').insert({
+      order_id: id, event_type: 'hold',
+      user_id: profile?.id,
+      note: `Placed on hold — ${holdReason}${holdNote ? ': ' + holdNote : ''}`
+    })
+    setShowHoldModal(false)
+    setHoldReason(''); setHoldNote('')
+    await loadOrder()
+    setUpdating(false)
+  }
+
+  async function releaseHold() {
+    setUpdating(true)
+    await supabase.from('orders').update({
+      hold_status:      null,
+      hold_reason:      null,
+      hold_note:        null,
+      hold_released_at: new Date().toISOString(),
+      updated_at:       new Date().toISOString(),
+    }).eq('id', id)
+    await supabase.from('order_timeline').insert({
+      order_id: id, event_type: 'hold_released',
+      user_id: profile?.id, note: 'Hold released'
     })
     await loadOrder()
     setUpdating(false)
@@ -133,6 +210,52 @@ export default function OrderDetail() {
         {order.notes && (
           <div className="mt-4 p-3 bg-stone-50 rounded-lg text-sm text-stone-500">{order.notes}</div>
         )}
+      </div>
+
+      {/* Hold banner */}
+      {order.hold_status === 'on_hold' && (
+        <div className="card p-4 mb-5 bg-red-50 border-red-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">⏸</span>
+              <div>
+                <div className="text-sm font-bold text-red-800">Order on Hold — {order.hold_reason?.replace(/_/g, ' ')}</div>
+                {order.hold_note && <div className="text-xs text-red-700 mt-1">{order.hold_note}</div>}
+                {order.hold_started_at && (
+                  <div className="text-xs text-red-500 mt-1">
+                    Since {new Date(order.hold_started_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button onClick={releaseHold} disabled={updating}
+              className="text-xs font-medium px-3 py-1.5 bg-white border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50">
+              Release Hold
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Actions — always available */}
+      <div className="card p-4 mb-5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide mr-1">Quick Actions:</span>
+          <button onClick={markInProduction} disabled={updating || order.status === 'in_production'}
+            className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            🏭 Mark In Production
+          </button>
+          {order.hold_status !== 'on_hold' && (
+            <button onClick={() => setShowHoldModal(true)} disabled={updating}
+              className="px-3 py-1.5 text-xs font-medium bg-white border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors">
+              ⏸ Place on Hold
+            </button>
+          )}
+          {order.wrangl_status === 'in_production' && (
+            <span className="text-xs text-stone-400 ml-auto">
+              Manually set in production by Wrangl
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Status workflow — only for Wrangl orders */}
@@ -242,6 +365,51 @@ export default function OrderDetail() {
           )}
         </div>
       </div>
+
+      {/* Hold Modal */}
+      {showHoldModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-5 py-4 border-b border-stone-100">
+              <h3 className="font-bold text-stone-900">Place Order on Hold</h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Order #{order.order_number} — {order.customer_name}
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1.5">Reason *</label>
+                <select value={holdReason} onChange={e => setHoldReason(e.target.value)}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+                  <option value="">Select reason...</option>
+                  <option value="missing_part">Missing Part</option>
+                  <option value="missing_fabric">Missing Fabric</option>
+                  <option value="missing_component">Missing Component</option>
+                  <option value="quality_issue">Quality Issue</option>
+                  <option value="customer_request">Customer Request</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1.5">Notes</label>
+                <textarea value={holdNote} onChange={e => setHoldNote(e.target.value)} rows={3}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="What part? When expected? Any other details..." autoFocus />
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-stone-100 flex justify-end gap-2">
+              <button onClick={() => { setShowHoldModal(false); setHoldReason(''); setHoldNote('') }}
+                className="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">
+                Cancel
+              </button>
+              <button onClick={placeOnHold} disabled={updating || !holdReason}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium">
+                {updating ? 'Placing on hold…' : 'Place on Hold'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
