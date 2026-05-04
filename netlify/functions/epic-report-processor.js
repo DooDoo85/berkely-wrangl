@@ -10,7 +10,9 @@
 //   BERKELY FAUX PRINTED            → orders.status = 'printed'
 //   ROLLER SHADE INVOICE BY PRODUCT → product_line_sales (Roller Shades)
 //   COMBINED ROLLER/FAUX            → product_line_sales (both lines)
-//   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (fuzzy match)
+//   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (RS PART only)
+//   COMMITTED EXTRUSIONS            → epic_committed_stock, qty_committed on extrusion parts (RS COMP)
+//   FAUX COMMITTED                  → epic_committed_stock, qty_committed on blind parts (FW)
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
@@ -175,14 +177,12 @@ function stringSimilarity(a, b) {
   const s2 = b.toLowerCase().trim()
   if (s1 === s2) return 1.0
 
-  // Token-based similarity
   const tokens1 = new Set(s1.split(/\s+|[-\/|"']/))
   const tokens2 = new Set(s2.split(/\s+|[-\/|"']/))
   const intersection = [...tokens1].filter(t => tokens2.has(t)).length
   const union = new Set([...tokens1, ...tokens2]).size
   const tokenScore = union > 0 ? intersection / union : 0
 
-  // Character-level Levenshtein
   const m = s1.length, n = s2.length
   const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0))
   for (let i = 1; i <= m; i++) {
@@ -199,7 +199,6 @@ function stringSimilarity(a, b) {
 
 // ── Report processors ─────────────────────────────────────────────────────────
 
-// FULL SHIP — mark orders as invoiced + update daily shipment totals
 async function processFullShip(csvText, orderType) {
   const rows = parseCSV(csvText)
   console.log(`  ${orderType.toUpperCase()} FULL SHIP: ${rows.length} rows`)
@@ -218,7 +217,6 @@ async function processFullShip(csvText, orderType) {
   }
   console.log(`  Updated ${updated} orders to invoiced`)
 
-  // For roller orders — aggregate by ship date and upsert into roller_shipments_daily
   if (orderType === 'roller') {
     const dayMap = {}
     for (const row of rows) {
@@ -249,13 +247,10 @@ async function processFullShip(csvText, orderType) {
     console.log(`  Updated roller_shipments_daily for ${Object.keys(dayMap).length} dates`)
   }
 
-  // Relieve committed inventory for shipped orders
   await relieveCommittedForShippedOrders(rows)
-
   return updated
 }
 
-// Relieve committed stock when orders ship
 async function relieveCommittedForShippedOrders(rows) {
   const woNumbers = [...new Set(rows.map(r => (r.OrderNo || r.Wo || '').trim()).filter(Boolean))]
   if (!woNumbers.length) return
@@ -264,21 +259,18 @@ async function relieveCommittedForShippedOrders(rows) {
   let relieved = 0
 
   for (const wo of woNumbers) {
-    // Get all unrelieved committed lines for this WO
     const committedLines = await sbQuery(
       'epic_committed_stock',
       `work_order=eq.${wo}&relieved=eq.false&part_id=not.is.null&select=id,part_id,required_qty`
     )
     if (!Array.isArray(committedLines) || !committedLines.length) continue
 
-    // Group by part_id and sum quantities
     const partTotals = {}
     for (const line of committedLines) {
       if (!partTotals[line.part_id]) partTotals[line.part_id] = 0
       partTotals[line.part_id] += parseFloat(line.required_qty || 0)
     }
 
-    // Deduct from qty_on_hand and qty_committed for each part
     for (const [partId, qty] of Object.entries(partTotals)) {
       const parts = await sbQuery('parts', `id=eq.${partId}&select=qty_on_hand,qty_committed`)
       if (!Array.isArray(parts) || !parts[0]) continue
@@ -292,7 +284,6 @@ async function relieveCommittedForShippedOrders(rows) {
       })
     }
 
-    // Mark all committed lines for this WO as relieved
     await sbUpdate('epic_committed_stock', `work_order=eq.${wo}&relieved=eq.false`, {
       relieved:      true,
       relieved_date: new Date().toISOString().slice(0, 10),
@@ -303,7 +294,6 @@ async function relieveCommittedForShippedOrders(rows) {
   console.log(`  Relieved ${relieved} committed stock lines`)
 }
 
-// PRINTED — mark orders as printed
 async function processPrinted(csvText, orderType) {
   const rows = parseCSV(csvText)
   console.log(`  ${orderType.toUpperCase()} PRINTED: ${rows.length} rows`)
@@ -342,7 +332,6 @@ async function processPrinted(csvText, orderType) {
   return updated
 }
 
-// ── Product line sales helpers ────────────────────────────────────────────────
 function parseCurrency(str) {
   if (!str) return 0
   return parseFloat(str.replace(/[$,]/g, '')) || 0
@@ -363,7 +352,6 @@ async function upsertProductLine(productLine, fields) {
   }
 }
 
-// ROLLER SHADE INVOICE BY PRODUCT
 async function processRollerSalesCSV(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  ROLLER SALES CSV: ${rows.length} rows`)
@@ -389,7 +377,6 @@ async function processRollerSalesCSV(csvText) {
   return toUpsert.length
 }
 
-// COMBINED ROLLER/FAUX
 async function processCombinedCSV(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  COMBINED CSV: ${rows.length} rows`)
@@ -414,7 +401,6 @@ async function processCombinedCSV(csvText) {
   return shipped.length
 }
 
-// ROLLER SHADE WIP
 async function processRollerWIP(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  ROLLER SHADE WIP: ${rows.length} rows`)
@@ -444,16 +430,14 @@ async function processRollerWIP(csvText) {
 
   if (toInsert.length) await sbUpsert('roller_wip', toInsert)
 
-  const creditOK    = toInsert.filter(r => r.order_status === 'CREDIT OK')
-  const printed     = toInsert.filter(r => r.order_status === 'PRINTED')
-  const creditUnits = creditOK.reduce((s, r) => s + r.total_units, 0)
+  const creditOK     = toInsert.filter(r => r.order_status === 'CREDIT OK')
+  const printed      = toInsert.filter(r => r.order_status === 'PRINTED')
+  const creditUnits  = creditOK.reduce((s, r) => s + r.total_units, 0)
   const printedUnits = printed.reduce((s, r) => s + r.total_units, 0)
   console.log(`  WIP loaded — Credit OK: ${creditOK.length} orders / ${creditUnits} units | Printed: ${printed.length} orders / ${printedUnits} units`)
   return toInsert.length
 }
 
-// SALES REPORT — daily 6am report with all orders + statuses
-// This is the master source of truth for order status (except "In Production" which is manual)
 async function processSalesReport(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  SALES REPORT: ${rows.length} rows total`)
@@ -475,25 +459,19 @@ async function processSalesReport(csvText) {
   let transitions = 0
   const toUpsert = []
 
-  // Build a map of incoming orders for transition detection
   const incomingMap = {}
   for (const row of rows) {
     if ((row.RowType || '').trim().toUpperCase() !== 'DETAIL') continue
-    const epicStatus = (row.OrderStatus || '').trim().toUpperCase()
+    const epicStatus   = (row.OrderStatus || '').trim().toUpperCase()
     const wranglStatus = mapStatus(epicStatus)
     if (!wranglStatus) continue
     const orderNo = (row.OrderNo || '').trim()
     if (!orderNo) continue
-    incomingMap[orderNo] = {
-      epicStatus,
-      wranglStatus,
-      statusDate: row.StatusDate || null,
-    }
+    incomingMap[orderNo] = { epicStatus, wranglStatus, statusDate: row.StatusDate || null }
   }
 
-  // Fetch existing orders to detect transitions
   const orderNumbers = Object.keys(incomingMap)
-  const existingMap = {}
+  const existingMap  = {}
   for (let i = 0; i < orderNumbers.length; i += 500) {
     const batch = orderNumbers.slice(i, i + 500)
     const res = await fetch(
@@ -506,23 +484,21 @@ async function processSalesReport(csvText) {
     }
   }
 
-  // Build upsert list and detect transitions
   const historyRows = []
   const today = new Date().toISOString().slice(0, 10)
 
   for (const [orderNo, incoming] of Object.entries(incomingMap)) {
-    const existing = existingMap[orderNo]
+    const existing   = existingMap[orderNo]
     const prevStatus = existing?.status || null
 
     toUpsert.push({
-      order_number:    orderNo,
-      epic_status:     incoming.epicStatus,
+      order_number:     orderNo,
+      epic_status:      incoming.epicStatus,
       epic_status_date: incoming.statusDate || null,
-      status:          incoming.wranglStatus,
-      updated_at:      new Date().toISOString(),
+      status:           incoming.wranglStatus,
+      updated_at:       new Date().toISOString(),
     })
 
-    // Log transition if status changed
     if (prevStatus && prevStatus !== incoming.wranglStatus && prevStatus !== 'in_production') {
       historyRows.push({
         order_number: orderNo,
@@ -531,11 +507,10 @@ async function processSalesReport(csvText) {
         to_status:    incoming.wranglStatus,
         status_date:  incoming.statusDate || today,
         source:       'epic',
-        notes:        `Daily SALES REPORT sync`,
+        notes:        'Daily SALES REPORT sync',
       })
       transitions++
     } else if (!prevStatus) {
-      // New order — log initial status
       historyRows.push({
         order_number: orderNo,
         order_id:     null,
@@ -548,17 +523,15 @@ async function processSalesReport(csvText) {
     }
   }
 
-  // Upsert orders in batches of 500
-  const batchSize = 500
-  for (let i = 0; i < toUpsert.length; i += batchSize) {
-    const batch = toUpsert.slice(i, i + batchSize)
+  for (let i = 0; i < toUpsert.length; i += 500) {
+    const batch = toUpsert.slice(i, i + 500)
     const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=order_number`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify(batch),
     })
@@ -569,7 +542,6 @@ async function processSalesReport(csvText) {
     }
   }
 
-  // Insert history rows in batches
   if (historyRows.length > 0) {
     for (let i = 0; i < historyRows.length; i += 500) {
       const batch = historyRows.slice(i, i + 500)
@@ -579,7 +551,7 @@ async function processSalesReport(csvText) {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
+          Prefer: 'return=minimal',
         },
         body: JSON.stringify(batch),
       })
@@ -587,180 +559,32 @@ async function processSalesReport(csvText) {
     console.log(`  Status transitions logged: ${transitions}`)
   }
 
-  // Preserve "In Production" wrangl_status
   await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=not.in.(INVOICED,PAID)`, {
     method: 'PATCH',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ status: 'in_production' }),
   })
 
-  // Clear wrangl_status when ePIC has invoiced the order
   await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=in.(INVOICED,PAID)`, {
     method: 'PATCH',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ wrangl_status: null }),
   })
 
-  // Log the import
   await fetch(`${SUPABASE_URL}/rest/v1/sales_report_log`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      total_rows:    rows.length,
-      rows_upserted: upserted,
-      rows_skipped:  skipped,
-    }),
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ total_rows: rows.length, rows_upserted: upserted, rows_skipped: skipped }),
   })
 
   console.log(`  Sales report done — upserted: ${upserted}, transitions: ${transitions}, skipped: ${skipped}`)
   return upserted
 }
-async function processSalesReport(csvText) {
-  const rows = parseCSV(csvText)
-  console.log(`  SALES REPORT: ${rows.length} rows total`)
 
-  // ePIC status → Wrangl status mapping
-  // Returns null for statuses we don't want to track
-  const mapStatus = (s) => {
-    const upper = (s || '').trim().toUpperCase()
-    if (upper === 'QUOTE')        return 'quote'
-    if (upper === 'CREDIT HOLD')  return 'credit_hold'
-    if (upper === 'CREDIT OK')    return 'credit_ok'
-    if (upper === 'PO SENT')      return 'po_sent'
-    if (upper === 'PRINTED')      return 'printed'
-    if (upper === 'INVOICED')     return 'invoiced'
-    if (upper === 'PAID')         return 'invoiced' // bucket together
-    return null // ignore: REVIEW HOLD, MANUAL HOLD, PARTIAL SHIP, UNPACKED, FULL PACK
-  }
-
-  let upserted = 0
-  let skipped  = 0
-  const toUpsert = []
-
-  for (const row of rows) {
-    if ((row.RowType || '').trim().toUpperCase() !== 'DETAIL') {
-      skipped++
-      continue
-    }
-
-    const epicStatus = (row.OrderStatus || '').trim().toUpperCase()
-    const wranglStatus = mapStatus(epicStatus)
-
-    if (!wranglStatus) {
-      skipped++
-      continue // Not a status we track
-    }
-
-    const orderNo = (row.OrderNo || '').trim()
-    if (!orderNo) {
-      skipped++
-      continue
-    }
-
-    toUpsert.push({
-      order_number:    orderNo,
-      customer_name:   (row.CustomerName || '').trim(),
-      sales_rep:       (row.Salesperson || '').trim(),
-      epic_status:     epicStatus,
-      epic_status_date: row.StatusDate || null,
-      status:          wranglStatus,
-      total_units:     parseInt(row.TotalUnits || 0) || 0,
-      order_amount:    parseCurrency(row.OrderAmount || 0),
-      updated_at:      new Date().toISOString(),
-    })
-  }
-
-  // Upsert in batches of 500
-  const batchSize = 500
-  for (let i = 0; i < toUpsert.length; i += batchSize) {
-    const batch = toUpsert.slice(i, i + batchSize)
-
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=order_number`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
-      },
-      body: JSON.stringify(batch),
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error(`  Batch ${i / batchSize + 1} error: ${res.status} ${errText}`)
-    } else {
-      upserted += batch.length
-    }
-  }
-
-  // CRITICAL: For orders manually marked "in_production" in Wrangl, override the status
-  // back to in_production — UNLESS ePIC has now moved them to invoiced (which means
-  // production is done and the order shipped).
-  // Logic: if wrangl_status='in_production' AND epic_status NOT IN ('INVOICED','PAID'),
-  // set status back to 'in_production'
-  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=not.in.(INVOICED,PAID)`, {
-    method:  'PATCH',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ status: 'in_production' }),
-  })
-
-  // Clear wrangl_status when ePIC has moved the order to invoiced
-  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=in.(INVOICED,PAID)`, {
-    method:  'PATCH',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ wrangl_status: null }),
-  })
-
-  // Log the import
-  await fetch(`${SUPABASE_URL}/rest/v1/sales_report_log`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      total_rows:    rows.length,
-      rows_upserted: upserted,
-      rows_skipped:  skipped,
-    }),
-  })
-
-  console.log(`  Sales report processed — upserted: ${upserted}, skipped: ${skipped}`)
-  return upserted
-}
-
-// CREDIT HOLD/OK ORDERS — only capture CREDIT OK rows, fresh snapshot model
 async function processCreditOk(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  CREDIT HOLD/OK ORDERS: ${rows.length} rows total`)
 
-  // Wipe table — fresh snapshot each run
   await fetch(`${SUPABASE_URL}/rest/v1/credit_ok_orders?order_no=neq.__never__`, {
     method:  'DELETE',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -792,74 +616,82 @@ async function processCreditOk(csvText) {
   return toInsert.length
 }
 
-// COMITTED STOCK — fresh snapshot model, description-only matching
-async function processCommittedStock(csvText) {
+// ── Committed stock processor (shared) ───────────────────────────────────────
+// Used by all three committed reports — scoped by stockClass and partType so
+// each report only touches its own slice of parts and committed stock rows.
+//
+//   stockClass  partType     Report
+//   ----------  ----------   -------------------------
+//   RS PART     component    COMITTED STOCK (original)
+//   FW          blind        FAUX COMMITTED
+//   RS COMP     extrusion    COMMITTED EXTRUSIONS
+
+async function processCommittedByClass(csvText, stockClass, partType, reportName) {
   const rows = parseCSV(csvText)
-  console.log(`  COMITTED STOCK: ${rows.length} rows`)
+  console.log(`  ${reportName.toUpperCase()}: ${rows.length} rows`)
 
-  // Skip RS COMP (fabric/extrusions tracked separately)
-  const partRows = rows.filter(r => (r.StockClass || '').trim() !== 'RS COMP')
-  console.log(`  After skipping RS COMP: ${partRows.length} rows to process`)
+  // Filter to this stock class only
+  const classRows = rows.filter(r => (r.StockClass || '').trim() === stockClass)
+  console.log(`  Rows matching stock class '${stockClass}': ${classRows.length}`)
 
-  // FRESH SNAPSHOT — clear all unrelieved committed lines and reset qty_committed
-  console.log('  Clearing previous committed stock snapshot...')
-  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_stock?relieved=eq.false`, {
-    method: 'DELETE',
+  // FRESH SNAPSHOT — clear only unrelieved rows for this stock class
+  console.log(`  Clearing previous ${stockClass} committed stock...`)
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_stock?relieved=eq.false&stock_class=eq.${encodeURIComponent(stockClass)}`, {
+    method:  'DELETE',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
-  // Reset qty_committed on ALL active parts (including those with NULL)
-  await sbUpdate('parts', 'active=eq.true', { qty_committed: 0, updated_at: new Date().toISOString() })
-  console.log('  Snapshot cleared — importing fresh data...')
 
-  // Load all approved mappings keyed by epic_description
-  const mappings = await sbQuery('epic_part_mappings', 'select=epic_description,wrangl_part_id,wrangl_part_name')
+  // Reset qty_committed only for this part type
+  await sbUpdate('parts', `part_type=eq.${partType}&active=eq.true`, {
+    qty_committed: 0,
+    updated_at:    new Date().toISOString(),
+  })
+  console.log(`  Snapshot cleared — importing fresh ${reportName} data...`)
+
+  // Load approved mappings for this part type
+  const mappings = await sbQuery(
+    'epic_part_mappings',
+    `select=epic_description,wrangl_part_id,wrangl_part_name`
+  )
   const mappingMap = {}
   if (Array.isArray(mappings)) {
     mappings.forEach(m => { mappingMap[m.epic_description.toLowerCase().trim()] = m })
   }
 
-  // Load all active parts once for fuzzy matching
-  const allParts = await sbQuery('parts', 'select=id,name&active=eq.true&limit=1000')
+  // Load only parts of this type for fuzzy matching
+  const allParts = await sbQuery('parts', `select=id,name&part_type=eq.${partType}&active=eq.true&limit=1000`)
   const partsList = Array.isArray(allParts) ? allParts : []
+  console.log(`  Loaded ${partsList.length} ${partType} parts for matching`)
 
-  const stats = { new: 0, skipped: 0, auto_matched: 0, pending_review: 0, unmatched: 0 }
-  const toCommit = {} // partId → totalQty to add to qty_committed
+  const stats    = { new: 0, skipped: 0, auto_matched: 0, pending_review: 0, unmatched: 0 }
+  const toCommit = {}
 
-  for (const row of partRows) {
+  for (const row of classRows) {
     const wo          = (row.WorkOrder || '').trim()
     const lineItem    = (row.LineItem || row.WorkOrder || '').trim()
     const stockCode   = (row.StockCode || '').trim()
     const description = (row.ComponentDescription || '').trim()
     const requiredQty = parseFloat(row.TotalRequiredQty || row.RequiredQty || 0) || 0
     const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
+    const uom         = (row.UOM || '').trim()
 
     if (!wo || !lineItem || !description) continue
 
-    // Duplicate prevention — keyed on WorkOrder + LineItem + Description
-    const existing = await sbQuery(
-      'epic_committed_stock',
-      `work_order=eq.${wo}&line_item=eq.${lineItem}&component_description=eq.${encodeURIComponent(description)}&select=id&limit=1`
-    )
-    if (Array.isArray(existing) && existing.length > 0) {
-      stats.skipped++
-      continue
-    }
-
     stats.new++
 
-    // Check approved mapping by description first
-    let partId = null
+    // Check approved mapping first
+    let partId      = null
     let matchStatus = 'unmatched'
-    let matchScore = 0
+    let matchScore  = 0
 
     const descKey = description.toLowerCase().trim()
     if (mappingMap[descKey]) {
-      partId = mappingMap[descKey].wrangl_part_id
+      partId      = mappingMap[descKey].wrangl_part_id
       matchStatus = 'auto_matched'
-      matchScore = 1.0
+      matchScore  = 1.0
       stats.auto_matched++
     } else {
-      // Fuzzy match description against Wrangl part names
+      // Fuzzy match against this part type's parts only
       let bestScore = 0
       let bestPart  = null
 
@@ -872,12 +704,12 @@ async function processCommittedStock(csvText) {
       }
 
       if (bestScore >= 0.95) {
-        partId = bestPart.id
+        partId      = bestPart.id
         matchStatus = 'auto_matched'
-        matchScore = bestScore
+        matchScore  = bestScore
         stats.auto_matched++
 
-        // Save mapping keyed by description for future imports
+        // Save mapping for future imports
         await sbUpsert('epic_part_mappings', [{
           epic_description: description,
           wrangl_part_id:   bestPart.id,
@@ -885,18 +717,17 @@ async function processCommittedStock(csvText) {
           approved_at:      new Date().toISOString(),
         }])
       } else if (bestScore >= 0.85) {
-        partId = bestPart.id
+        partId      = bestPart.id
         matchStatus = 'pending_review'
-        matchScore = bestScore
+        matchScore  = bestScore
         stats.pending_review++
       } else {
         matchStatus = 'unmatched'
-        matchScore = bestScore
+        matchScore  = bestScore
         stats.unmatched++
       }
     }
 
-    // Insert committed stock line
     await sbInsert('epic_committed_stock', [{
       work_order:            wo,
       line_item:             lineItem,
@@ -904,21 +735,20 @@ async function processCommittedStock(csvText) {
       stock_code:            stockCode,
       component_description: description,
       required_qty:          requiredQty,
-      uom:                   (row.UOM || '').trim(),
-      stock_class:           (row.StockClass || '').trim(),
+      uom,
+      stock_class:           stockClass,
       part_id:               partId,
       match_status:          matchStatus,
       match_score:           matchScore,
     }])
 
-    // Accumulate qty_committed for auto-matched parts only
     if (matchStatus === 'auto_matched' && partId) {
       if (!toCommit[partId]) toCommit[partId] = 0
       toCommit[partId] += requiredQty
     }
   }
 
-  // Update qty_committed on parts — set directly since we already reset to 0
+  // Update qty_committed on matched parts
   for (const [partId, qty] of Object.entries(toCommit)) {
     await sbUpdate('parts', `id=eq.${partId}`, {
       qty_committed: qty,
@@ -926,10 +756,9 @@ async function processCommittedStock(csvText) {
     })
   }
 
-  // Log import run
   await sbInsert('epic_import_log', [{
-    import_type:            'committed_stock',
-    records_total:          partRows.length,
+    import_type:            reportName,
+    records_total:          classRows.length,
     records_new:            stats.new,
     records_skipped:        stats.skipped,
     records_auto_matched:   stats.auto_matched,
@@ -937,8 +766,13 @@ async function processCommittedStock(csvText) {
     records_unmatched:      stats.unmatched,
   }])
 
-  console.log(`  Committed stock — new: ${stats.new}, skipped: ${stats.skipped}, auto: ${stats.auto_matched}, review: ${stats.pending_review}, unmatched: ${stats.unmatched}`)
+  console.log(`  ${reportName} — new: ${stats.new}, auto: ${stats.auto_matched}, review: ${stats.pending_review}, unmatched: ${stats.unmatched}`)
   return stats.new
+}
+
+// COMITTED STOCK (original — RS PART components, one-M typo subject)
+async function processCommittedStock(csvText) {
+  return processCommittedByClass(csvText, 'RS PART', 'component', 'committed_stock')
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -1006,6 +840,14 @@ exports.handler = async function(event, context) {
           await markProcessed(messageId, 'roller_printed', count)
           results.processed++
 
+        } else if (subject.includes('FAUX COMMITTED')) {
+          // ── NEW: Faux wood committed stock (FW stock class → blind parts)
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCommittedByClass(csvText, 'FW', 'blind', 'committed_faux')
+          await markProcessed(messageId, 'committed_faux', count)
+          results.processed++
+
         } else if (subject.includes('FAUX PRINTED')) {
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
@@ -1051,7 +893,16 @@ exports.handler = async function(event, context) {
           await markProcessed(messageId, 'credit_ok_orders', count)
           results.processed++
 
+        } else if (subject.includes('COMMITTED EXTRUSIONS')) {
+          // ── NEW: Extrusion committed stock (RS COMP stock class → extrusion parts)
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCommittedByClass(csvText, 'RS COMP', 'extrusion', 'committed_extrusions')
+          await markProcessed(messageId, 'committed_extrusions', count)
+          results.processed++
+
         } else if (subject.includes('COMITTED STOCK')) {
+          // Original committed stock handler (note one-M typo in subject)
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCommittedStock(csvText)
