@@ -40,7 +40,15 @@ const EXEC_NAV = [
       { to: '/quotes/new', label: 'New Quote'  },
     ],
   },
-  { to: '/reports', icon: '📊', label: 'Reports' },
+  {
+    label: 'Reports', icon: '📊', group: true,
+    children: [
+      { to: '/reports',                 label: 'Overview'       },
+      { to: '/reports/sales-activity',  label: 'Sales Activity' },
+      { to: '/reports/production',      label: 'Production'     },
+      { to: '/reports/rep-activity',    label: 'Rep Activity'   },
+    ],
+  },
 ]
 
 const SALES_NAV = [
