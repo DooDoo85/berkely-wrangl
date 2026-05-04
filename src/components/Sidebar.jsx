@@ -3,29 +3,47 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 
 // Deep forest green palette
-const BG_BASE      = 'bg-[#0a2e22]'
-const BG_HOVER     = 'hover:bg-[#143f30]'
-const BG_ACTIVE    = 'bg-[#1f6b4d]'
-const BG_GROUP_OPEN= 'bg-[#143f30]'
-const BORDER       = 'border-[#143f30]'
-const TEXT_MUTED   = 'text-[#9bb8a8]'
-const TEXT_HOVER   = 'hover:text-white'
+const BG_BASE       = 'bg-[#0a2e22]'
+const BG_HOVER      = 'hover:bg-[#143f30]'
+const BG_ACTIVE     = 'bg-[#1f6b4d]'
+const BG_GROUP_OPEN = 'bg-[#143f30]'
+const BORDER        = 'border-[#143f30]'
+const TEXT_MUTED    = 'text-[#9bb8a8]'
+const TEXT_HOVER    = 'hover:text-white'
+const TEXT_SECTION  = 'text-[#5e8a75]'
+
+// ── Nav structure ─────────────────────────────────────────────────────────────
+// type: 'section' → non-collapsible section header
+// type: 'link'    → single nav item
+// type: 'group'   → collapsible group with children
 
 const EXEC_NAV = [
-  { to: '/', icon: '🏠', label: 'Home', exact: true },
+  { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
+
+  // ── SALES ──
+  { type: 'section', label: 'Sales' },
+  { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
+  { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
+  { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
   {
-    label: 'Orders', icon: '📋', group: true,
+    type: 'group', label: 'Quotes', icon: '💬',
+    children: [
+      { to: '/quotes',     label: 'All Quotes' },
+      { to: '/quotes/new', label: 'New Quote'  },
+    ],
+  },
+  {
+    type: 'group', label: 'Orders', icon: '📋',
     children: [
       { to: '/orders',         label: 'All Orders'     },
-      { to: '/ops/production', label: 'Production'     },
       { to: '/orders/on-hold', label: 'Orders on Hold' },
     ],
   },
-  { to: '/customers',  icon: '👥', label: 'Customers'  },
-  { to: '/activities', icon: '📝', label: 'Activities' },
-  { to: '/calendar',   icon: '📅', label: 'Calendar'   },
+
+  // ── OPERATIONS ──
+  { type: 'section', label: 'Operations' },
   {
-    label: 'Inventory', icon: '📦', group: true,
+    type: 'group', label: 'Inventory', icon: '📦',
     children: [
       { to: '/inventory',             label: 'All Parts'   },
       { to: '/inventory/fabrics',     label: 'Fabrics'     },
@@ -35,22 +53,19 @@ const EXEC_NAV = [
     ],
   },
   {
-    label: 'Ops / Warehouse', icon: '🏭', group: true,
+    type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops',        label: 'Warehouse'  },
-      { to: '/purchasing', label: 'Purchasing' },
-      { to: '/freight',    label: 'Freight'    },
+      { to: '/ops/production', label: 'Production Board' },
+      { to: '/ops',            label: 'Warehouse'        },
+      { to: '/purchasing',     label: 'Purchasing'       },
+      { to: '/freight',        label: 'Freight'          },
     ],
   },
+
+  // ── INSIGHTS ──
+  { type: 'section', label: 'Insights' },
   {
-    label: 'Quotes', icon: '💬', group: true,
-    children: [
-      { to: '/quotes',     label: 'All Quotes' },
-      { to: '/quotes/new', label: 'New Quote'  },
-    ],
-  },
-  {
-    label: 'Reports', icon: '📊', group: true,
+    type: 'group', label: 'Reports', icon: '📊',
     children: [
       { to: '/reports',                 label: 'Overview'       },
       { to: '/reports/sales-activity',  label: 'Sales Activity' },
@@ -58,35 +73,38 @@ const EXEC_NAV = [
       { to: '/reports/rep-activity',    label: 'Rep Activity'   },
     ],
   },
-  {
-    label: 'System', icon: '⚙️', group: true,
-    children: [
-      { to: '/inventory/committed-import', label: 'Committed Import' },
-      { to: '/inventory/match-review',     label: 'Match Review'     },
-      { to: '/inventory/price-grids',      label: 'Price Grids'      },
-    ],
-  },
+
+  // ── SYSTEM ──
+  { type: 'section', label: 'System' },
+  { type: 'link', to: '/inventory/committed-import', icon: '📥', label: 'Committed Import' },
+  { type: 'link', to: '/inventory/match-review',     icon: '🔍', label: 'Match Review'     },
+  { type: 'link', to: '/inventory/price-grids',      icon: '💲', label: 'Price Grids'      },
 ]
 
 const SALES_NAV = [
-  { to: '/', icon: '🏠', label: 'Home', exact: true },
+  { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
+
+  // ── SALES ──
+  { type: 'section', label: 'Sales' },
+  { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
+  { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
+  { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
   {
-    label: 'Orders', icon: '📋', group: true,
-    children: [
-      { to: '/orders', label: 'All Orders' },
-    ],
-  },
-  { to: '/customers',  icon: '👥', label: 'Customers'  },
-  { to: '/activities', icon: '📝', label: 'Activities' },
-  { to: '/calendar',   icon: '📅', label: 'Calendar'   },
-  {
-    label: 'Quotes', icon: '💬', group: true,
+    type: 'group', label: 'Quotes', icon: '💬',
     children: [
       { to: '/quotes',     label: 'All Quotes' },
       { to: '/quotes/new', label: 'New Quote'  },
     ],
   },
+  {
+    type: 'group', label: 'Orders', icon: '📋',
+    children: [
+      { to: '/orders', label: 'All Orders' },
+    ],
+  },
 ]
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getInitials(profile) {
   if (profile?.full_name) {
@@ -103,6 +121,8 @@ function roleLabel(role) {
   return role || ''
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function Sidebar() {
   const location = useLocation()
   const { profile, signOut } = useAuth()
@@ -112,7 +132,7 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
     NAV.forEach(item => {
-      if (item.group) {
+      if (item.type === 'group') {
         initial[item.label] = item.children.some(c =>
           location.pathname === c.to || location.pathname.startsWith(c.to + '/')
         )
@@ -130,7 +150,7 @@ export default function Sidebar() {
   return (
     <div className={`w-60 ${BG_BASE} text-white flex flex-col h-full flex-shrink-0`}>
       {/* Header */}
-      <div className="px-5 pt-5 pb-6">
+      <div className="px-5 pt-5 pb-4">
         <div className="flex items-center gap-2">
           <span className="text-xl">🐄</span>
           <span className="text-lg font-bold text-white tracking-tight">Wrangl</span>
@@ -140,8 +160,21 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
-        {NAV.map((item) => {
-          if (item.group) {
+        {NAV.map((item, idx) => {
+
+          {/* Section header */}
+          if (item.type === 'section') {
+            return (
+              <div key={item.label} className="pt-5 pb-1.5 px-3">
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${TEXT_SECTION}`}>
+                  {item.label}
+                </span>
+              </div>
+            )
+          }
+
+          {/* Collapsible group */}
+          if (item.type === 'group') {
             const open   = openGroups[item.label]
             const active = isGroupActive(item)
             return (
@@ -173,6 +206,8 @@ export default function Sidebar() {
               </div>
             )
           }
+
+          {/* Single nav link */}
           return (
             <NavLink key={item.to} to={item.to} end={item.exact}
               className={({ isActive }) =>
@@ -184,8 +219,6 @@ export default function Sidebar() {
             </NavLink>
           )
         })}
-
-
       </nav>
 
       {/* User footer */}
