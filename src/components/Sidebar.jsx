@@ -55,7 +55,7 @@ const EXEC_NAV = [
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops/production', label: 'Production Board' },
+      { to: '/ops/production', label: 'Start Production' },
       { to: '/ops',            label: 'Warehouse'        },
       { to: '/purchasing',     label: 'Purchasing'       },
       { to: '/freight',        label: 'Freight'          },
