@@ -88,11 +88,26 @@ export default function OrderDetail() {
       hold_released_at:     new Date().toISOString(),
       updated_at:           new Date().toISOString(),
     }).eq('id', id)
+
+    // Log to timeline
     await supabase.from('order_timeline').insert({
       order_id: id, event_type: 'status_change',
       from_status: oldStatus, to_status: 'in_production',
       user_id: profile?.id, note: 'Marked In Production'
     })
+
+    // Log to status history
+    await supabase.from('order_status_history').insert({
+      order_number: order.order_number,
+      order_id:     id,
+      from_status:  oldStatus,
+      to_status:    'in_production',
+      status_date:  new Date().toISOString().slice(0, 10),
+      source:       'wrangl',
+      changed_by:   profile?.id,
+      notes:        `Manually marked In Production by ${profile?.full_name || profile?.email}`,
+    })
+
     await loadOrder()
     setUpdating(false)
   }
