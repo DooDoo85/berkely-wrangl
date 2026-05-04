@@ -62,23 +62,31 @@ const EXEC_NAV = [
     ],
   },
 
-  // ── INSIGHTS ──
-  { type: 'section', label: 'Insights' },
+  // ── INSIGHTS ── (collapsible)
   {
-    type: 'group', label: 'Reports', icon: '📊',
-    children: [
-      { to: '/reports',                 label: 'Overview'       },
-      { to: '/reports/sales-activity',  label: 'Sales Activity' },
-      { to: '/reports/production',      label: 'Production'     },
-      { to: '/reports/rep-activity',    label: 'Rep Activity'   },
+    type: 'section', label: 'Insights', collapsible: true,
+    items: [
+      {
+        type: 'group', label: 'Reports', icon: '📊',
+        children: [
+          { to: '/reports',                 label: 'Overview'       },
+          { to: '/reports/sales-activity',  label: 'Sales Activity' },
+          { to: '/reports/production',      label: 'Production'     },
+          { to: '/reports/rep-activity',    label: 'Rep Activity'   },
+        ],
+      },
     ],
   },
 
-  // ── SYSTEM ──
-  { type: 'section', label: 'System' },
-  { type: 'link', to: '/inventory/committed-import', icon: '📥', label: 'Committed Import' },
-  { type: 'link', to: '/inventory/match-review',     icon: '🔍', label: 'Match Review'     },
-  { type: 'link', to: '/inventory/price-grids',      icon: '💲', label: 'Price Grids'      },
+  // ── SYSTEM ── (collapsible)
+  {
+    type: 'section', label: 'System', collapsible: true,
+    items: [
+      { type: 'link', to: '/inventory/committed-import', icon: '📥', label: 'Committed Import' },
+      { type: 'link', to: '/inventory/match-review',     icon: '🔍', label: 'Match Review'     },
+      { type: 'link', to: '/inventory/price-grids',      icon: '💲', label: 'Price Grids'      },
+    ],
+  },
 ]
 
 const SALES_NAV = [
@@ -131,11 +139,33 @@ export default function Sidebar() {
 
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
+    const scanItems = (items) => {
+      items.forEach(item => {
+        if (item.type === 'group') {
+          initial[item.label] = item.children.some(c =>
+            location.pathname === c.to || location.pathname.startsWith(c.to + '/')
+          )
+        }
+        if (item.type === 'section' && item.items) {
+          scanItems(item.items)
+        }
+      })
+    }
+    scanItems(NAV)
+    return initial
+  })
+
+  const [openSections, setOpenSections] = useState(() => {
+    const initial = {}
     NAV.forEach(item => {
-      if (item.type === 'group') {
-        initial[item.label] = item.children.some(c =>
-          location.pathname === c.to || location.pathname.startsWith(c.to + '/')
-        )
+      if (item.type === 'section' && item.collapsible) {
+        // Auto-open if any child route is active
+        const isActive = (item.items || []).some(sub => {
+          if (sub.type === 'link') return location.pathname === sub.to || location.pathname.startsWith(sub.to + '/')
+          if (sub.type === 'group') return sub.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+          return false
+        })
+        initial[item.label] = isActive
       }
     })
     return initial
@@ -144,8 +174,57 @@ export default function Sidebar() {
   const toggleGroup = (label) =>
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
 
+  const toggleSection = (label) =>
+    setOpenSections(prev => ({ ...prev, [label]: !prev[label] }))
+
   const isGroupActive = (item) =>
     item.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+
+  function renderNavItem(item) {
+    if (item.type === 'group') {
+      const open   = openGroups[item.label]
+      const active = isGroupActive(item)
+      return (
+        <div key={item.label}>
+          <button
+            onClick={() => toggleGroup(item.label)}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors duration-150
+              ${active ? `text-[#f5e6d0] ${BG_GROUP_OPEN}` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-base">{item.icon}</span>
+              <span className="font-medium">{item.label}</span>
+            </span>
+            <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
+          </button>
+          {open && (
+            <div className="ml-9 mt-0.5 space-y-0.5">
+              {item.children.map(child => (
+                <NavLink key={child.to} to={child.to}
+                  className={({ isActive }) =>
+                    `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
+                    ${isActive ? `text-[#f5e6d0] ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+                  }>
+                  {child.label}
+                </NavLink>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <NavLink key={item.to} to={item.to} end={item.exact}
+        className={({ isActive }) =>
+          `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150
+          ${isActive ? `${BG_ACTIVE} text-[#f5e6d0] font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+        }>
+        <span className="text-base">{item.icon}</span>
+        <span className="font-medium">{item.label}</span>
+      </NavLink>
+    )
+  }
 
   return (
     <div className={`w-60 ${BG_BASE} text-[#f5e6d0] flex flex-col h-full flex-shrink-0`}>
@@ -164,60 +243,37 @@ export default function Sidebar() {
 
           {/* Section header */}
           if (item.type === 'section') {
-            return (
-              <div key={item.label} className="pt-4 pb-1 px-3">
-                <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION} border-b border-[#4a3020] pb-1 block`}>
-                  {item.label}
-                </span>
-              </div>
-            )
-          }
-
-          {/* Collapsible group */}
-          if (item.type === 'group') {
-            const open   = openGroups[item.label]
-            const active = isGroupActive(item)
+            const isCollapsible = item.collapsible
+            const isOpen = !isCollapsible || openSections[item.label]
             return (
               <div key={item.label}>
-                <button
-                  onClick={() => toggleGroup(item.label)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors duration-150
-                    ${active ? `text-[#f5e6d0] ${BG_GROUP_OPEN}` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="text-base">{item.icon}</span>
-                    <span className="font-medium">{item.label}</span>
-                  </span>
-                  <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
-                </button>
-                {open && (
-                  <div className="ml-9 mt-0.5 space-y-0.5">
-                    {item.children.map(child => (
-                      <NavLink key={child.to} to={child.to}
-                        className={({ isActive }) =>
-                          `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                          ${isActive ? `text-[#f5e6d0] ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
-                        }>
-                        {child.label}
-                      </NavLink>
-                    ))}
+                {isCollapsible ? (
+                  <button
+                    onClick={() => toggleSection(item.label)}
+                    className="w-full pt-4 pb-1 px-3 flex items-center justify-between"
+                  >
+                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION}`}>
+                      {item.label}
+                    </span>
+                    <span className={`text-[10px] ${TEXT_SECTION} transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                  </button>
+                ) : (
+                  <div className="pt-4 pb-1 px-3">
+                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION} border-b border-[#4a3020] pb-1 block`}>
+                      {item.label}
+                    </span>
+                  </div>
+                )}
+                {isOpen && item.items && (
+                  <div className="space-y-0.5 mt-0.5">
+                    {item.items.map(sub => renderNavItem(sub))}
                   </div>
                 )}
               </div>
             )
           }
 
-          {/* Single nav link */}
-          return (
-            <NavLink key={item.to} to={item.to} end={item.exact}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150
-                ${isActive ? `${BG_ACTIVE} text-[#f5e6d0] font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
-              }>
-              <span className="text-base">{item.icon}</span>
-              <span className="font-medium">{item.label}</span>
-            </NavLink>
-          )
+          return renderNavItem(item)
         })}
       </nav>
 
