@@ -458,6 +458,181 @@ async function processSalesReport(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  SALES REPORT: ${rows.length} rows total`)
 
+  const mapStatus = (s) => {
+    const upper = (s || '').trim().toUpperCase()
+    if (upper === 'QUOTE')        return 'quote'
+    if (upper === 'CREDIT HOLD')  return 'credit_hold'
+    if (upper === 'CREDIT OK')    return 'credit_ok'
+    if (upper === 'PO SENT')      return 'po_sent'
+    if (upper === 'PRINTED')      return 'printed'
+    if (upper === 'INVOICED')     return 'invoiced'
+    if (upper === 'PAID')         return 'invoiced'
+    return null
+  }
+
+  let upserted = 0
+  let skipped  = 0
+  let transitions = 0
+  const toUpsert = []
+
+  // Build a map of incoming orders for transition detection
+  const incomingMap = {}
+  for (const row of rows) {
+    if ((row.RowType || '').trim().toUpperCase() !== 'DETAIL') continue
+    const epicStatus = (row.OrderStatus || '').trim().toUpperCase()
+    const wranglStatus = mapStatus(epicStatus)
+    if (!wranglStatus) continue
+    const orderNo = (row.OrderNo || '').trim()
+    if (!orderNo) continue
+    incomingMap[orderNo] = {
+      epicStatus,
+      wranglStatus,
+      statusDate: row.StatusDate || null,
+    }
+  }
+
+  // Fetch existing orders to detect transitions
+  const orderNumbers = Object.keys(incomingMap)
+  const existingMap = {}
+  for (let i = 0; i < orderNumbers.length; i += 500) {
+    const batch = orderNumbers.slice(i, i + 500)
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?select=id,order_number,status,epic_status&order_number=in.(${batch.map(n => `"${n}"`).join(',')})`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      data.forEach(o => { existingMap[o.order_number] = o })
+    }
+  }
+
+  // Build upsert list and detect transitions
+  const historyRows = []
+  const today = new Date().toISOString().slice(0, 10)
+
+  for (const [orderNo, incoming] of Object.entries(incomingMap)) {
+    const existing = existingMap[orderNo]
+    const prevStatus = existing?.status || null
+
+    toUpsert.push({
+      order_number:    orderNo,
+      epic_status:     incoming.epicStatus,
+      epic_status_date: incoming.statusDate || null,
+      status:          incoming.wranglStatus,
+      updated_at:      new Date().toISOString(),
+    })
+
+    // Log transition if status changed
+    if (prevStatus && prevStatus !== incoming.wranglStatus && prevStatus !== 'in_production') {
+      historyRows.push({
+        order_number: orderNo,
+        order_id:     existing?.id || null,
+        from_status:  prevStatus,
+        to_status:    incoming.wranglStatus,
+        status_date:  incoming.statusDate || today,
+        source:       'epic',
+        notes:        `Daily SALES REPORT sync`,
+      })
+      transitions++
+    } else if (!prevStatus) {
+      // New order — log initial status
+      historyRows.push({
+        order_number: orderNo,
+        order_id:     null,
+        from_status:  null,
+        to_status:    incoming.wranglStatus,
+        status_date:  incoming.statusDate || today,
+        source:       'epic',
+        notes:        'New order from SALES REPORT',
+      })
+    }
+  }
+
+  // Upsert orders in batches of 500
+  const batchSize = 500
+  for (let i = 0; i < toUpsert.length; i += batchSize) {
+    const batch = toUpsert.slice(i, i + batchSize)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=order_number`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(batch),
+    })
+    if (!res.ok) {
+      console.error(`  Batch error: ${res.status} ${await res.text()}`)
+    } else {
+      upserted += batch.length
+    }
+  }
+
+  // Insert history rows in batches
+  if (historyRows.length > 0) {
+    for (let i = 0; i < historyRows.length; i += 500) {
+      const batch = historyRows.slice(i, i + 500)
+      await fetch(`${SUPABASE_URL}/rest/v1/order_status_history`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(batch),
+      })
+    }
+    console.log(`  Status transitions logged: ${transitions}`)
+  }
+
+  // Preserve "In Production" wrangl_status
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=not.in.(INVOICED,PAID)`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'in_production' }),
+  })
+
+  // Clear wrangl_status when ePIC has invoiced the order
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=in.(INVOICED,PAID)`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ wrangl_status: null }),
+  })
+
+  // Log the import
+  await fetch(`${SUPABASE_URL}/rest/v1/sales_report_log`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      total_rows:    rows.length,
+      rows_upserted: upserted,
+      rows_skipped:  skipped,
+    }),
+  })
+
+  console.log(`  Sales report done — upserted: ${upserted}, transitions: ${transitions}, skipped: ${skipped}`)
+  return upserted
+}
+async function processSalesReport(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  SALES REPORT: ${rows.length} rows total`)
+
   // ePIC status → Wrangl status mapping
   // Returns null for statuses we don't want to track
   const mapStatus = (s) => {
