@@ -75,6 +75,19 @@ export default function CommitMaterial() {
         updated_at:           new Date().toISOString(),
       }).eq('id', selOrder.id)
       if (err) throw err
+
+      // Log to status history
+      await supabase.from('order_status_history').insert({
+        order_number: selOrder.order_number,
+        order_id:     selOrder.id,
+        from_status:  selOrder.status,
+        to_status:    'in_production',
+        status_date:  new Date().toISOString().slice(0, 10),
+        source:       'wrangl',
+        changed_by:   profile?.id,
+        notes:        `Marked In Production via Commit Fabric by ${profile?.full_name || profile?.email}`,
+      })
+
       setSuccess({ type: 'production', msg: `Marked Order #${selOrder.order_number} as In Production` })
       setSelOrder(null); setOrderSearch('')
       setTimeout(() => setSuccess(null), 4000)
