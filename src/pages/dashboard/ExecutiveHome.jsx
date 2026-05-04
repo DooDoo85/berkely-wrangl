@@ -435,11 +435,11 @@ export default function ExecutiveHome() {
                 </div>
               );
             })}
-            {avgDays !== null ? (
+            {data.avgDays !== null ? (
               <div className="mt-5 pt-4 border-t border-gray-100 flex justify-between text-sm">
                 <span className="text-gray-500">Avg days printed → invoiced</span>
-                <span className={`font-semibold tabular-nums ${Number(avgDays)>7?"text-red-600":Number(avgDays)>4?"text-amber-600":"text-blue-700"}`}>
-                  {avgDays}d
+                <span className={`font-semibold tabular-nums ${Number(data.avgDays)>7?"text-red-600":Number(data.avgDays)>4?"text-amber-600":"text-blue-700"}`}>
+                  {data.avgDays}d
                 </span>
               </div>
             ) : (
