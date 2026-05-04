@@ -17,15 +17,18 @@ function StockBadge({ qty, reorder }) {
   return <span className="text-sm font-semibold text-stone-700">{Math.ceil(Number(qty)).toLocaleString()}</span>
 }
 
-export default function InventoryList() {
+export default function InventoryList({ partType }) {
   const navigate = useNavigate()
   const [parts,   setParts]   = useState([])
   const [loading, setLoading] = useState(true)
-  const [type,    setType]    = useState('all')
+  const [type,    setType]    = useState(partType || 'all')
   const [search,  setSearch]  = useState('')
   const [counts,  setCounts]  = useState({})
   const [reorderPart, setReorderPart] = useState(null)
 
+  const locked = !!partType  // when a partType prop is passed, hide tabs
+
+  useEffect(() => { if (partType) setType(partType) }, [partType])
   useEffect(() => { fetchParts() }, [type])
 
   async function fetchParts() {
@@ -68,9 +71,11 @@ export default function InventoryList() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-display font-bold text-stone-800">Inventory</h2>
+          <h2 className="text-2xl font-display font-bold text-stone-800">
+            {locked ? (TYPE_CONFIG[partType]?.label || 'Inventory') : 'Inventory'}
+          </h2>
           <p className="text-stone-400 text-sm mt-0.5">
-            {counts.all || 0} parts tracked
+            {locked ? (counts[partType] || 0) : (counts.all || 0)} parts tracked
             {outStock > 0 && <span className="text-red-500 ml-2">· {outStock} out of stock</span>}
             {lowStock > 0 && <span className="text-amber-500 ml-2">· {lowStock} low stock</span>}
           </p>
@@ -88,7 +93,8 @@ export default function InventoryList() {
         </div>
       </div>
 
-      {/* Type tabs */}
+      {/* Type tabs — hidden when viewing a specific part type */}
+      {!locked && (
       <div className="flex gap-2 mb-5 flex-wrap">
         <button
           onClick={() => setType('all')}
@@ -113,6 +119,7 @@ export default function InventoryList() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Search */}
       <div className="mb-4">
@@ -142,7 +149,7 @@ export default function InventoryList() {
                 <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Part</th>
                 <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor ID</th>
                 <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor</th>
-                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Type</th>
+                {!locked && <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Type</th>}
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">On Hand</th>
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Committed</th>
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Available</th>
@@ -179,11 +186,13 @@ export default function InventoryList() {
                     <td className="px-4 py-3 cursor-pointer text-stone-500" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor || '—'}
                     </td>
+                    {!locked && (
                     <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${cfg.bg} ${cfg.color} ${cfg.border}`}>
                         {cfg.icon} {cfg.label}
                       </span>
                     </td>
+                    )}
                     <td className="px-4 py-3 text-right cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <StockBadge qty={p.qty_on_hand} reorder={p.reorder_level} />
                     </td>
