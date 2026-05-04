@@ -24,7 +24,21 @@ const EXEC_NAV = [
   { to: '/customers',  icon: '👥', label: 'Customers'  },
   { to: '/activities', icon: '📝', label: 'Activities' },
   { to: '/calendar',   icon: '📅', label: 'Calendar'   },
-  { to: '/inventory',  icon: '📦', label: 'Inventory'  },
+  {
+    label: 'Inventory', icon: '📦', group: true, adminChildren: true,
+    children: [
+      { to: '/inventory',             label: 'All Parts'   },
+      { to: '/inventory/fabrics',     label: 'Fabrics'     },
+      { to: '/inventory/components',  label: 'Components'  },
+      { to: '/inventory/extrusions',  label: 'Extrusions'  },
+      { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
+    ],
+    adminOnly: [
+      { to: '/inventory/committed-import', label: 'Committed Import' },
+      { to: '/inventory/match-review',     label: 'Match Review'     },
+      { to: '/inventory/price-grids',      label: 'Price Grids'      },
+    ],
+  },
   {
     label: 'Ops / Warehouse', icon: '🏭', group: true,
     children: [
@@ -96,7 +110,8 @@ export default function Sidebar() {
     const initial = {}
     NAV.forEach(item => {
       if (item.group) {
-        initial[item.label] = item.children.some(c =>
+        const allChildren = [...(item.children || []), ...(item.adminOnly || [])]
+        initial[item.label] = allChildren.some(c =>
           location.pathname === c.to || location.pathname.startsWith(c.to + '/')
         )
       }
@@ -107,8 +122,10 @@ export default function Sidebar() {
   const toggleGroup = (label) =>
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
 
-  const isGroupActive = (children) =>
-    children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+  const isGroupActive = (item) => {
+    const allChildren = [...(item.children || []), ...((role !== 'sales' && item.adminOnly) ? item.adminOnly : [])]
+    return allChildren.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+  }
 
   return (
     <div className={`w-60 ${BG_BASE} text-white flex flex-col h-full flex-shrink-0`}>
@@ -126,7 +143,8 @@ export default function Sidebar() {
         {NAV.map((item) => {
           if (item.group) {
             const open   = openGroups[item.label]
-            const active = isGroupActive(item.children)
+            const active = isGroupActive(item)
+            const adminChildren = (role !== 'sales' && item.adminOnly) ? item.adminOnly : []
             return (
               <div key={item.label}>
                 <button
@@ -151,6 +169,20 @@ export default function Sidebar() {
                         {child.label}
                       </NavLink>
                     ))}
+                    {adminChildren.length > 0 && (
+                      <>
+                        <div className={`mx-3 my-1 border-t border-[#1f3d2e]`} />
+                        {adminChildren.map(child => (
+                          <NavLink key={child.to} to={child.to}
+                            className={({ isActive }) =>
+                              `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
+                              ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+                            }>
+                            {child.label}
+                          </NavLink>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -168,25 +200,7 @@ export default function Sidebar() {
           )
         })}
 
-        {role !== 'sales' && location.pathname.startsWith('/inventory') && (
-          <div className="ml-9 mt-0.5 space-y-0.5">
-            <NavLink to="/inventory/committed-import"
-              className={({ isActive }) => `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-              Committed Import
-            </NavLink>
-            <NavLink to="/inventory/match-review"
-              className={({ isActive }) => `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-              Match Review
-            </NavLink>
-            <NavLink to="/inventory/price-grids"
-              className={({ isActive }) => `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-              Price Grids
-            </NavLink>
-          </div>
-        )}
+
       </nav>
 
       {/* User footer */}
