@@ -178,8 +178,50 @@ export default function ExecutiveHome() {
         acc[o.status]=(acc[o.status]??0)+1; return acc;
       },{});
       const inProdOrders = (activeOrders??[]).filter(o => ["credit_ok","po_sent","printed"].includes(o.status));
-      const avgDays = inProdOrders.length
-        ? (inProdOrders.reduce((s,o)=>s+daysSince(o.epic_status_date || o.updated_at),0)/inProdOrders.length).toFixed(1) : null;
+
+      // Avg days printed → invoiced from status history (last 90 days)
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
+      const { data: printedHistory } = await supabase
+        .from('order_status_history')
+        .select('order_number, status_date')
+        .eq('to_status', 'printed')
+        .gte('status_date', ninetyDaysAgo)
+
+      const { data: invoicedHistory } = await supabase
+        .from('order_status_history')
+        .select('order_number, status_date')
+        .eq('to_status', 'invoiced')
+        .gte('status_date', ninetyDaysAgo)
+
+      let avgDays = null
+      if (printedHistory?.length && invoicedHistory?.length) {
+        const printedMap = {}
+        printedHistory.forEach(r => {
+          // Keep earliest printed date per order
+          if (!printedMap[r.order_number] || r.status_date < printedMap[r.order_number]) {
+            printedMap[r.order_number] = r.status_date
+          }
+        })
+        const invoicedMap = {}
+        invoicedHistory.forEach(r => {
+          // Keep latest invoiced date per order
+          if (!invoicedMap[r.order_number] || r.status_date > invoicedMap[r.order_number]) {
+            invoicedMap[r.order_number] = r.status_date
+          }
+        })
+        // Find orders that went through both printed and invoiced
+        const deltas = []
+        for (const [orderNo, printedDate] of Object.entries(printedMap)) {
+          const invoicedDate = invoicedMap[orderNo]
+          if (invoicedDate && invoicedDate >= printedDate) {
+            const days = Math.round((new Date(invoicedDate) - new Date(printedDate)) / 86400000)
+            if (days >= 0 && days <= 60) deltas.push(days) // ignore outliers
+          }
+        }
+        if (deltas.length >= 3) { // need at least 3 data points
+          avgDays = (deltas.reduce((a, b) => a + b, 0) / deltas.length).toFixed(1)
+        }
+      }
 
       const { data: wipData } = await supabase.from("roller_wip").select("*").order("days_in_status",{ascending:false});
       const creditOK = (wipData??[]).filter(r=>r.order_status==="CREDIT OK");
@@ -393,12 +435,17 @@ export default function ExecutiveHome() {
                 </div>
               );
             })}
-            {data.avgDays && (
+            {avgDays !== null ? (
               <div className="mt-5 pt-4 border-t border-gray-100 flex justify-between text-sm">
-                <span className="text-gray-500">Avg days in status</span>
-                <span className={`font-semibold tabular-nums ${Number(data.avgDays)>5?"text-red-600":Number(data.avgDays)>3?"text-amber-600":"text-blue-700"}`}>
-                  {data.avgDays}d
+                <span className="text-gray-500">Avg days printed → invoiced</span>
+                <span className={`font-semibold tabular-nums ${Number(avgDays)>7?"text-red-600":Number(avgDays)>4?"text-amber-600":"text-blue-700"}`}>
+                  {avgDays}d
                 </span>
+              </div>
+            ) : (
+              <div className="mt-5 pt-4 border-t border-gray-100 flex justify-between text-sm">
+                <span className="text-gray-500">Avg days printed → invoiced</span>
+                <span className="text-gray-400 text-xs italic">Collecting data…</span>
               </div>
             )}
           </div>
