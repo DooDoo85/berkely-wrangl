@@ -91,6 +91,10 @@ function AppRoutes() {
 
         {/* Inventory */}
         <Route path="/inventory" element={<InventoryList />} />
+        <Route path="/inventory/fabrics" element={<InventoryList partType="fabric" />} />
+        <Route path="/inventory/components" element={<InventoryList partType="component" />} />
+        <Route path="/inventory/extrusions" element={<InventoryList partType="extrusion" />} />
+        <Route path="/inventory/faux-blinds" element={<InventoryList partType="blind" />} />
         <Route path="/inventory/committed-import" element={<CommittedStockImport />} />
         <Route path="/inventory/match-review" element={<MatchReview />} />
         <Route path="/inventory/price-grids" element={<PriceGridImport />} />
