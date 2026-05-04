@@ -25,18 +25,13 @@ const EXEC_NAV = [
   { to: '/activities', icon: '📝', label: 'Activities' },
   { to: '/calendar',   icon: '📅', label: 'Calendar'   },
   {
-    label: 'Inventory', icon: '📦', group: true, adminChildren: true,
+    label: 'Inventory', icon: '📦', group: true,
     children: [
       { to: '/inventory',             label: 'All Parts'   },
       { to: '/inventory/fabrics',     label: 'Fabrics'     },
       { to: '/inventory/components',  label: 'Components'  },
       { to: '/inventory/extrusions',  label: 'Extrusions'  },
       { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
-    ],
-    adminOnly: [
-      { to: '/inventory/committed-import', label: 'Committed Import' },
-      { to: '/inventory/match-review',     label: 'Match Review'     },
-      { to: '/inventory/price-grids',      label: 'Price Grids'      },
     ],
   },
   {
@@ -61,6 +56,14 @@ const EXEC_NAV = [
       { to: '/reports/sales-activity',  label: 'Sales Activity' },
       { to: '/reports/production',      label: 'Production'     },
       { to: '/reports/rep-activity',    label: 'Rep Activity'   },
+    ],
+  },
+  {
+    label: 'System', icon: '⚙️', group: true,
+    children: [
+      { to: '/inventory/committed-import', label: 'Committed Import' },
+      { to: '/inventory/match-review',     label: 'Match Review'     },
+      { to: '/inventory/price-grids',      label: 'Price Grids'      },
     ],
   },
 ]
@@ -110,8 +113,7 @@ export default function Sidebar() {
     const initial = {}
     NAV.forEach(item => {
       if (item.group) {
-        const allChildren = [...(item.children || []), ...(item.adminOnly || [])]
-        initial[item.label] = allChildren.some(c =>
+        initial[item.label] = item.children.some(c =>
           location.pathname === c.to || location.pathname.startsWith(c.to + '/')
         )
       }
@@ -122,10 +124,8 @@ export default function Sidebar() {
   const toggleGroup = (label) =>
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
 
-  const isGroupActive = (item) => {
-    const allChildren = [...(item.children || []), ...((role !== 'sales' && item.adminOnly) ? item.adminOnly : [])]
-    return allChildren.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
-  }
+  const isGroupActive = (item) =>
+    item.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
 
   return (
     <div className={`w-60 ${BG_BASE} text-white flex flex-col h-full flex-shrink-0`}>
@@ -144,7 +144,6 @@ export default function Sidebar() {
           if (item.group) {
             const open   = openGroups[item.label]
             const active = isGroupActive(item)
-            const adminChildren = (role !== 'sales' && item.adminOnly) ? item.adminOnly : []
             return (
               <div key={item.label}>
                 <button
@@ -169,20 +168,6 @@ export default function Sidebar() {
                         {child.label}
                       </NavLink>
                     ))}
-                    {adminChildren.length > 0 && (
-                      <>
-                        <div className={`mx-3 my-1 border-t border-[#1f3d2e]`} />
-                        {adminChildren.map(child => (
-                          <NavLink key={child.to} to={child.to}
-                            className={({ isActive }) =>
-                              `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                              ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
-                            }>
-                            {child.label}
-                          </NavLink>
-                        ))}
-                      </>
-                    )}
                   </div>
                 )}
               </div>
