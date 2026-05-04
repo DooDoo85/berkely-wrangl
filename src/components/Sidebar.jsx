@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 
-// Deep forest green palette
-const BG_BASE       = 'bg-[#0a2e22]'
-const BG_HOVER      = 'hover:bg-[#143f30]'
-const BG_ACTIVE     = 'bg-[#1f6b4d]'
-const BG_GROUP_OPEN = 'bg-[#143f30]'
-const BORDER        = 'border-[#143f30]'
-const TEXT_MUTED    = 'text-[#9bb8a8]'
-const TEXT_HOVER    = 'hover:text-white'
-const TEXT_SECTION  = 'text-[#5e8a75]'
+// Old western — worn saddle leather
+const BG_BASE       = 'bg-[#261810]'
+const BG_HOVER      = 'hover:bg-[#382618]'
+const BG_ACTIVE     = 'bg-[#5a3a24]'
+const BG_GROUP_OPEN = 'bg-[#382618]'
+const BORDER        = 'border-[#382618]'
+const TEXT_MUTED    = 'text-[#b89878]'
+const TEXT_HOVER    = 'hover:text-[#f5e6d0]'
+const TEXT_SECTION  = 'text-[#d4aa70]'
 
 // ── Nav structure ─────────────────────────────────────────────────────────────
 // type: 'section' → non-collapsible section header
@@ -148,12 +148,12 @@ export default function Sidebar() {
     item.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
 
   return (
-    <div className={`w-60 ${BG_BASE} text-white flex flex-col h-full flex-shrink-0`}>
+    <div className={`w-60 ${BG_BASE} text-[#f5e6d0] flex flex-col h-full flex-shrink-0`}>
       {/* Header */}
-      <div className="px-5 pt-5 pb-4">
+      <div className="px-5 pt-5 pb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">🐄</span>
-          <span className="text-lg font-bold text-white tracking-tight">Wrangl</span>
+          <span className="text-lg font-bold text-[#f5e6d0] tracking-tight">Wrangl</span>
         </div>
         <div className={`text-xs ${TEXT_MUTED} mt-0.5`}>Berkely Distribution</div>
       </div>
@@ -165,8 +165,8 @@ export default function Sidebar() {
           {/* Section header */}
           if (item.type === 'section') {
             return (
-              <div key={item.label} className="pt-5 pb-1.5 px-3">
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${TEXT_SECTION}`}>
+              <div key={item.label} className="pt-4 pb-1 px-3">
+                <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION} border-b border-[#4a3020] pb-1 block`}>
                   {item.label}
                 </span>
               </div>
@@ -181,8 +181,8 @@ export default function Sidebar() {
               <div key={item.label}>
                 <button
                   onClick={() => toggleGroup(item.label)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm transition-colors duration-150
-                    ${active ? `text-white ${BG_GROUP_OPEN}` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors duration-150
+                    ${active ? `text-[#f5e6d0] ${BG_GROUP_OPEN}` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}
                 >
                   <span className="flex items-center gap-3">
                     <span className="text-base">{item.icon}</span>
@@ -196,7 +196,7 @@ export default function Sidebar() {
                       <NavLink key={child.to} to={child.to}
                         className={({ isActive }) =>
                           `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                          ${isActive ? `text-white ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+                          ${isActive ? `text-[#f5e6d0] ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
                         }>
                         {child.label}
                       </NavLink>
@@ -211,8 +211,8 @@ export default function Sidebar() {
           return (
             <NavLink key={item.to} to={item.to} end={item.exact}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors duration-150
-                ${isActive ? `${BG_ACTIVE} text-white font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+                `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150
+                ${isActive ? `${BG_ACTIVE} text-[#f5e6d0] font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
               }>
               <span className="text-base">{item.icon}</span>
               <span className="font-medium">{item.label}</span>
@@ -224,11 +224,11 @@ export default function Sidebar() {
       {/* User footer */}
       <div className={`px-4 py-4 border-t ${BORDER}`}>
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-[#1f6b4d] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+          <div className="w-9 h-9 rounded-full bg-[#5a3a24] flex items-center justify-center text-[#f5e6d0] text-xs font-semibold flex-shrink-0">
             {getInitials(profile)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-white truncate font-medium">{profile?.email}</div>
+            <div className="text-xs text-[#f5e6d0] truncate font-medium">{profile?.email}</div>
             <div className={`text-[11px] ${TEXT_MUTED} truncate`}>{roleLabel(role)}</div>
           </div>
         </div>
