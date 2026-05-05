@@ -22,6 +22,7 @@ export default function CustomerForm() {
   const [contacts,     setContacts]     = useState([{ ...EMPTY_CONTACT, is_primary: true }])
   const [loading,      setLoading]      = useState(false)
   const [saving,       setSaving]       = useState(false)
+  const [skipAgreement, setSkipAgreement] = useState(false)
   const [error,        setError]        = useState('')
   const [docusealSent, setDocusealSent] = useState(false)
   const [docusealErr,  setDocusealErr]  = useState('')
@@ -141,10 +142,12 @@ export default function CustomerForm() {
         if (error) throw error
         customerId = data.id
 
-        // Send DocuSeal to primary contact if they have an email
-        const primaryContact = contacts.find(c => c.is_primary) || contacts[0]
-        if (primaryContact?.email && primaryContact?.name) {
-          await sendDocuSeal(customerId, form.account_name, primaryContact)
+        // Send DocuSeal to primary contact unless skipped
+        if (!skipAgreement) {
+          const primaryContact = contacts.find(c => c.is_primary) || contacts[0]
+          if (primaryContact?.email && primaryContact?.name) {
+            await sendDocuSeal(customerId, form.account_name, primaryContact)
+          }
         }
       }
 
@@ -191,8 +194,9 @@ export default function CustomerForm() {
             <div>
               <p className="text-sm font-semibold text-amber-800">Account Agreement</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                When you create this customer, a DocuSeal account agreement will automatically be sent
-                to the primary contact's email. Parker, Customer Service, and Abigail will be copied.
+                By default, creating a customer sends a DocuSeal account agreement to the primary contact's email
+                (Parker, Customer Service, and Abigail are CC'd). Use <strong>Quick Add</strong> at the bottom
+                to skip the agreement — useful for prospects, internal records, or when the agreement was already signed elsewhere.
               </p>
             </div>
           </div>
@@ -354,8 +358,24 @@ export default function CustomerForm() {
         {/* Actions */}
         <div className="flex items-center gap-3 justify-end pb-6">
           <button type="button" onClick={() => navigate(-1)} className="btn-ghost">Cancel</button>
-          <button type="submit" disabled={saving} className="btn-primary px-6">
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Customer & Send Agreement'}
+          {!isEdit && (
+            <button
+              type="submit"
+              disabled={saving}
+              onClick={() => setSkipAgreement(true)}
+              className="px-5 py-2 rounded-xl border border-stone-300 text-sm text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-40"
+              title="Create customer record without sending the DocuSeal account agreement"
+            >
+              {saving && skipAgreement ? 'Saving...' : 'Quick Add (No Agreement)'}
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            onClick={() => setSkipAgreement(false)}
+            className="btn-primary px-6"
+          >
+            {saving && !skipAgreement ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Customer & Send Agreement'}
           </button>
         </div>
       </form>
