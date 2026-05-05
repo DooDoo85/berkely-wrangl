@@ -71,7 +71,6 @@ const EXEC_NAV = [
         children: [
           { to: '/reports',                 label: 'Overview'       },
           { to: '/reports/sales-activity',  label: 'Sales Activity' },
-          { to: '/reports/production',      label: 'Production'     },
           { to: '/reports/rep-activity',    label: 'Rep Activity'   },
         ],
       },
