@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 const STATUS_STYLES = {
-  draft:      'bg-stone-100 text-stone-600',
-  submitted:  'bg-blue-50 text-blue-700',
-  exported:   'bg-amber-50 text-amber-700',
-  received:   'bg-green-50 text-green-700',
-  cancelled:  'bg-red-50 text-red-500',
+  draft:             'bg-stone-100 text-stone-600',
+  submitted:         'bg-blue-50 text-blue-700',
+  sent:              'bg-cyan-50 text-cyan-700',
+  exported:          'bg-amber-50 text-amber-700',
+  partial_received:  'bg-amber-50 text-amber-700',
+  received:          'bg-green-50 text-green-700',
+  cancelled:         'bg-red-50 text-red-500',
 }
 
 export default function PurchaseOrderDetail() {
@@ -22,6 +24,10 @@ export default function PurchaseOrderDetail() {
   const [addingItem, setAddingItem] = useState(false)
   const [newItem, setNewItem] = useState({ part_name: '', stock_number: '', qty_ordered: 1, unit_cost: 0, note: '' })
   const [confirmSubmit, setConfirmSubmit] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailResult, setEmailResult] = useState(null)
+  const [vendorEmail, setVendorEmail] = useState('')
+  const [showEmailDialog, setShowEmailDialog] = useState(false)
 
   useEffect(() => { loadPO() }, [id])
 
@@ -34,6 +40,19 @@ export default function PurchaseOrderDetail() {
     setPO(poData)
     setItems(itemData || [])
     setEpicPOInput(poData?.epic_po_number || '')
+
+    // Pre-fill vendor email from vendors table
+    if (poData?.vendor_id) {
+      const { data: vendor } = await supabase
+        .from('vendors').select('contact_email').eq('id', poData.vendor_id).single()
+      if (vendor?.contact_email) setVendorEmail(vendor.contact_email)
+    } else if (poData?.vendor_name) {
+      const { data: vendors } = await supabase
+        .from('vendors').select('contact_email').ilike('vendor_name', poData.vendor_name).limit(1)
+      if (vendors?.[0]?.contact_email) setVendorEmail(vendors[0].contact_email)
+    }
+    if (poData?.sent_to_email) setVendorEmail(poData.sent_to_email)
+
     setLoading(false)
   }
 
@@ -63,6 +82,54 @@ export default function PurchaseOrderDetail() {
     setSaving(false)
     setConfirmSubmit(false)
     loadPO()
+  }
+
+  async function sendPOToVendor() {
+    if (!vendorEmail || !vendorEmail.includes('@')) {
+      setEmailResult({ ok: false, error: 'Enter a valid vendor email' })
+      return
+    }
+    setSendingEmail(true)
+    setEmailResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/send-po-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          po_id: id,
+          vendor_email: vendorEmail,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send')
+
+      // Save vendor email back to vendors table for future use
+      if (po.vendor_id) {
+        await supabase.from('vendors')
+          .update({ contact_email: vendorEmail })
+          .eq('id', po.vendor_id)
+      }
+
+      // Update PO
+      await supabase.from('purchase_orders').update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        sent_to_email: vendorEmail,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id)
+
+      setEmailResult({ ok: true, email: vendorEmail })
+      setShowEmailDialog(false)
+      loadPO()
+      setTimeout(() => setEmailResult(null), 5000)
+    } catch (err) {
+      setEmailResult({ ok: false, error: err.message })
+    }
+    setSendingEmail(false)
   }
 
   async function saveEpicPO() {
@@ -118,9 +185,16 @@ export default function PurchaseOrderDetail() {
   if (!po) return <div className="p-8 text-red-500 text-sm">PO not found.</div>
 
   const isDraft = po.status === 'draft'
+  const isSent = po.status === 'sent'
   const isExported = po.status === 'exported'
+  const isPartialReceived = po.status === 'partial_received'
   const isReceived = po.status === 'received'
   const isCancelled = po.status === 'cancelled'
+
+  // Receiving metrics
+  const totalOrdered = items.reduce((s, i) => s + (i.qty_ordered || 0), 0)
+  const totalReceived = items.reduce((s, i) => s + (i.qty_received || 0), 0)
+  const canReceive = items.length > 0 && (isSent || isExported || isPartialReceived) && totalReceived < totalOrdered
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -141,11 +215,18 @@ export default function PurchaseOrderDetail() {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isDraft && (
             <>
               <button onClick={exportCSV} className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors">
                 Download CSV
+              </button>
+              <button
+                onClick={() => setShowEmailDialog(true)}
+                disabled={items.length === 0}
+                className="text-xs font-semibold bg-cyan-600 text-white px-4 py-1.5 rounded hover:bg-cyan-700 transition-colors disabled:opacity-40"
+              >
+                📧 Send to Vendor
               </button>
               <button
                 onClick={() => setConfirmSubmit(true)}
@@ -156,23 +237,30 @@ export default function PurchaseOrderDetail() {
               </button>
             </>
           )}
-          {isExported && (
+          {(isSent || isExported || isPartialReceived) && (
             <>
               <button onClick={exportCSV} className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors">
                 Download CSV
               </button>
               <button
-                onClick={() => updateStatus('received')}
-                disabled={saving}
-                className="text-xs font-semibold bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700 transition-colors disabled:opacity-40"
+                onClick={() => setShowEmailDialog(true)}
+                className="text-xs border border-stone-200 text-stone-600 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors"
               >
-                ✓ Mark as Received
+                📧 {isSent ? 'Resend to Vendor' : 'Send to Vendor'}
               </button>
+              {canReceive && (
+                <button
+                  onClick={() => navigate(`/ops/receive-po/${id}`)}
+                  className="text-xs font-semibold bg-emerald-600 text-white px-4 py-1.5 rounded hover:bg-emerald-700 transition-colors"
+                >
+                  📥 Receive Items
+                </button>
+              )}
             </>
           )}
           {isReceived && (
             <span className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded">
-              ✓ Stock Received
+              ✓ Fully Received
             </span>
           )}
           {!isCancelled && !isReceived && (
@@ -186,34 +274,111 @@ export default function PurchaseOrderDetail() {
         </div>
       </div>
 
-      {/* Status banner */}
-      {isDraft && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
-          <span className="text-amber-500 text-lg">✏️</span>
-          <div>
-            <p className="text-sm font-semibold text-amber-800">Draft — Review before submitting</p>
-            <p className="text-xs text-amber-600 mt-0.5">Add or remove items, update quantities, then click "Submit & Export to ePIC" when ready.</p>
+      {/* Email result toast */}
+      {emailResult && (
+        <div className={`mb-4 p-3 rounded-xl border ${emailResult.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <p className={`text-sm font-semibold ${emailResult.ok ? 'text-green-800' : 'text-red-700'}`}>
+            {emailResult.ok ? `✓ PO emailed to ${emailResult.email}` : `✕ ${emailResult.error}`}
+          </p>
+        </div>
+      )}
+
+      {/* Send to Vendor Modal */}
+      {showEmailDialog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowEmailDialog(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-display font-bold text-stone-800 mb-4">Send PO to Vendor</h3>
+            <p className="text-sm text-stone-500 mb-4">
+              Emails {po.wrangl_po_number} as a PDF to the vendor with a "REPLY TO CONFIRM" message.
+            </p>
+            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Vendor Email</label>
+            <input
+              type="email"
+              value={vendorEmail}
+              onChange={e => setVendorEmail(e.target.value)}
+              placeholder="orders@vendor.com"
+              className="input w-full mb-1"
+              autoFocus
+            />
+            <p className="text-xs text-stone-400 mb-5">This email will be saved to {po.vendor_name}'s vendor record for next time.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEmailDialog(false)}
+                className="flex-1 py-2 px-4 rounded-xl border border-stone-200 text-sm text-stone-500 hover:bg-stone-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendPOToVendor}
+                disabled={sendingEmail || !vendorEmail}
+                className="flex-1 py-2 px-4 rounded-xl bg-cyan-600 text-white text-sm font-semibold hover:bg-cyan-700 disabled:opacity-40 transition-colors"
+              >
+                {sendingEmail ? 'Sending...' : '📧 Send Now'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {isExported && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
-          <span className="text-blue-500 text-lg">📤</span>
-          <div>
-            <p className="text-sm font-semibold text-blue-800">Submitted & Exported to ePIC</p>
-            <p className="text-xs text-blue-600 mt-0.5">PO has been sent. Click "Mark as Received" when the stock arrives.</p>
+
+      {/* Status timeline */}
+      <div className="card p-4 mb-5">
+        <div className="flex items-center justify-between gap-2">
+          {[
+            { key: 'draft',     label: 'Draft',    icon: '✏️',  date: po.created_at,   active: true },
+            { key: 'sent',      label: 'Sent',     icon: '📧',  date: po.sent_at,      active: !!po.sent_at || ['sent','exported','partial_received','received'].includes(po.status) },
+            { key: 'exported',  label: 'In ePIC',  icon: '📤',  date: null,             active: !!po.epic_po_number || ['exported','partial_received','received'].includes(po.status) },
+            { key: 'received',  label: po.status === 'partial_received' ? 'Partial' : 'Received', icon: po.status === 'partial_received' ? '📦' : '✅',  date: po.received_at,  active: ['partial_received','received'].includes(po.status) },
+          ].map((step, i, arr) => (
+            <div key={step.key} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-base transition-all ${
+                  step.active ? 'bg-[#5a3a24] text-[#f5e6d0]' : 'bg-stone-100 text-stone-300'
+                }`}>
+                  {step.icon}
+                </div>
+                <p className={`text-[10px] font-bold mt-1 uppercase tracking-wide ${step.active ? 'text-stone-700' : 'text-stone-300'}`}>
+                  {step.label}
+                </p>
+                {step.date && (
+                  <p className="text-[9px] text-stone-400 mt-0.5">{new Date(step.date).toLocaleDateString()}</p>
+                )}
+              </div>
+              {i < arr.length - 1 && (
+                <div className={`h-0.5 flex-1 mx-1 ${arr[i+1].active ? 'bg-[#5a3a24]' : 'bg-stone-200'}`} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Receiving progress (when applicable) */}
+      {(isPartialReceived || isReceived || isSent || isExported) && totalOrdered > 0 && (
+        <div className="card p-4 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-stone-700">
+              {totalReceived} of {totalOrdered} units received
+              {isPartialReceived && <span className="ml-2 text-xs text-amber-600">({Math.round((totalReceived/totalOrdered)*100)}%)</span>}
+            </p>
+            {canReceive && (
+              <button
+                onClick={() => navigate(`/ops/receive-po/${id}`)}
+                className="text-xs font-semibold text-emerald-700 hover:underline"
+              >
+                Receive items →
+              </button>
+            )}
+          </div>
+          <div className="w-full bg-stone-100 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all ${
+                isReceived ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+              style={{ width: `${Math.min((totalReceived/totalOrdered)*100, 100)}%` }}
+            />
           </div>
         </div>
       )}
-      {isReceived && (
-        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
-          <span className="text-green-500 text-lg">✅</span>
-          <div>
-            <p className="text-sm font-semibold text-green-800">Stock Received</p>
-            <p className="text-xs text-green-600 mt-0.5">This PO is complete.</p>
-          </div>
-        </div>
-      )}
+
       {isCancelled && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
           <span className="text-red-400 text-lg">✕</span>
@@ -267,6 +432,7 @@ export default function PurchaseOrderDetail() {
               <th className="text-left px-5 py-2">Stock #</th>
               <th className="text-left px-5 py-2">Part Name</th>
               <th className="text-center px-5 py-2">Qty</th>
+              {!isDraft && <th className="text-center px-5 py-2">Received</th>}
               <th className="text-right px-5 py-2">Unit Cost</th>
               <th className="text-right px-5 py-2">Total</th>
               <th className="text-left px-5 py-2">Note</th>
@@ -274,7 +440,12 @@ export default function PurchaseOrderDetail() {
             </tr>
           </thead>
           <tbody>
-            {items.map(item => (
+            {items.map(item => {
+              const received = item.qty_received || 0
+              const ordered = item.qty_ordered || 0
+              const fullyReceived = received >= ordered && ordered > 0
+              const partial = received > 0 && received < ordered
+              return (
               <tr key={item.id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors">
                 <td className="px-5 py-3 text-stone-500 font-mono text-xs">{item.stock_number || '—'}</td>
                 <td className="px-5 py-3 text-stone-800 font-medium">{item.part_name}</td>
@@ -291,6 +462,17 @@ export default function PurchaseOrderDetail() {
                     <span className="font-semibold text-stone-800">{item.qty_ordered}</span>
                   )}
                 </td>
+                {!isDraft && (
+                  <td className="px-5 py-3 text-center">
+                    {fullyReceived ? (
+                      <span className="text-xs font-semibold text-emerald-700">✓ {received}</span>
+                    ) : partial ? (
+                      <span className="text-xs font-semibold text-amber-700">{received}/{ordered}</span>
+                    ) : (
+                      <span className="text-xs text-stone-300">—</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-5 py-3 text-right text-stone-500">${(item.unit_cost || 0).toFixed(2)}</td>
                 <td className="px-5 py-3 text-right font-semibold text-stone-800">${(item.qty_ordered * (item.unit_cost || 0)).toFixed(2)}</td>
                 <td className="px-5 py-3 text-stone-400 text-xs">{item.note || '—'}</td>
@@ -300,7 +482,8 @@ export default function PurchaseOrderDetail() {
                   </td>
                 )}
               </tr>
-            ))}
+              )
+            })}
             {addingItem && (
               <tr className="border-b border-stone-100 bg-blue-50">
                 <td className="px-5 py-3">
@@ -329,7 +512,7 @@ export default function PurchaseOrderDetail() {
           {totalValue > 0 && (
             <tfoot>
               <tr className="border-t border-stone-200 bg-stone-50">
-                <td colSpan={4} className="px-5 py-3 text-right text-xs font-bold text-stone-500 uppercase tracking-wide">Total Estimated Value</td>
+                <td colSpan={isDraft ? 4 : 5} className="px-5 py-3 text-right text-xs font-bold text-stone-500 uppercase tracking-wide">Total Estimated Value</td>
                 <td className="px-5 py-3 text-right font-bold text-stone-800">${totalValue.toFixed(2)}</td>
                 <td colSpan={isDraft ? 2 : 1}></td>
               </tr>
