@@ -7,7 +7,7 @@ export default function Home() {
   const { profile } = useAuth()
   const role = profile?.role
 
-  if (role === 'executive' || role === 'admin') return <ExecutiveHome />
+  if (role === 'owner' || role === 'executive' || role === 'admin') return <ExecutiveHome />
   if (role === 'sales') return <RepHome />
   if (role === 'production') return <ProductionHome />
 
