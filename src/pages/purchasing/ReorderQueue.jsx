@@ -192,11 +192,30 @@ export default function ReorderQueue() {
         .select().single()
       if (error) throw error
 
+      // Pull pricing for parts in this PO so we can auto-fill unit_cost
+      const partIds = selectedItems.map(i => i.part_id).filter(Boolean)
+      let priceMap = {}
+      if (partIds.length > 0) {
+        const { data: parts } = await supabase
+          .from('parts')
+          .select('id, unit_cost, pack_size, pack_cost, vendor_part_number')
+          .in('id', partIds)
+        priceMap = (parts || []).reduce((acc, p) => { acc[p.id] = p; return acc }, {})
+      }
+
       await supabase.from('purchase_order_items').insert(
-        selectedItems.map(item => ({
-          po_id: po.id, part_id: item.part_id, part_name: item.part_name,
-          stock_number: item.stock_number, qty_ordered: item.qty_requested, note: item.note,
-        }))
+        selectedItems.map(item => {
+          const pricing = priceMap[item.part_id] || {}
+          return {
+            po_id: po.id,
+            part_id: item.part_id,
+            part_name: item.part_name,
+            stock_number: pricing.vendor_part_number || item.stock_number,
+            qty_ordered: item.qty_requested,
+            unit_cost: pricing.unit_cost ?? null,
+            note: item.note,
+          }
+        })
       )
 
       await supabase.from('reorder_queue').delete().in('id', selectedItems.map(i => i.id))
