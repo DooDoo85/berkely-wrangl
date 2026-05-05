@@ -4,6 +4,9 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 import HoldModal from '../../components/HoldModal'
 
+// Strip accents for search (é→e, ô→o, etc.)
+const stripAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
 export default function ProductionHub() {
   const navigate = useNavigate()
   const { profile } = useAuth()
@@ -388,7 +391,7 @@ export default function ProductionHub() {
                   const selectedFabric = cut.fabricId ? fabrics.find(f => f.id === cut.fabricId) : null
                   const searchVal = cut.search || ''
                   const filteredFabrics = fabrics.filter(f =>
-                    f.name.toLowerCase().includes(searchVal.toLowerCase())
+                    stripAccents(f.name.toLowerCase()).includes(stripAccents(searchVal.toLowerCase()))
                   ).slice(0, 8)
 
                   return (
