@@ -53,6 +53,9 @@ import CalendarPage from './pages/calendar/CalendarPage'
 // Price Grids
 import PriceGridImport from './pages/inventory/PriceGridImport'
 
+// System
+import FeedbackTickets from './pages/system/FeedbackTickets'
+
 // Purchasing
 import PurchaseOrders from './pages/purchasing/PurchaseOrders'
 import ReorderQueue from './pages/purchasing/ReorderQueue'
@@ -131,6 +134,9 @@ function AppRoutes() {
 
         {/* Calendar */}
         <Route path="/calendar" element={<CalendarPage />} />
+
+        {/* System */}
+        <Route path="/system/tickets" element={<FeedbackTickets />} />
 
         {/* Freight / Settings */}
         <Route path="/freight" element={<Placeholder title="Freight" />} />
