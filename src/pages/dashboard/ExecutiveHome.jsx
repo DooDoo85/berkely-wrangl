@@ -224,10 +224,42 @@ export default function ExecutiveHome() {
       const creditOK = (wipData??[]).filter(r=>r.order_status==="CREDIT OK");
       const printed  = (wipData??[]).filter(r=>r.order_status==="PRINTED");
 
-      // Stuck orders — sourced from WIP (single source of truth from ePIC)
-      const stuckOrders = (wipData??[])
+      // Stuck orders — sourced from WIP (PRINTED/CREDIT OK/PO SENT > 5 days)
+      const wipStuck = (wipData??[])
         .filter(w => ["CREDIT OK","PO SENT","PRINTED"].includes(w.order_status) && (w.days_in_status ?? 0) > 5)
-        .sort((a,b) => (b.days_in_status??0)-(a.days_in_status??0)).slice(0,5);
+        .map(w => ({
+          key: `wip-${w.wo}`,
+          order_no: w.order_no,
+          customer: w.customer,
+          status_label: w.order_status?.toLowerCase(),
+          days: w.days_in_status ?? 0,
+          hold_reason: null,
+        }))
+
+      // Also pull held orders > 5 days (placed on hold by production lead)
+      const { data: heldOrders } = await supabase.from("orders")
+        .select("id, order_number, customer_name, hold_reason, hold_note, wrangl_status_set_at, updated_at")
+        .eq("status", "on_hold")
+
+      const heldStuck = (heldOrders ?? [])
+        .map(o => {
+          const holdDate = o.wrangl_status_set_at || o.updated_at
+          const days = holdDate ? daysSince(holdDate) : 0
+          return {
+            key: `held-${o.id}`,
+            order_no: o.order_number,
+            customer: o.customer_name,
+            status_label: 'on hold',
+            days,
+            hold_reason: o.hold_reason,
+          }
+        })
+        .filter(o => o.days > 5)
+
+      // Merge and take top 5 most stuck
+      const stuckOrders = [...wipStuck, ...heldStuck]
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 5)
 
       // Credit OK from email-imported table
       const { data: creditOkRows } = await supabase
@@ -393,15 +425,24 @@ export default function ExecutiveHome() {
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
-                  const days = o.days_in_status ?? 0;
+                  const days = o.days;
+                  const isHold = o.status_label === 'on hold';
                   return (
-                    <div key={o.wo} onClick={()=>navigate(`/orders?search=${o.order_no}`)}
+                    <div key={o.key} onClick={()=>navigate(`/orders?search=${o.order_no}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-red-100/40 rounded-lg px-2 transition-colors">
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{o.order_no}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{o.customer ?? "—"} · {o.order_status?.toLowerCase()}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {o.customer ?? "—"} · {o.status_label}
+                          {isHold && o.hold_reason && (
+                            <span className="text-red-600 ml-1">({o.hold_reason})</span>
+                          )}
+                        </p>
                       </div>
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${days>=8?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        isHold ? "bg-red-100 text-red-700" :
+                        days >= 8 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      }`}>
                         Day {days} →
                       </span>
                     </div>
