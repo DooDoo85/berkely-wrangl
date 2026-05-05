@@ -81,6 +81,7 @@ const EXEC_NAV = [
   {
     type: 'section', label: 'System', collapsible: true,
     items: [
+      { type: 'link', to: '/system/users',               icon: '👤', label: 'Users',             ownerOnly: true },
       { type: 'link', to: '/system/tickets',             icon: '💬', label: 'Feedback Tickets' },
       { type: 'link', to: '/inventory/committed-import', icon: '📥', label: 'Committed Import' },
       { type: 'link', to: '/inventory/match-review',     icon: '🔍', label: 'Match Review'     },
@@ -151,6 +152,7 @@ function getInitials(profile) {
 }
 
 function roleLabel(role) {
+  if (role === 'owner')      return 'Owner'
   if (role === 'sales')      return 'Sales Representative'
   if (role === 'admin')      return 'Executive'
   if (role === 'production') return 'Production Lead'
@@ -294,7 +296,7 @@ export default function Sidebar() {
                 )}
                 {isOpen && item.items && (
                   <div className="space-y-0.5 mt-0.5">
-                    {item.items.map(sub => renderNavItem(sub))}
+                    {item.items.filter(sub => !sub.ownerOnly || role === 'owner').map(sub => renderNavItem(sub))}
                   </div>
                 )}
               </div>
