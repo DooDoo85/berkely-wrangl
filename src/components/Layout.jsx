@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import FeedbackButton from './FeedbackButton'
 
 const PAGE_TITLES = {
   '/':           'Home',
@@ -41,6 +42,9 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      {/* Floating feedback button — visible on every page */}
+      <FeedbackButton />
     </div>
   )
 }
