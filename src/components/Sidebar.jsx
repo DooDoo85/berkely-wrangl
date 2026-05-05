@@ -112,6 +112,33 @@ const SALES_NAV = [
   },
 ]
 
+const PRODUCTION_NAV = [
+  { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
+
+  // ── OPERATIONS ──
+  { type: 'section', label: 'Operations' },
+  {
+    type: 'group', label: 'Inventory', icon: '📦',
+    children: [
+      { to: '/inventory',             label: 'All Parts'   },
+      { to: '/inventory/fabrics',     label: 'Fabrics'     },
+      { to: '/inventory/components',  label: 'Components'  },
+      { to: '/inventory/extrusions',  label: 'Extrusions'  },
+      { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
+    ],
+  },
+  {
+    type: 'group', label: 'Production', icon: '🏭',
+    children: [
+      { to: '/ops/production', label: 'Start Production' },
+      { to: '/orders/on-hold', label: 'Orders on Hold'   },
+      { to: '/ops',            label: 'Warehouse'        },
+      { to: '/ops/receive',    label: 'Receive Stock'    },
+      { to: '/purchasing',     label: 'Purchasing'       },
+    ],
+  },
+]
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getInitials(profile) {
@@ -124,8 +151,9 @@ function getInitials(profile) {
 }
 
 function roleLabel(role) {
-  if (role === 'sales')  return 'Sales Representative'
-  if (role === 'admin')  return 'Executive'
+  if (role === 'sales')      return 'Sales Representative'
+  if (role === 'admin')      return 'Executive'
+  if (role === 'production') return 'Production Lead'
   return role || ''
 }
 
@@ -135,7 +163,7 @@ export default function Sidebar() {
   const location = useLocation()
   const { profile, signOut } = useAuth()
   const role = profile?.role
-  const NAV = (role === 'sales') ? SALES_NAV : EXEC_NAV
+  const NAV = role === 'sales' ? SALES_NAV : role === 'production' ? PRODUCTION_NAV : EXEC_NAV
 
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
