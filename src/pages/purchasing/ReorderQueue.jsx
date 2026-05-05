@@ -31,20 +31,38 @@ export default function ReorderQueue() {
     if (showQuickAdd && searchRef.current) searchRef.current.focus()
   }, [showQuickAdd])
 
+  // Strip accents (é→e, ô→o) so "Orleans" matches "Orléans"
+  const stripAccents = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
   // Debounced search
   useEffect(() => {
     if (!addSearch.trim()) { setAddResults([]); return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       setAddSearching(true)
-      const { data } = await supabase
-        .from('parts')
-        .select('id, name, part_type, vendor, vendor_id, qty_on_hand, reorder_qty')
-        .eq('active', true)
-        .ilike('name', `%${addSearch.trim()}%`)
-        .order('name')
-        .limit(10)
-      setAddResults(data || [])
+      try {
+        // Pull broader pool (we'll filter client-side for accent-insensitive match)
+        const { data, error } = await supabase
+          .from('parts')
+          .select('id, name, part_type, vendor, vendor_id, qty_on_hand')
+          .eq('active', true)
+          .order('name')
+          .limit(500)
+
+        if (error) {
+          console.error('Parts search error:', error)
+          setAddResults([])
+        } else {
+          const term = stripAccents(addSearch.trim().toLowerCase())
+          const filtered = (data || [])
+            .filter(p => stripAccents((p.name || '').toLowerCase()).includes(term))
+            .slice(0, 10)
+          setAddResults(filtered)
+        }
+      } catch (e) {
+        console.error('Search exception:', e)
+        setAddResults([])
+      }
       setAddSearching(false)
     }, 250)
     return () => clearTimeout(debounceRef.current)
