@@ -5,18 +5,13 @@ import { useAuth } from '../../components/AuthProvider'
 import ActivityForm from './ActivityForm'
 
 const TYPE_STYLES = {
-  call:        { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞' },
-  email:       { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️' },
-  note:        { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝' },
-  meeting:     { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝' },
-  sample_book: { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  icon: '📚' },
-}
-
-const WEEKLY_TARGETS = {
-  meetings:     10,
-  new_customers: 5,
-  sample_books:  5,
-  new_orders:    0, // no fixed target — just show count
+  call:              { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '☎️', label: 'Other Call' },
+  cold_call:         { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞', label: 'Cold Call' },
+  email:             { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️', label: 'Email' },
+  note:              { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝', label: 'Note' },
+  scheduled_meeting: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝', label: 'Scheduled Meeting' },
+  meeting:           { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝', label: 'Meeting' },
+  sample_book:       { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  icon: '📚', label: 'Sample Book' },
 }
 
 function startOfWeek() {
@@ -87,7 +82,8 @@ export default function ActivityLog() {
   const [showForm,    setShowForm]    = useState(false)
   const [filter,      setFilter]      = useState('all')
   const [search,      setSearch]      = useState('')
-  const [kpis,        setKpis]        = useState({ meetings: 0, sample_books: 0, new_customers: 0, new_orders: 0 })
+  const [kpis,        setKpis]        = useState({ scheduled_meetings: 0, sample_books: 0, new_accounts: 0, cold_calls: 0 })
+  const [goals,       setGoals]       = useState({ scheduled_meetings: 15, sample_books: 3, new_accounts: 2, cold_calls: 0 })
 
   useEffect(() => { fetchActivities() }, [filter, profile])
 
@@ -101,27 +97,30 @@ export default function ActivityLog() {
       const weekStart = startOfWeek()
       const weekStartDate = weekStart.slice(0, 10)
 
-      const [actsRes, customersRes, ordersRes] = await Promise.all([
+      const [goalsRes, actsRes, customersRes] = await Promise.all([
+        supabase.from('weekly_goals').select('metric_key, target_value'),
         supabase.from('activities')
-          .select('activity_type, activity_date, user_id, profiles(rep_id)')
-          .gte('activity_date', weekStart),
+          .select('activity_type')
+          .eq('user_id', profile.id)
+          .gte('activity_date', weekStartDate),
         supabase.from('customers')
-          .select('id, created_at, sales_rep')
-          .eq('sales_rep', repId)
-          .gte('created_at', weekStart),
-        supabase.from('orders')
-          .select('id, created_at, sales_rep')
+          .select('id')
           .eq('sales_rep', repId)
           .gte('created_at', weekStart),
       ])
 
-      const acts = (actsRes.data || []).filter(a => a.profiles?.rep_id === repId)
+      const acts = actsRes.data || []
+
+      // Goals from DB (with sane defaults)
+      const goalMap = { scheduled_meetings: 15, sample_books: 3, new_accounts: 2, cold_calls: 0 }
+      ;(goalsRes?.data || []).forEach(g => { goalMap[g.metric_key] = g.target_value })
+      setGoals(goalMap)
 
       setKpis({
-        meetings:      acts.filter(a => a.activity_type === 'meeting').length,
-        sample_books:  acts.filter(a => a.activity_type === 'sample_book').length,
-        new_customers: (customersRes.data || []).length,
-        new_orders:    (ordersRes.data || []).length,
+        scheduled_meetings: acts.filter(a => a.activity_type === 'scheduled_meeting').length,
+        sample_books:       acts.filter(a => a.activity_type === 'sample_book').length,
+        cold_calls:         acts.filter(a => a.activity_type === 'cold_call').length,
+        new_accounts:       (customersRes.data || []).length,
       })
     } catch (err) {
       console.error('KPI fetch error:', err)
@@ -195,10 +194,10 @@ export default function ActivityLog() {
         <div className="mb-6">
           <div className="text-[10px] font-bold tracking-[0.12em] text-stone-400 uppercase mb-3">My week — scorecard</div>
           <div className="grid grid-cols-4 gap-3">
-            <KpiScorecard label="Meetings"      icon="🤝" actual={kpis.meetings}      target={WEEKLY_TARGETS.meetings}      loading={kpiLoading} />
-            <KpiScorecard label="Sample Books"  icon="📚" actual={kpis.sample_books}  target={WEEKLY_TARGETS.sample_books}  loading={kpiLoading} />
-            <KpiScorecard label="New Customers" icon="👤" actual={kpis.new_customers} target={WEEKLY_TARGETS.new_customers} loading={kpiLoading} />
-            <KpiScorecard label="New Orders"    icon="📋" actual={kpis.new_orders}    target={WEEKLY_TARGETS.new_orders}    loading={kpiLoading} />
+            <KpiScorecard label="Scheduled Meetings" icon="🤝" actual={kpis.scheduled_meetings} target={goals.scheduled_meetings} loading={kpiLoading} />
+            <KpiScorecard label="New Accounts"       icon="👤" actual={kpis.new_accounts}       target={goals.new_accounts}       loading={kpiLoading} />
+            <KpiScorecard label="Sample Books"       icon="📚" actual={kpis.sample_books}       target={goals.sample_books}       loading={kpiLoading} />
+            <KpiScorecard label="Cold Calls"         icon="📞" actual={kpis.cold_calls}         target={0}                        loading={kpiLoading} />
           </div>
         </div>
       )}
@@ -206,7 +205,7 @@ export default function ActivityLog() {
       {/* Filters */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="flex gap-1 flex-wrap">
-          {['all', 'call', 'email', 'note', 'meeting', 'sample_book'].map(t => (
+          {['all', 'scheduled_meeting', 'cold_call', 'sample_book', 'call', 'email', 'note'].map(t => (
             <button
               key={t}
               onClick={() => setFilter(t)}
@@ -217,7 +216,7 @@ export default function ActivityLog() {
               }`}
             >
               {t !== 'all' && <span>{TYPE_STYLES[t]?.icon}</span>}
-              {t === 'sample_book' ? 'Sample Book' : t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === 'all' ? 'All' : TYPE_STYLES[t]?.label || t}
             </button>
           ))}
         </div>
