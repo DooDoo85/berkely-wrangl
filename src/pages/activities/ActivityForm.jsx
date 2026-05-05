@@ -11,6 +11,35 @@ const TYPES = [
   { value: 'note',              label: 'Note',              icon: '📝' },
 ]
 
+// Persist drafts so unfinished notes survive tab switches / refreshes
+const DRAFT_KEY = 'wrangl_activity_draft_v1'
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const draft = JSON.parse(raw)
+    // Drafts older than 24 hours are stale — discard
+    if (Date.now() - (draft._savedAt || 0) > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(DRAFT_KEY)
+      return null
+    }
+    return draft
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(draft) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, _savedAt: Date.now() }))
+  } catch {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY) } catch {}
+}
+
 export default function ActivityForm({
   onSave,
   onCancel,
@@ -19,15 +48,17 @@ export default function ActivityForm({
   compact           = false,
 }) {
   const { profile } = useAuth()
-  const [type,        setType]        = useState('scheduled_meeting')
-  const [subject,     setSubject]     = useState('')
-  const [body,        setBody]        = useState('')
-  const [customerId,  setCustomerId]  = useState(defaultCustomerId || '')
-  const [orderId,     setOrderId]     = useState(defaultOrderId || '')
-  const [followUp,    setFollowUp]    = useState('')
-  const [quantity,    setQuantity]    = useState(1)
+  const draft = loadDraft()
+  const [type,        setType]        = useState(draft?.type || 'scheduled_meeting')
+  const [subject,     setSubject]     = useState(draft?.subject || '')
+  const [body,        setBody]        = useState(draft?.body || '')
+  const [customerId,  setCustomerId]  = useState(defaultCustomerId || draft?.customerId || '')
+  const [orderId,     setOrderId]     = useState(defaultOrderId || draft?.orderId || '')
+  const [followUp,    setFollowUp]    = useState(draft?.followUp || '')
+  const [quantity,    setQuantity]    = useState(draft?.quantity || 1)
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
+  const [draftRestored, setDraftRestored] = useState(!!draft && (draft.subject || draft.body))
   const [customers,   setCustomers]   = useState([])
   const [orders,      setOrders]      = useState([])
   const [custSearch,  setCustSearch]  = useState('')
@@ -40,6 +71,16 @@ export default function ActivityForm({
     if (defaultCustomerId) loadDefaultCustomer(defaultCustomerId)
     if (defaultOrderId)    loadDefaultOrder(defaultOrderId)
   }, [])
+
+  // Auto-save draft as user types (debounced via setTimeout pattern)
+  useEffect(() => {
+    // Don't save empty drafts
+    if (!subject.trim() && !body.trim()) return
+    const handle = setTimeout(() => {
+      saveDraft({ type, subject, body, customerId, orderId, followUp, quantity })
+    }, 400)
+    return () => clearTimeout(handle)
+  }, [type, subject, body, customerId, orderId, followUp, quantity])
 
   async function fetchCustomers() {
     const { data } = await supabase
@@ -105,6 +146,7 @@ export default function ActivityForm({
     })
 
     if (error) { setError(error.message); setSaving(false); return }
+    clearDraft()
     onSave?.()
   }
 
@@ -119,6 +161,33 @@ export default function ActivityForm({
           <button onClick={onCancel} className="text-stone-400 hover:text-stone-600 text-xl leading-none">✕</button>
         )}
       </div>
+
+      {/* Draft restored notice */}
+      {draftRestored && (
+        <div className="mb-4 flex items-center justify-between gap-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center gap-2 text-xs text-amber-800">
+            <span>💾</span>
+            <span>Draft restored from earlier</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              clearDraft()
+              setType('scheduled_meeting')
+              setSubject('')
+              setBody('')
+              setCustomerId(defaultCustomerId || '')
+              setOrderId(defaultOrderId || '')
+              setFollowUp('')
+              setQuantity(1)
+              setDraftRestored(false)
+            }}
+            className="text-xs text-amber-700 hover:text-amber-900 font-semibold"
+          >
+            Discard
+          </button>
+        </div>
+      )}
 
       {/* Type selector */}
       <div className="grid grid-cols-3 gap-2 mb-5">
