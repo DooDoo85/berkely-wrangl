@@ -16,9 +16,18 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ─── KPI Tile ───────────────────────────────────────────────────────────────
+// ─── KPI Tile (goal-aware) ──────────────────────────────────────────────────
 
-function KpiTile({ label, value, loading, iconBg, iconColor, icon }) {
+function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon }) {
+  const v = Number(value || 0)
+  const g = Number(goal || 0)
+  const pct = g > 0 ? Math.min((v / g) * 100, 100) : 0
+  const hit = g > 0 && v >= g
+  const onTrack = g > 0 && v >= g * 0.5
+  // Color logic: green when hit goal, amber when 50%+, gray otherwise
+  const barColor = hit ? 'bg-emerald-500' : onTrack ? 'bg-amber-500' : 'bg-gray-300'
+  const valueColor = hit ? 'text-emerald-700' : 'text-gray-900'
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 transition-shadow duration-200 hover:shadow-sm">
       <div className="flex items-start gap-3">
@@ -27,10 +36,29 @@ function KpiTile({ label, value, loading, iconBg, iconColor, icon }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{label}</div>
-          <div className="mt-1 text-3xl font-bold text-gray-900 tabular-nums leading-none">
-            {loading ? "—" : value}
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>
+              {loading ? "—" : v}
+            </span>
+            {g > 0 && !loading && (
+              <span className="text-sm font-medium text-gray-400 tabular-nums">/ {g}</span>
+            )}
           </div>
-          <div className="text-xs text-gray-400 mt-1.5">This week</div>
+          {g > 0 ? (
+            <div className="mt-2.5">
+              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${barColor} transition-all duration-500`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-gray-400 mt-1">
+                {hit ? '✓ Goal hit' : `${Math.round(pct)}% to goal`}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-400 mt-2">This week</div>
+          )}
         </div>
       </div>
     </div>
@@ -180,7 +208,18 @@ export default function RepHome() {
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
-    kpis:     { newCustomers: 0, meetings: 0, quotesSent: 0, ordersSubmitted: 0 },
+    kpis:     {
+      scheduledMeetings: 0,
+      newAccounts:       0,
+      sampleBooks:       0,
+      coldCalls:         0,
+    },
+    goals: {
+      scheduled_meetings: 15,
+      new_accounts:       2,
+      sample_books:       3,
+      cold_calls:         0,
+    },
     pipeline: { quotesDraft: 0, quotesSent: 0, ordersSubmitted: 0, inProduction: 0 },
     followUps: [],
     upcomingTasks: [],
@@ -202,10 +241,11 @@ export default function RepHome() {
       const repName = repRow?.rep_name;
 
       const [
-        newCustomersRes,
-        meetingsRes,
-        quotesSentWTDRes,
-        ordersSubmittedWTDRes,
+        goalsRes,
+        newAccountsRes,
+        scheduledMeetingsRes,
+        coldCallsRes,
+        sampleBooksRes,
         quotesDraftRes,
         quotesSentRes,
         ordersSubRes,
@@ -213,21 +253,21 @@ export default function RepHome() {
         followUpsRes,
         upcomingTasksRes,
       ] = await Promise.all([
+        supabase.from("weekly_goals").select("metric_key, target_value"),
+
         repName
           ? supabase.from("customers").select("id", { count: "exact", head: true })
               .eq("sales_rep", repName).gte("created_at", weekStart)
           : Promise.resolve({ count: 0 }),
 
         supabase.from("activities").select("id", { count: "exact", head: true })
-          .eq("user_id", profile.id).eq("activity_type", "meeting").gte("activity_date", weekStartDate),
+          .eq("user_id", profile.id).eq("activity_type", "scheduled_meeting").gte("activity_date", weekStartDate),
 
-        supabase.from("quotes").select("id", { count: "exact", head: true })
-          .eq("sales_rep", profile.email).eq("status", "sent").gte("updated_at", weekStart),
+        supabase.from("activities").select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id).eq("activity_type", "cold_call").gte("activity_date", weekStartDate),
 
-        repName
-          ? supabase.from("orders").select("id", { count: "exact", head: true })
-              .eq("sales_rep", repName).eq("status", "submitted").gte("created_at", weekStart)
-          : Promise.resolve({ count: 0 }),
+        supabase.from("activities").select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id).eq("activity_type", "sample_book").gte("activity_date", weekStartDate),
 
         supabase.from("quotes").select("id", { count: "exact", head: true })
           .eq("sales_rep", profile.email).eq("status", "draft"),
@@ -258,13 +298,18 @@ export default function RepHome() {
           .order("due_date", { ascending: true }).limit(5),
       ]);
 
+      // Build goals map (defaults if not in DB yet)
+      const goalsMap = { scheduled_meetings: 15, new_accounts: 2, sample_books: 3, cold_calls: 0 }
+      ;(goalsRes?.data || []).forEach(g => { goalsMap[g.metric_key] = g.target_value })
+
       setData({
         kpis: {
-          newCustomers:    newCustomersRes.count ?? 0,
-          meetings:        meetingsRes.count ?? 0,
-          quotesSent:      quotesSentWTDRes.count ?? 0,
-          ordersSubmitted: ordersSubmittedWTDRes.count ?? 0,
+          scheduledMeetings: scheduledMeetingsRes.count ?? 0,
+          newAccounts:       newAccountsRes.count ?? 0,
+          sampleBooks:       sampleBooksRes.count ?? 0,
+          coldCalls:         coldCallsRes.count ?? 0,
         },
+        goals: goalsMap,
         pipeline: {
           quotesDraft:     quotesDraftRes.count ?? 0,
           quotesSent:      quotesSentRes.count ?? 0,
@@ -311,14 +356,34 @@ export default function RepHome() {
 
       {/* Weekly KPI Strip */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <KpiTile label="New Customers"    value={data.kpis.newCustomers}
-          loading={loading} iconBg="bg-emerald-50"  iconColor="text-emerald-600" icon={Icon.users} />
-        <KpiTile label="Meetings"         value={data.kpis.meetings}
-          loading={loading} iconBg="bg-blue-50"     iconColor="text-blue-600"    icon={Icon.calendar} />
-        <KpiTile label="Quotes Sent"      value={data.kpis.quotesSent}
-          loading={loading} iconBg="bg-purple-50"   iconColor="text-purple-600"  icon={Icon.message} />
-        <KpiTile label="Orders Submitted" value={data.kpis.ordersSubmitted}
-          loading={loading} iconBg="bg-amber-50"    iconColor="text-amber-600"   icon={Icon.package} />
+        <KpiTile
+          label="Scheduled Meetings"
+          value={data.kpis.scheduledMeetings}
+          goal={data.goals.scheduled_meetings}
+          loading={loading}
+          iconBg="bg-blue-50"     iconColor="text-blue-600"    icon={Icon.calendar}
+        />
+        <KpiTile
+          label="New Accounts"
+          value={data.kpis.newAccounts}
+          goal={data.goals.new_accounts}
+          loading={loading}
+          iconBg="bg-emerald-50"  iconColor="text-emerald-600" icon={Icon.users}
+        />
+        <KpiTile
+          label="Sample Books"
+          value={data.kpis.sampleBooks}
+          goal={data.goals.sample_books}
+          loading={loading}
+          iconBg="bg-purple-50"   iconColor="text-purple-600"  icon={Icon.package}
+        />
+        <KpiTile
+          label="Cold Calls"
+          value={data.kpis.coldCalls}
+          goal={0}
+          loading={loading}
+          iconBg="bg-amber-50"    iconColor="text-amber-600"   icon={Icon.message}
+        />
       </div>
 
       {/* Quick Actions */}
