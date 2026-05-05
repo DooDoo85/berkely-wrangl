@@ -25,6 +25,7 @@ import OpsHub from './pages/ops/OpsHub'
 import AdjustInventory from './pages/ops/AdjustInventory'
 import CommitMaterial from './pages/ops/CommitMaterial'
 import ReceiveStock from './pages/ops/ReceiveStock'
+import ReceiveAgainstPO from './pages/ops/ReceiveAgainstPO'
 import TransactionLog from './pages/ops/TransactionLog'
 import ProductionHub from './pages/ops/ProductionHub'
 import OrdersOnHold from './pages/orders/OrdersOnHold'
@@ -110,6 +111,7 @@ function AppRoutes() {
         <Route path="/ops/adjust" element={<AdjustInventory />} />
         <Route path="/ops/commit" element={<CommitMaterial />} />
         <Route path="/ops/receive" element={<ReceiveStock />} />
+        <Route path="/ops/receive-po/:id" element={<ReceiveAgainstPO />} />
         <Route path="/ops/transactions" element={<TransactionLog />} />
 
         {/* Orders on Hold */}
