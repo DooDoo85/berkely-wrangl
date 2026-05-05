@@ -282,12 +282,28 @@ async function updateUser({ user_id, full_name, role }) {
 async function sendPasswordReset({ user_id, email }) {
   if (!email) return { ok: false, error: 'email required' }
 
-  // Generate a recovery link via admin API (doesn't trigger Supabase's own email)
+  // Check if user has ever signed in before. If not, treat this as a fresh invite
+  // because Supabase's "recovery" flow doesn't work for users who never set a password.
+  let isNewUser = false
+  try {
+    const userRes = user_id
+      ? await adminFetch(`/auth/v1/admin/users/${user_id}`, 'GET')
+      : null
+    const userData = userRes?.data
+    // A user who never signed in has last_sign_in_at = null
+    isNewUser = !userData?.last_sign_in_at
+  } catch {
+    // If we can't determine, default to invite (safer — works for both)
+    isNewUser = true
+  }
+
+  // Generate the appropriate link type
+  const linkType = isNewUser ? 'invite' : 'recovery'
   const { ok, data, status } = await adminFetch('/auth/v1/admin/generate_link', 'POST', {
-    type: 'recovery',
+    type: linkType,
     email,
   })
-  if (!ok) return { ok: false, error: data?.msg || data?.error || `Failed to generate reset link (${status})` }
+  if (!ok) return { ok: false, error: data?.msg || data?.error || `Failed to generate link (${status})` }
 
   const resetLink = data.action_link || data.properties?.action_link
   if (!resetLink) return { ok: false, error: 'No reset link returned' }
@@ -296,18 +312,32 @@ async function sendPasswordReset({ user_id, email }) {
   const profileRes = await adminFetch(`/rest/v1/profiles?id=eq.${user_id || ''}&select=full_name`, 'GET')
   const fullName = profileRes.data?.[0]?.full_name || null
 
+  // Different copy depending on whether they're setting initial password or resetting
+  const subject = isNewUser
+    ? 'Welcome to Wrangl — set your password'
+    : 'Reset your Wrangl password'
+
+  const heading = isNewUser ? '🐄 Welcome to Wrangl' : '🐄 Reset your Wrangl password'
+  const intro = isNewUser
+    ? `Your Wrangl account is ready. Click below to set your password and log in for the first time:`
+    : `A password reset was requested for your Wrangl account. Click below to set a new password:`
+  const buttonLabel = isNewUser ? 'Set Your Password' : 'Reset Password'
+  const footer = isNewUser
+    ? `This link expires in 24 hours. If it expires, just ask David to send a new one.`
+    : `If you didn't request this, you can ignore this email.`
+
   const html = `
     <!DOCTYPE html>
     <html>
       <body style="font-family:-apple-system,Segoe UI,sans-serif;color:#333;max-width:560px;margin:0 auto;padding:24px;background:#fafafa">
         <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
-          <h1 style="font-size:22px;margin:0 0 16px;color:#261810">🐄 Reset your Wrangl password</h1>
+          <h1 style="font-size:22px;margin:0 0 16px;color:#261810">${heading}</h1>
           <p>${fullName ? `Hi ${fullName.split(' ')[0]},` : 'Hi,'}</p>
-          <p>A password reset was requested for your Wrangl account. Click below to set a new password:</p>
+          <p>${intro}</p>
           <p style="text-align:center;margin:30px 0">
-            <a href="${resetLink}" style="background:#5a3a24;color:#f5e6d0;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Reset Password</a>
+            <a href="${resetLink}" style="background:#5a3a24;color:#f5e6d0;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${buttonLabel}</a>
           </p>
-          <p style="font-size:12px;color:#888">If you didn't request this, you can ignore this email.</p>
+          <p style="font-size:12px;color:#888">${footer}</p>
           <p style="font-size:13px;color:#888;margin-top:24px;border-top:1px solid #eee;padding-top:16px">— David</p>
         </div>
       </body>
@@ -316,15 +346,14 @@ async function sendPasswordReset({ user_id, email }) {
 
   const emailResult = await sendViaResend({
     to: email,
-    subject: 'Reset your Wrangl password',
+    subject,
     html,
   })
 
   if (!emailResult.ok) {
-    // Email failed — return link as fallback
-    return { ok: true, reset_link: resetLink, email_sent: false, warning: `Email failed: ${emailResult.error}. Share the link manually.` }
+    return { ok: true, reset_link: resetLink, email_sent: false, link_type: linkType, warning: `Email failed: ${emailResult.error}. Share the link manually.` }
   }
-  return { ok: true, email_sent: true }
+  return { ok: true, email_sent: true, link_type: linkType, is_new_user: isNewUser }
 }
 
 async function setActive({ user_id, active }) {
