@@ -171,9 +171,6 @@ export default function ExecutiveHome() {
         .in("status",["credit_hold","credit_ok","po_sent","printed","in_production"])
         .order("epic_status_date",{ascending:true});
 
-      const stuckOrders = (activeOrders??[])
-        .filter(o => ["credit_hold","credit_ok","po_sent","printed"].includes(o.status) && daysSince(o.epic_status_date || o.updated_at) > 5)
-        .sort((a,b) => daysSince(b.epic_status_date || b.updated_at)-daysSince(a.epic_status_date || a.updated_at)).slice(0,5);
       const productionLoad = (activeOrders??[]).reduce((acc,o) => {
         acc[o.status]=(acc[o.status]??0)+1; return acc;
       },{});
@@ -226,6 +223,11 @@ export default function ExecutiveHome() {
       const { data: wipData } = await supabase.from("roller_wip").select("*").order("days_in_status",{ascending:false});
       const creditOK = (wipData??[]).filter(r=>r.order_status==="CREDIT OK");
       const printed  = (wipData??[]).filter(r=>r.order_status==="PRINTED");
+
+      // Stuck orders — sourced from WIP (single source of truth from ePIC)
+      const stuckOrders = (wipData??[])
+        .filter(w => ["CREDIT OK","PO SENT","PRINTED"].includes(w.order_status) && (w.days_in_status ?? 0) > 5)
+        .sort((a,b) => (b.days_in_status??0)-(a.days_in_status??0)).slice(0,5);
 
       // Credit OK from email-imported table
       const { data: creditOkRows } = await supabase
@@ -388,13 +390,13 @@ export default function ExecutiveHome() {
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
-                  const days = daysSince(o.epic_status_date || o.updated_at);
+                  const days = o.days_in_status ?? 0;
                   return (
-                    <div key={o.id} onClick={()=>navigate(`/orders/${o.id}`)}
+                    <div key={o.wo} onClick={()=>navigate(`/orders?search=${o.order_no}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-red-100/40 rounded-lg px-2 transition-colors">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{o.order_number ?? o.id}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{o.sales_rep ?? "—"} · {o.status?.replace(/_/g," ")}</p>
+                        <p className="text-sm font-semibold text-gray-900">{o.order_no}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{o.customer ?? "—"} · {o.order_status?.toLowerCase()}</p>
                       </div>
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${days>=8?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>
                         Day {days} →
