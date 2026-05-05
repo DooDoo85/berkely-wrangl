@@ -55,6 +55,7 @@ import PriceGridImport from './pages/inventory/PriceGridImport'
 
 // System
 import FeedbackTickets from './pages/system/FeedbackTickets'
+import UserManagement from './pages/system/UserManagement'
 
 // Purchasing
 import PurchaseOrders from './pages/purchasing/PurchaseOrders'
@@ -137,6 +138,7 @@ function AppRoutes() {
 
         {/* System */}
         <Route path="/system/tickets" element={<FeedbackTickets />} />
+        <Route path="/system/users" element={<UserManagement />} />
 
         {/* Freight / Settings */}
         <Route path="/freight" element={<Placeholder title="Freight" />} />
