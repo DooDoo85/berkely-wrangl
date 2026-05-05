@@ -3,11 +3,12 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 const TYPES = [
-  { value: 'call',        label: 'Call',        icon: '📞' },
-  { value: 'email',       label: 'Email',        icon: '✉️' },
-  { value: 'note',        label: 'Note',         icon: '📝' },
-  { value: 'meeting',     label: 'Meeting',      icon: '🤝' },
-  { value: 'sample_book', label: 'Sample Book',  icon: '📚' },
+  { value: 'scheduled_meeting', label: 'Scheduled Meeting', icon: '🤝' },
+  { value: 'cold_call',         label: 'Cold Call',         icon: '📞' },
+  { value: 'sample_book',       label: 'Sample Book',       icon: '📚' },
+  { value: 'call',              label: 'Other Call',        icon: '☎️' },
+  { value: 'email',             label: 'Email',             icon: '✉️' },
+  { value: 'note',              label: 'Note',              icon: '📝' },
 ]
 
 export default function ActivityForm({
@@ -18,7 +19,7 @@ export default function ActivityForm({
   compact           = false,
 }) {
   const { profile } = useAuth()
-  const [type,        setType]        = useState('call')
+  const [type,        setType]        = useState('scheduled_meeting')
   const [subject,     setSubject]     = useState('')
   const [body,        setBody]        = useState('')
   const [customerId,  setCustomerId]  = useState(defaultCustomerId || '')
@@ -120,7 +121,7 @@ export default function ActivityForm({
       </div>
 
       {/* Type selector */}
-      <div className="grid grid-cols-5 gap-2 mb-5">
+      <div className="grid grid-cols-3 gap-2 mb-5">
         {TYPES.map(t => (
           <button
             key={t.value}
