@@ -81,6 +81,7 @@ const EXEC_NAV = [
   {
     type: 'section', label: 'System', collapsible: true,
     items: [
+      { type: 'link', to: '/system/tickets',             icon: '💬', label: 'Feedback Tickets' },
       { type: 'link', to: '/inventory/committed-import', icon: '📥', label: 'Committed Import' },
       { type: 'link', to: '/inventory/match-review',     icon: '🔍', label: 'Match Review'     },
       { type: 'link', to: '/inventory/price-grids',      icon: '💲', label: 'Price Grids'      },
