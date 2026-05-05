@@ -138,6 +138,12 @@ export default function ProductionHub() {
       return
     }
 
+    // When already in production, require at least one cut (otherwise nothing to log)
+    if (order.status === 'in_production' && !order._manual && validCuts.length === 0) {
+      setError('Add at least one fabric cut to log')
+      return
+    }
+
     // Check stock for each cut
     for (const cut of validCuts) {
       const fabric = fabrics.find(f => f.id === cut.fabricId)
@@ -172,8 +178,8 @@ export default function ProductionHub() {
 
         if (createErr) throw new Error('Failed to create order: ' + createErr.message)
         orderId = newOrder.id
-      } else {
-        // Update existing order status
+      } else if (order.status !== 'in_production') {
+        // First time starting — update status
         const { error: updateErr } = await supabase
           .from('orders')
           .update({
@@ -187,6 +193,7 @@ export default function ProductionHub() {
 
         if (updateErr) throw new Error('Failed to update order: ' + updateErr.message)
       }
+      // else: already in production — just log additional cuts, no status change
 
       // Process each cut — deduct from inventory + log transaction
       for (const cut of validCuts) {
@@ -220,7 +227,10 @@ export default function ProductionHub() {
       const cutSummary = validCuts.length > 0
         ? ` — ${validCuts.length} fabric cut${validCuts.length > 1 ? 's' : ''} logged`
         : ''
-      setSuccess(`Order #${order.order_number} → In Production ✓${cutSummary}`)
+      const action = order.status === 'in_production' && !order._manual
+        ? 'Cuts logged'
+        : '→ In Production'
+      setSuccess(`Order #${order.order_number} ${action} ✓${cutSummary}`)
       setOrder(null)
       setOrderInput('')
       setCuts([])
@@ -495,7 +505,7 @@ export default function ProductionHub() {
           {/* ── Step 3: Actions ───────────────────────────────────────────── */}
           <div className="card p-5">
             <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-4">
-              {order.status === 'on_hold' ? 'Actions' : '3 · Start'}
+              {order.status === 'on_hold' ? 'Actions' : order.status === 'in_production' ? '3 · Log Cuts' : '3 · Start'}
             </p>
 
             <div className="flex items-center gap-3">
@@ -526,10 +536,14 @@ export default function ProductionHub() {
                 <>
                   <button
                     onClick={handleStartProduction}
-                    disabled={saving || (!order._manual && order.status === 'in_production')}
+                    disabled={saving}
                     className="flex-1 py-3 bg-brand-dark text-white font-semibold rounded-xl hover:bg-brand-dark/90 disabled:opacity-40 transition-colors text-sm"
                   >
-                    {saving ? 'Processing...' : order.status === 'in_production' ? 'Already In Production' : '▶ Start Production'}
+                    {saving
+                      ? 'Processing...'
+                      : order.status === 'in_production'
+                        ? '➕ Log Cuts'
+                        : '▶ Start Production'}
                   </button>
                   <button
                     onClick={() => setShowHoldModal(true)}
