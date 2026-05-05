@@ -282,23 +282,25 @@ async function updateUser({ user_id, full_name, role }) {
 async function sendPasswordReset({ user_id, email }) {
   if (!email) return { ok: false, error: 'email required' }
 
-  // Check if user has ever signed in before. If not, treat this as a fresh invite
-  // because Supabase's "recovery" flow doesn't work for users who never set a password.
+  // Check if user has ever signed in before. If not, treat this as a fresh
+  // password setup because Supabase's "recovery" flow doesn't work cleanly
+  // for users who never set a password.
   let isNewUser = false
   try {
     const userRes = user_id
       ? await adminFetch(`/auth/v1/admin/users/${user_id}`, 'GET')
       : null
     const userData = userRes?.data
-    // A user who never signed in has last_sign_in_at = null
     isNewUser = !userData?.last_sign_in_at
   } catch {
-    // If we can't determine, default to invite (safer — works for both)
     isNewUser = true
   }
 
-  // Generate the appropriate link type
-  const linkType = isNewUser ? 'invite' : 'recovery'
+  // For users who never logged in, use magiclink (one-time login) — it works
+  // for already-registered users (unlike 'invite') and lets them set a password
+  // immediately after signing in (unlike 'recovery' which prompts for old pw).
+  // For users who already set a password, use 'recovery'.
+  const linkType = isNewUser ? 'magiclink' : 'recovery'
   const { ok, data, status } = await adminFetch('/auth/v1/admin/generate_link', 'POST', {
     type: linkType,
     email,
@@ -308,22 +310,20 @@ async function sendPasswordReset({ user_id, email }) {
   const resetLink = data.action_link || data.properties?.action_link
   if (!resetLink) return { ok: false, error: 'No reset link returned' }
 
-  // Get the user's name for personalization
   const profileRes = await adminFetch(`/rest/v1/profiles?id=eq.${user_id || ''}&select=full_name`, 'GET')
   const fullName = profileRes.data?.[0]?.full_name || null
 
-  // Different copy depending on whether they're setting initial password or resetting
   const subject = isNewUser
-    ? 'Welcome to Wrangl — set your password'
+    ? 'Welcome to Wrangl — sign in to set your password'
     : 'Reset your Wrangl password'
 
   const heading = isNewUser ? '🐄 Welcome to Wrangl' : '🐄 Reset your Wrangl password'
   const intro = isNewUser
-    ? `Your Wrangl account is ready. Click below to set your password and log in for the first time:`
+    ? `Your Wrangl account is ready. Click below to log in. Once you're in, go to your profile to set a password so you can log in with email + password going forward.`
     : `A password reset was requested for your Wrangl account. Click below to set a new password:`
-  const buttonLabel = isNewUser ? 'Set Your Password' : 'Reset Password'
+  const buttonLabel = isNewUser ? 'Log In to Wrangl' : 'Reset Password'
   const footer = isNewUser
-    ? `This link expires in 24 hours. If it expires, just ask David to send a new one.`
+    ? `This link expires in 1 hour. If it expires, just ask David to send a new one.`
     : `If you didn't request this, you can ignore this email.`
 
   const html = `
