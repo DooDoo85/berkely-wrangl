@@ -250,8 +250,11 @@ export default function ExecutiveHome() {
       const faux   = (productLines??[]).find(p=>p.product_line==="Faux Wood Blinds")??{};
       const roller = (productLines??[]).find(p=>p.product_line==="Roller Shades")??{};
 
+      // Team orders this week — use epic_status_date (date status actually changed)
+      // not updated_at (which gets touched by every ePIC sync, making old orders count)
+      const weekStartDate = weekStart.slice(0, 10)
       const { data: repRows } = await supabase.from("orders").select("sales_rep")
-        .eq("status","invoiced").gte("updated_at",weekStart).not("sales_rep","is",null);
+        .eq("status","invoiced").gte("epic_status_date",weekStartDate).not("sales_rep","is",null);
       const repMap = {};
       (repRows??[]).forEach(r=>{ const n=r.sales_rep?.trim(); if(n) repMap[n]=(repMap[n]??0)+1; });
       const repOrders = Object.entries(repMap).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
