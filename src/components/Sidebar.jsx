@@ -8,8 +8,8 @@ const BG_HOVER      = 'hover:bg-[#382618]'
 const BG_ACTIVE     = 'bg-[#5a3a24]'
 const BG_GROUP_OPEN = 'bg-[#382618]'
 const BORDER        = 'border-[#382618]'
-const TEXT_MUTED    = 'text-[#b89878]'
-const TEXT_HOVER    = 'hover:text-[#ffffff]'
+const TEXT_MUTED    = 'text-white/80'
+const TEXT_HOVER    = 'hover:text-white'
 const TEXT_SECTION  = 'text-[#d4aa70]'
 
 // ── Nav structure ─────────────────────────────────────────────────────────────
