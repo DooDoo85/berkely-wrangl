@@ -19,6 +19,7 @@ import InventoryList from './pages/inventory/InventoryList'
 import PartDetail from './pages/inventory/PartDetail'
 import CommittedStockImport from './pages/inventory/CommittedStockImport'
 import MatchReview from './pages/inventory/MatchReview'
+import { ContainerList, ContainerDetail } from './pages/inventory/Containers'
 
 // Ops
 import OpsHub from './pages/ops/OpsHub'
@@ -107,6 +108,8 @@ function AppRoutes() {
         <Route path="/inventory/committed-import" element={<CommittedStockImport />} />
         <Route path="/inventory/match-review" element={<MatchReview />} />
         <Route path="/inventory/price-grids" element={<PriceGridImport />} />
+        <Route path="/inventory/containers" element={<ContainerList />} />
+        <Route path="/inventory/containers/:id" element={<ContainerDetail />} />
         <Route path="/inventory/:id" element={<PartDetail />} />
 
         {/* Ops */}
