@@ -71,6 +71,9 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
           {loading ? "—" : fmt$Full(data.sales_wtd)}
         </span>
         <span className="text-xs text-gray-400">WTD</span>
+        <span className="text-xs text-gray-400 ml-auto tabular-nums">
+          {loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}
+        </span>
       </div>
 
       <div className="mb-4">
@@ -83,11 +86,17 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
           <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_mtd)}
           </p>
+          <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+            {loading ? "" : `${(data.units_mtd ?? 0).toLocaleString()} units`}
+          </p>
         </div>
         <div>
           <p className="text-[10px] text-gray-400 uppercase tracking-wide">YTD</p>
           <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_ytd)}
+          </p>
+          <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+            {loading ? "" : `${(data.units_ytd ?? 0).toLocaleString()} units`}
           </p>
         </div>
         <div>
