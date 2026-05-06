@@ -6,8 +6,9 @@
 //   BERKELY ROLLER SHADE FULL SHIP  → orders.status = 'invoiced', roller_shipments_daily, inventory relief
 //   BERKELY FAUX FULL SHIP          → orders.status = 'invoiced'
 //   BEREKLY FAUX FULL SHIP          → orders.status = 'invoiced' (typo variant)
-//   BERKELY ROLLER SHADE PRINTED    → orders.status = 'printed'
-//   BERKELY FAUX PRINTED            → orders.status = 'printed'
+//   BERKELY ROLLER SHADE PRINTED    → orders.status = 'printed' (legacy, still handled)
+//   BERKELY FAUX PRINTED            → orders.status = 'printed' (legacy, still handled)
+//   BERKELY PRINTED ORDERS          → orders.status = 'printed', product_line tagged, stale faux purged
 //   ROLLER SHADE INVOICE BY PRODUCT → product_line_sales (Roller Shades)
 //   COMBINED ROLLER/FAUX            → product_line_sales (both lines)
 //   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (RS PART only)
@@ -308,6 +309,9 @@ async function processPrinted(csvText, orderType) {
   console.log(`  ${orderType.toUpperCase()} PRINTED: ${rows.length} rows`)
   let updated = 0
 
+  // Track faux order numbers seen in this report — used for purge step below
+  const fauxOrdersInReport = new Set()
+
   for (const row of rows) {
     const orderNo = (row.OrderNo || row.Wo || '').trim()
     if (!orderNo) continue
@@ -316,18 +320,24 @@ async function processPrinted(csvText, orderType) {
     const csvLine = productTypeToLine(row.ProductType)
     const productLine = csvLine || (orderType === 'faux' ? 'faux' : orderType === 'roller' ? 'roller' : null)
 
+    if (productLine === 'faux') fauxOrdersInReport.add(orderNo)
+
     const existing = await sbQuery('orders', `epic_id=eq.${orderNo}&select=id,status&limit=1`)
     if (!Array.isArray(existing) || !existing[0]) {
       await sbUpsert('orders', [{
-        epic_id:       orderNo,
-        order_number:  orderNo,
-        customer_name: row.Customer || row.CustomerName || '',
-        status:        'printed',
-        product_line:  productLine,
-        order_date:    row.PrintedDate || row.OrderDate || null,
-        sales_rep:     row.Salesperson || null,
-        source:        'epic',
-        read_only:     true,
+        epic_id:         orderNo,
+        order_number:    orderNo,
+        customer_name:   row.Customer || row.CustomerName || '',
+        sidemark:        row.Sidemark || null,
+        status:          'printed',
+        product_line:    productLine,
+        epic_status_date: row.PrintedDate || null,
+        order_date:      row.PrintedDate || row.OrderDate || null,
+        total_units:     row.TotalUnits ? parseInt(row.TotalUnits) : null,
+        order_amount:    row.TotalSales ? parseFloat(row.TotalSales) : null,
+        sales_rep:       row.Salesperson || null,
+        source:          'epic',
+        read_only:       true,
       }])
       updated++
       continue
@@ -336,19 +346,42 @@ async function processPrinted(csvText, orderType) {
     const current = existing[0].status
     if (['draft', 'submitted'].includes(current)) {
       await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        status:       'printed',
-        product_line: productLine,
-        updated_at:   new Date().toISOString(),
+        status:           'printed',
+        product_line:     productLine,
+        epic_status_date: row.PrintedDate || null,
+        updated_at:       new Date().toISOString(),
       })
       updated++
     } else {
-      // Even if status is unchanged, still backfill product_line if missing
+      // Even if status is unchanged, still backfill product_line + printed date if missing
       await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        product_line: productLine,
-        updated_at:   new Date().toISOString(),
+        product_line:     productLine,
+        epic_status_date: row.PrintedDate || null,
+        updated_at:       new Date().toISOString(),
       })
     }
   }
+
+  // ── PURGE stale faux printed orders ────────────────────────────────────────
+  // Any faux order currently in 'printed' status that was NOT in today's report
+  // has moved on (invoiced/shipped). Mirror how roller_wip works — snapshot replacement.
+  if ((orderType === 'faux' || orderType === 'combined') && fauxOrdersInReport.size > 0) {
+    const inList = [...fauxOrdersInReport].join(',')
+    const purged = await sbUpdate(
+      'orders',
+      `status=eq.printed&product_line=eq.faux&order_number=not.in.(${inList})`,
+      { status: 'invoiced', updated_at: new Date().toISOString() }
+    )
+    console.log(`  Purged stale faux printed orders not in today's report (${fauxOrdersInReport.size} kept)`)
+
+    // Also clean up null-customer / null-product_line orphan printed rows
+    await sbUpdate(
+      'orders',
+      `status=eq.printed&product_line=is.null&customer_name=is.null`,
+      { status: 'invoiced', updated_at: new Date().toISOString() }
+    )
+  }
+
   console.log(`  Updated ${updated} orders to printed`)
   return updated
 }
