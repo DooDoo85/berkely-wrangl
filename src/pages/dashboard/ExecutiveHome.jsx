@@ -31,12 +31,18 @@ function fmt$Full(n) {
 
 function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
   if (!data.length) return <div className="h-10" />;
-  const max = Math.max(...data, 1);
+  // Use 90th percentile as the visual ceiling so 1-2 outlier days don't flatten the rest.
+  // Anything above the 90th percentile clips to the top of the chart.
+  const sorted = [...data].sort((a, b) => a - b);
+  const p90 = sorted[Math.floor(sorted.length * 0.9)] || 0;
+  const max = Math.max(p90, ...data.slice(0, 1)) || 1; // never use 0 as max
+  const ceiling = Math.max(max, 1);
   const w = 280, h = 40;
   const step = data.length > 1 ? w / (data.length - 1) : 0;
   const points = data.map((v, i) => {
     const x = i * step;
-    const y = h - (v / max) * (h - 4) - 2;
+    const clamped = Math.min(v, ceiling); // clip to 90th percentile
+    const y = h - (clamped / ceiling) * (h - 4) - 2;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   const linePath = points.join(" ");
@@ -123,12 +129,16 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
 
 function DailySalesChart({ data = [] }) {
   if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-gray-400">No data</div>;
-  const maxSales = Math.max(...data.map(d => d.sales), 1);
+  // 90th percentile ceiling so outlier days don't flatten the rest
+  const sorted = [...data].map(d => d.sales).sort((a, b) => a - b);
+  const p90 = sorted[Math.floor(sorted.length * 0.9)] || 0;
+  const ceiling = Math.max(p90, ...sorted.slice(0, 1), 1);
   return (
     <div className="px-1">
-      <div className="flex items-end gap-1.5 h-28 mb-2">
+      <div className="flex items-end gap-2 h-32 mb-2">
         {data.map((d, i) => {
-          const pct = (d.sales / maxSales) * 100;
+          const clamped = Math.min(d.sales, ceiling);
+          const pct = ceiling > 0 ? (clamped / ceiling) * 100 : 0;
           const isToday = i === data.length - 1;
           const hasData = d.sales > 0;
           return (
@@ -140,7 +150,7 @@ function DailySalesChart({ data = [] }) {
               )}
               <div className="w-full rounded-t transition-all"
                 style={{
-                  height: `${Math.max(pct, hasData ? 3 : 0)}%`,
+                  height: `${Math.max(pct, hasData ? 4 : 0)}%`,
                   background: isToday ? '#7c3aed' : hasData ? '#c4b5fd' : 'transparent',
                   minHeight: hasData ? '4px' : '0',
                 }}
@@ -149,10 +159,12 @@ function DailySalesChart({ data = [] }) {
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-gray-400 px-0.5">
-        <span>{data[0]?.label}</span>
-        <span>{data[Math.floor(data.length/2)]?.label}</span>
-        <span>Today</span>
+      <div className="flex gap-2">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 text-center text-[10px] text-gray-400">
+            {i === data.length - 1 ? "Today" : d.label}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -231,10 +243,11 @@ export default function ExecutiveHome() {
       const weekStartDate = weekStart.slice(0, 10);
       const today = new Date().toISOString().slice(0, 10);
 
-      // ── In Production count ──────────────────────────────────────────
+      // ── In Production count (status OR wrangl_status flag) ────────────
+      // Rene's "Mark In Production" button only sets wrangl_status to keep ePIC sync from overwriting
       const { count: inProductionCount } = await supabase.from("orders")
         .select("*", { count: "exact", head: true })
-        .eq("status", "in_production");
+        .or("status.eq.in_production,wrangl_status.eq.in_production");
 
       // ── Avg days printed → invoiced (last 90 days) ───────────────────
       const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
@@ -346,21 +359,46 @@ export default function ExecutiveHome() {
       const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
 
       // ── Team — orders invoiced this week ──────────────────────────────
-      const { data: repRows } = await supabase.from("orders").select("sales_rep")
-        .eq("status", "invoiced").gte("epic_status_date", weekStartDate).not("sales_rep", "is", null);
-      const repMap = {};
-      (repRows ?? []).forEach(r => {
-        const n = r.sales_rep?.trim();
-        if (n) repMap[n] = (repMap[n] ?? 0) + 1;
-      });
-      const repOrders = Object.entries(repMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+      // sales_rep is null on most invoiced orders (ePIC processor doesn't populate it),
+      // so we fall back to credit_ok_orders.salesperson via order_no lookup.
+      const { data: invoicedRows } = await supabase.from("orders")
+        .select("order_number, sales_rep")
+        .eq("status", "invoiced").gte("epic_status_date", weekStartDate);
 
-      // ── Daily sales — last 15 days, status != quote ──────────────────
-      const fifteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+      // Build a salesperson lookup from credit_ok_orders (already loaded above)
+      const repByOrderNo = {};
+      (creditOkRowsData ?? []).forEach(r => {
+        if (r.order_no && r.salesperson) {
+          repByOrderNo[r.order_no] = r.salesperson;
+        }
+      });
+
+      const repMap = {};
+      (invoicedRows ?? []).forEach(r => {
+        const name = (r.sales_rep || repByOrderNo[r.order_number] || "").trim();
+        if (name) repMap[name] = (repMap[name] ?? 0) + 1;
+      });
+      const repOrders = Object.entries(repMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // ── Daily sales — last 5 business days, status != quote ──────────
+      // Walk back from today, skip Sat/Sun, until we have 5 weekdays.
+      const businessDays = [];
+      const cur = new Date();
+      cur.setHours(0, 0, 0, 0);
+      while (businessDays.length < 5) {
+        const dow = cur.getDay();
+        if (dow !== 0 && dow !== 6) {
+          businessDays.unshift(new Date(cur)); // prepend so oldest is first
+        }
+        cur.setDate(cur.getDate() - 1);
+      }
+      const earliestBizDay = businessDays[0].toISOString().slice(0, 10);
       const { data: dailySalesRows } = await supabase
         .from("orders")
         .select("order_date, order_amount")
-        .gte("order_date", fifteenDaysAgo)
+        .gte("order_date", earliestBizDay)
         .neq("status", "quote")
         .not("order_date", "is", null);
 
@@ -372,13 +410,11 @@ export default function ExecutiveHome() {
         salesByDay[d].orders++;
         salesByDay[d].sales += amt;
       });
-      const dailySales = Array.from({ length: 15 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (14 - i));
+      const dailySales = businessDays.map(d => {
         const key = d.toISOString().slice(0, 10);
-        const monthDay = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const label = d.toLocaleDateString("en-US", { weekday: "short" });
         const bucket = salesByDay[key] || { orders: 0, sales: 0 };
-        return { label: monthDay, orders: bucket.orders, sales: bucket.sales };
+        return { label, orders: bucket.orders, sales: bucket.sales };
       });
 
       // ── Sparklines (30 days, by product line) ─────────────────────────
@@ -646,7 +682,7 @@ export default function ExecutiveHome() {
           {/* Daily Sales chart */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-900">Daily Sales · Last 15 Days</h3>
+              <h3 className="text-sm font-medium text-gray-900">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-gray-400">orders entered, ex. quotes</span>
             </div>
             <DailySalesChart data={data.dailySales} />
