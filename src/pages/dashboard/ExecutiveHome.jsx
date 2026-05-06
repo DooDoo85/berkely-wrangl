@@ -393,15 +393,6 @@ export default function ExecutiveHome() {
             onClick={() => setCreditOkModal('roller')}
           />
           <StatusTracker
-            label="Credit OK · Faux"
-            count={data.creditOkFaux.count}
-            ordersLabel={`${data.creditOkFaux.count} orders`}
-            color={{ label: "text-amber-700", bg: "bg-amber-50", icon: "text-amber-600" }}
-            icon={Icon.shield}
-            loading={loading}
-            onClick={() => setCreditOkModal('faux')}
-          />
-          <StatusTracker
             label="Printed · Roller"
             count={data.printedTotal.units}
             ordersLabel={`${data.printedTotal.count} orders`}
@@ -409,6 +400,15 @@ export default function ExecutiveHome() {
             icon={Icon.printer}
             loading={loading}
             onClick={() => setWipModal("PRINTED")}
+          />
+          <StatusTracker
+            label="Credit OK · Faux"
+            count={data.creditOkFaux.count}
+            ordersLabel={`${data.creditOkFaux.count} orders`}
+            color={{ label: "text-amber-700", bg: "bg-amber-50", icon: "text-amber-600" }}
+            icon={Icon.shield}
+            loading={loading}
+            onClick={() => setCreditOkModal('faux')}
           />
           <StatusTracker
             label="Printed · Faux"
