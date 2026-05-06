@@ -69,7 +69,6 @@ const EXEC_NAV = [
       {
         type: 'group', label: 'Reports', icon: '📊',
         children: [
-          { to: '/reports',                 label: 'Overview'       },
           { to: '/reports/sales-activity',  label: 'Sales Activity' },
           { to: '/reports/rep-activity',    label: 'Rep Activity'   },
         ],
