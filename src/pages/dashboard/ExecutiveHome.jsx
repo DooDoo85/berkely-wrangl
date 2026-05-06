@@ -142,6 +142,8 @@ export default function ExecutiveHome() {
   const [refreshedAt, setRefreshedAt] = useState(new Date());
   const [wipModal, setWipModal] = useState(null);
   const [creditOkModal, setCreditOkModal] = useState(false);
+  const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
+  const [fauxPrintedRows, setFauxPrintedRows] = useState([]);
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     shippedWTD: null, shippedMTD: null, inProduction: null,
@@ -150,7 +152,10 @@ export default function ExecutiveHome() {
     faux: {}, roller: {},
     wip: { creditOK: [], printed: [] },
     creditOk: { count: 0, total: 0 },
+    creditOkRoller: { count: 0, total: 0 },
+    creditOkFaux: { count: 0, total: 0 },
     printedTotal: { count: 0, units: 0 },
+    fauxPrintedTotal: { count: 0, units: 0 },
   });
 
   const load = useCallback(async () => {
@@ -261,18 +266,37 @@ export default function ExecutiveHome() {
         .sort((a, b) => b.days - a.days)
         .slice(0, 5)
 
-      // Credit OK from email-imported table
+      // Credit OK from email-imported table — broken down by product line
       const { data: creditOkRows } = await supabase
         .from("credit_ok_orders")
-        .select("order_no, salesperson, customer_name, order_amount, entered_date")
+        .select("order_no, salesperson, customer_name, order_amount, entered_date, order_status, product_line")
         .order("entered_date", { ascending: false });
+      const creditAll = (creditOkRows ?? []).filter(r => r.order_status === 'CREDIT OK')
       const creditOk = {
-        count: (creditOkRows ?? []).length,
-        total: (creditOkRows ?? []).reduce((s, r) => s + Number(r.order_amount || 0), 0),
+        count: creditAll.length,
+        total: creditAll.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+      };
+      const creditOkRoller = {
+        count: creditAll.filter(r => r.product_line === 'roller').length,
+        total: creditAll.filter(r => r.product_line === 'roller').reduce((s, r) => s + Number(r.order_amount || 0), 0),
+      };
+      const creditOkFaux = {
+        count: creditAll.filter(r => r.product_line === 'faux').length,
+        total: creditAll.filter(r => r.product_line === 'faux').reduce((s, r) => s + Number(r.order_amount || 0), 0),
       };
       setCreditOkRows(creditOkRows ?? []);
 
-      // Printed counts (units from roller_wip + total order count)
+      // Printed counts — split by product line
+      // Roller printed comes from roller_wip table (existing); faux printed from orders table
+      const { data: fauxPrintedOrders } = await supabase
+        .from("orders")
+        .select("order_number, total_units")
+        .eq("status", "printed")
+        .eq("product_line", "faux");
+      const fauxPrintedTotal = {
+        count: (fauxPrintedOrders ?? []).length,
+        units: (fauxPrintedOrders ?? []).reduce((s, r) => s + (r.total_units || 0), 0),
+      };
       const printedTotal = {
         count: printed.length,
         units: printed.reduce((s, r) => s + (r.total_units || 0), 0),
@@ -312,7 +336,8 @@ export default function ExecutiveHome() {
         shippedWTD, shippedMTD, inProduction, stuckOrders, productionLoad, avgDays,
         repOrders, dailyShipped, faux, roller,
         wip: { creditOK, printed },
-        creditOk, printedTotal,
+        creditOk, creditOkRoller, creditOkFaux,
+        printedTotal, fauxPrintedTotal,
       });
       setRefreshedAt(new Date());
     } catch(err) { console.error("ExecutiveHome:",err); }
@@ -356,25 +381,43 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* Trackers row (Credit OK / Printed) */}
-        <div className="flex justify-end gap-3 -mt-4 mb-6">
+        {/* Trackers row — split by product line (Roller first, Faux second) */}
+        <div className="flex justify-end gap-3 -mt-4 mb-6 flex-wrap">
           <StatusTracker
-            label="Credit OK"
-            count={data.creditOk.count}
-            ordersLabel={`${data.creditOk.count} orders`}
-            color={{ label: "text-emerald-700", bg: "bg-emerald-50", icon: "text-emerald-600" }}
+            label="Credit OK · Roller"
+            count={data.creditOkRoller.count}
+            ordersLabel={`${data.creditOkRoller.count} orders`}
+            color={{ label: "text-violet-700", bg: "bg-violet-50", icon: "text-violet-600" }}
             icon={Icon.shield}
             loading={loading}
-            onClick={() => setCreditOkModal(true)}
+            onClick={() => setCreditOkModal('roller')}
           />
           <StatusTracker
-            label="Printed"
+            label="Credit OK · Faux"
+            count={data.creditOkFaux.count}
+            ordersLabel={`${data.creditOkFaux.count} orders`}
+            color={{ label: "text-amber-700", bg: "bg-amber-50", icon: "text-amber-600" }}
+            icon={Icon.shield}
+            loading={loading}
+            onClick={() => setCreditOkModal('faux')}
+          />
+          <StatusTracker
+            label="Printed · Roller"
             count={data.printedTotal.units}
             ordersLabel={`${data.printedTotal.count} orders`}
-            color={{ label: "text-amber-600", bg: "bg-amber-50", icon: "text-amber-500" }}
+            color={{ label: "text-violet-700", bg: "bg-violet-50", icon: "text-violet-600" }}
             icon={Icon.printer}
             loading={loading}
             onClick={() => setWipModal("PRINTED")}
+          />
+          <StatusTracker
+            label="Printed · Faux"
+            count={data.fauxPrintedTotal.units}
+            ordersLabel={`${data.fauxPrintedTotal.count} orders`}
+            color={{ label: "text-amber-700", bg: "bg-amber-50", icon: "text-amber-600" }}
+            icon={Icon.printer}
+            loading={loading}
+            onClick={() => setFauxPrintedModal(true)}
           />
         </div>
 
@@ -586,15 +629,22 @@ export default function ExecutiveHome() {
         </div>
       )}
 
-      {/* Credit OK Modal */}
-      {creditOkModal && (
+      {/* Credit OK Modal — filtered by product line */}
+      {creditOkModal && (() => {
+        const filtered = creditOkRows.filter(r =>
+          r.order_status === 'CREDIT OK' &&
+          (creditOkModal === true || r.product_line === creditOkModal)
+        )
+        const lineLabel = creditOkModal === 'faux' ? 'Faux' : creditOkModal === 'roller' ? 'Roller' : 'All'
+        const totalAmt = filtered.reduce((s, r) => s + Number(r.order_amount || 0), 0)
+        return (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
-                <h3 className="font-bold text-gray-900">Credit OK Orders</h3>
+                <h3 className="font-bold text-gray-900">Credit OK Orders · {lineLabel}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {creditOkRows.length} orders · ${creditOkRows.reduce((s,r)=>s+Number(r.order_amount||0),0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  {filtered.length} orders · ${totalAmt.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
                 </p>
               </div>
               <button onClick={()=>setCreditOkModal(false)}
@@ -614,9 +664,9 @@ export default function ExecutiveHome() {
                   </tr>
                 </thead>
                 <tbody>
-                  {creditOkRows.length === 0 ? (
+                  {filtered.length === 0 ? (
                     <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No orders</td></tr>
-                  ) : creditOkRows.map((r,i)=>(
+                  ) : filtered.map((r,i)=>(
                     <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_no}</td>
                       <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
@@ -634,7 +684,78 @@ export default function ExecutiveHome() {
             </div>
           </div>
         </div>
-      )}
+      )})()}
+
+      {/* Faux Printed Orders Modal */}
+      {fauxPrintedModal && <FauxPrintedModal onClose={() => setFauxPrintedModal(false)} />}
     </div>
   );
+}
+
+// ─── Faux Printed Modal ─────────────────────────────────────────────────────
+
+function FauxPrintedModal({ onClose }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('orders')
+        .select('order_number, customer_name, sales_rep, total_units, order_amount, order_date')
+        .eq('status', 'printed')
+        .eq('product_line', 'faux')
+        .order('order_date', { ascending: false })
+      setRows(data || [])
+      setLoading(false)
+    })()
+  }, [])
+
+  const totalUnits = rows.reduce((s, r) => s + (r.total_units || 0), 0)
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">Printed · Faux Wood</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits} units</p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Sales Rep</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Units</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No printed faux orders</td></tr>
+              ) : rows.map((r,i)=>(
+                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
+                  <td className="px-5 py-3 text-sm text-gray-500">{r.sales_rep || '—'}</td>
+                  <td className="px-5 py-3 text-right text-sm text-gray-700 tabular-nums">{r.total_units || 0}</td>
+                  <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                    ${Number(r.order_amount || 0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
 }
