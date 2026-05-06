@@ -21,7 +21,138 @@ function startOfWeek() {
   return d.toISOString()
 }
 
-function KpiScorecard({ label, icon, actual, target, loading }) {
+// Compute period boundaries for scorecard time filter
+function periodRange(period) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // Monday-based week (matches startOfWeek above)
+  const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1
+
+  if (period === 'this_week') {
+    const start = new Date(today)
+    start.setDate(today.getDate() - dayOfWeek)
+    return { start, end: null, label: 'This week' }
+  }
+  if (period === 'last_week') {
+    const start = new Date(today)
+    start.setDate(today.getDate() - dayOfWeek - 7)
+    const end = new Date(today)
+    end.setDate(today.getDate() - dayOfWeek)
+    return { start, end, label: 'Last week' }
+  }
+  if (period === 'this_month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { start, end: null, label: 'This month' }
+  }
+  // default: this_week
+  const start = new Date(today)
+  start.setDate(today.getDate() - dayOfWeek)
+  return { start, end: null, label: 'This week' }
+}
+
+// Pro-rate goals based on period (weekly goals × number of weeks in period)
+function periodGoalMultiplier(period) {
+  if (period === 'this_month') {
+    // Approximate: 4.3 weeks per month
+    const now = new Date()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    return daysInMonth / 7
+  }
+  return 1 // weekly views are 1x
+}
+
+// Team scorecard — table of reps × KPIs
+function TeamScorecard({ rows, goals, multiplier, loading, period, onCellClick, onPeriodChange }) {
+  const periods = [
+    { key: 'this_week',  label: 'This Week' },
+    { key: 'last_week',  label: 'Last Week' },
+    { key: 'this_month', label: 'This Month' },
+  ]
+
+  function cellColor(value, goal) {
+    if (!goal || goal <= 0) return 'text-stone-700'
+    const pct = (value / goal) * 100
+    if (pct >= 100) return 'text-emerald-600 font-semibold'
+    if (pct >= 50)  return 'text-amber-600 font-semibold'
+    return 'text-red-500 font-semibold'
+  }
+
+  return (
+    <div className="card mb-6 overflow-hidden">
+      <div className="flex items-center justify-between p-4 border-b border-stone-100">
+        <div>
+          <div className="text-[10px] font-bold tracking-[0.12em] text-stone-400 uppercase">Team Scorecard</div>
+          <div className="text-sm text-stone-500 mt-0.5">{periodRange(period).label}{multiplier !== 1 ? ` (goals scaled ${multiplier.toFixed(1)}×)` : ''}</div>
+        </div>
+        <div className="flex gap-1">
+          {periods.map(p => (
+            <button
+              key={p.key}
+              onClick={() => onPeriodChange(p.key)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                period === p.key
+                  ? 'bg-brand-dark text-white border-brand-dark'
+                  : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center text-sm text-stone-400">Loading scorecard...</div>
+      ) : rows.length === 0 ? (
+        <div className="p-8 text-center text-sm text-stone-400">No active reps to show.</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50">
+            <tr>
+              <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider">Rep</th>
+              <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider">🤝 Meetings</th>
+              <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider">👤 New Accts</th>
+              <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider">📚 Sample Books</th>
+              <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider">📞 Cold Calls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => {
+              const meetingGoal = Math.round((goals.scheduled_meetings || 0) * multiplier)
+              const accountGoal = Math.round((goals.new_accounts || 0) * multiplier)
+              const sampleGoal  = Math.round((goals.sample_books || 0) * multiplier)
+              return (
+                <tr key={row.rep_id} className="border-t border-stone-50 hover:bg-stone-50/50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-stone-800">{row.full_name || row.email}</td>
+                  <td onClick={() => onCellClick(row.rep_id, 'scheduled_meeting')}
+                      className={`text-center px-3 py-3 cursor-pointer hover:bg-stone-100 ${cellColor(row.scheduled_meetings, meetingGoal)}`}>
+                    {row.scheduled_meetings} <span className="text-stone-300 font-normal">/ {meetingGoal}</span>
+                  </td>
+                  <td className={`text-center px-3 py-3 ${cellColor(row.new_accounts, accountGoal)}`}>
+                    {row.new_accounts} <span className="text-stone-300 font-normal">/ {accountGoal}</span>
+                  </td>
+                  <td onClick={() => onCellClick(row.rep_id, 'sample_book')}
+                      className={`text-center px-3 py-3 cursor-pointer hover:bg-stone-100 ${cellColor(row.sample_books, sampleGoal)}`}>
+                    {row.sample_books} <span className="text-stone-300 font-normal">/ {sampleGoal}</span>
+                  </td>
+                  <td onClick={() => onCellClick(row.rep_id, 'cold_call')}
+                      className="text-center px-3 py-3 cursor-pointer hover:bg-stone-100 text-stone-700">
+                    {row.cold_calls}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="text-[10px] text-stone-400 px-4 py-2 bg-stone-50 border-t border-stone-100">
+        Click any cell to filter the activity feed below
+      </div>
+    </div>
+  )
+}
+
+
   const pct      = target > 0 ? Math.min(Math.round((actual / target) * 100), 100) : 100
   const onTrack  = target === 0 || actual >= target
   const behind   = target > 0 && actual >= target * 0.5 && actual < target
@@ -82,14 +213,104 @@ export default function ActivityLog() {
   const [showForm,    setShowForm]    = useState(false)
   const [filter,      setFilter]      = useState('all')
   const [search,      setSearch]      = useState('')
+  const [repFilter,   setRepFilter]   = useState('all')
+  const [reps,        setReps]        = useState([])
   const [kpis,        setKpis]        = useState({ scheduled_meetings: 0, sample_books: 0, new_accounts: 0, cold_calls: 0 })
   const [goals,       setGoals]       = useState({ scheduled_meetings: 15, sample_books: 3, new_accounts: 2, cold_calls: 0 })
+  // Team scorecard (execs only)
+  const [period,      setPeriod]      = useState('this_week')
+  const [teamRows,    setTeamRows]    = useState([])
+  const [teamLoading, setTeamLoading] = useState(false)
 
-  useEffect(() => { fetchActivities() }, [filter, profile])
+  useEffect(() => { fetchActivities() }, [filter, repFilter, period, profile])
 
   useEffect(() => {
     if (isSales && repId) fetchKpis()
-  }, [isSales, repId])
+    // Load rep list for non-sales users (so execs can filter)
+    if (profile && !isSales) loadReps()
+  }, [isSales, repId, profile])
+
+  // Reload team scorecard when period changes (or when reps list loads)
+  useEffect(() => {
+    if (!isSales && reps.length > 0) loadTeamScorecard()
+  }, [period, reps, isSales])
+
+  async function loadTeamScorecard() {
+    setTeamLoading(true)
+    try {
+      const range = periodRange(period)
+      const startISO = range.start.toISOString()
+      const endISO = range.end ? range.end.toISOString() : null
+      const startDate = startISO.slice(0, 10)
+      const endDate   = endISO ? endISO.slice(0, 10) : null
+
+      // Pull goals fresh too
+      const { data: goalsData } = await supabase.from('weekly_goals').select('metric_key, target_value')
+      const goalMap = { scheduled_meetings: 15, sample_books: 3, new_accounts: 2, cold_calls: 0 }
+      ;(goalsData || []).forEach(g => { goalMap[g.metric_key] = g.target_value })
+      setGoals(goalMap)
+
+      // Activities for all reps in this period
+      let actsQuery = supabase.from('activities')
+        .select('user_id, activity_type')
+        .gte('activity_date', startDate)
+      if (endDate) actsQuery = actsQuery.lt('activity_date', endDate)
+      const { data: acts } = await actsQuery
+
+      // Customers created in this period (by sales_rep name)
+      // sales_rep field stores the rep's name string — we'll match against profiles.full_name
+      let custQuery = supabase.from('customers').select('sales_rep').gte('created_at', startISO)
+      if (endISO) custQuery = custQuery.lt('created_at', endISO)
+      const { data: custs } = await custQuery
+
+      // Aggregate per rep
+      const repsForScorecard = reps.filter(r => ['sales', 'admin', 'owner'].includes(r.role))
+      const rows = repsForScorecard.map(r => {
+        const userActs = (acts || []).filter(a => a.user_id === r.id)
+        const newAccountsCount = (custs || []).filter(c => c.sales_rep === r.full_name).length
+        return {
+          rep_id: r.id,
+          full_name: r.full_name,
+          email: r.email,
+          scheduled_meetings: userActs.filter(a => a.activity_type === 'scheduled_meeting').length,
+          cold_calls:         userActs.filter(a => a.activity_type === 'cold_call').length,
+          sample_books:       userActs.filter(a => a.activity_type === 'sample_book').length,
+          new_accounts:       newAccountsCount,
+        }
+      })
+      // Sort by total activity descending so most active reps surface first
+      rows.sort((a, b) => {
+        const aTotal = a.scheduled_meetings + a.cold_calls + a.sample_books + a.new_accounts
+        const bTotal = b.scheduled_meetings + b.cold_calls + b.sample_books + b.new_accounts
+        return bTotal - aTotal
+      })
+      setTeamRows(rows)
+    } catch (err) {
+      console.error('Team scorecard error:', err)
+    } finally {
+      setTeamLoading(false)
+    }
+  }
+
+  // Click handler for scorecard cells — filters the feed below
+  function handleCellClick(repId, activityType) {
+    setRepFilter(repId)
+    setFilter(activityType)
+    // Scroll feed into view
+    setTimeout(() => {
+      document.getElementById('activity-feed-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }
+
+  async function loadReps() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('active', true)
+      .in('role', ['sales', 'admin', 'owner'])
+      .order('full_name')
+    setReps(data || [])
+  }
 
   async function fetchKpis() {
     setKpiLoading(true)
@@ -146,6 +367,17 @@ export default function ActivityLog() {
     // Sales reps only see their own activities
     if (profile?.role === 'sales') {
       query = query.eq('user_id', profile.id)
+    } else {
+      // Execs/admins/owners can filter by a specific rep
+      if (repFilter !== 'all') {
+        query = query.eq('user_id', repFilter)
+      }
+      // Apply period filter to feed (matches the scorecard time window)
+      const range = periodRange(period)
+      query = query.gte('activity_date', range.start.toISOString().slice(0, 10))
+      if (range.end) {
+        query = query.lt('activity_date', range.end.toISOString().slice(0, 10))
+      }
     }
 
     const { data } = await query
@@ -202,6 +434,21 @@ export default function ActivityLog() {
         </div>
       )}
 
+      {/* Team Scorecard — executives only */}
+      {!isSales && (
+        <TeamScorecard
+          rows={teamRows}
+          goals={goals}
+          multiplier={periodGoalMultiplier(period)}
+          loading={teamLoading}
+          period={period}
+          onPeriodChange={setPeriod}
+          onCellClick={handleCellClick}
+        />
+      )}
+
+      <div id="activity-feed-anchor" />
+
       {/* Filters */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="flex gap-1 flex-wrap">
@@ -220,6 +467,23 @@ export default function ActivityLog() {
             </button>
           ))}
         </div>
+
+        {/* Rep filter — only visible to non-sales users */}
+        {!isSales && reps.length > 0 && (
+          <select
+            value={repFilter}
+            onChange={e => setRepFilter(e.target.value)}
+            className="text-xs font-semibold border border-stone-200 rounded-lg px-3 py-1.5 bg-white text-stone-700 hover:border-stone-300 focus:outline-none focus:border-stone-500"
+          >
+            <option value="all">All Reps</option>
+            {reps.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.full_name || r.email}
+              </option>
+            ))}
+          </select>
+        )}
+
         <input
           type="text"
           placeholder="Search activities..."
