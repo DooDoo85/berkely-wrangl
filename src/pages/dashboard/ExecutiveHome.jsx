@@ -701,10 +701,10 @@ function FauxPrintedModal({ onClose }) {
     (async () => {
       const { data } = await supabase
         .from('orders')
-        .select('order_number, customer_name, sales_rep, total_units, order_amount, order_date')
+        .select('order_number, customer_name, sidemark, total_units, order_amount, epic_status_date')
         .eq('status', 'printed')
         .eq('product_line', 'faux')
-        .order('order_date', { ascending: false })
+        .order('epic_status_date', { ascending: false })
       setRows(data || [])
       setLoading(false)
     })()
@@ -712,13 +712,19 @@ function FauxPrintedModal({ onClose }) {
 
   const totalUnits = rows.reduce((s, r) => s + (r.total_units || 0), 0)
 
+  const daysSince = (dateStr) => {
+    if (!dateStr) return null
+    const ms = Date.now() - new Date(dateStr).getTime()
+    return Math.max(0, Math.floor(ms / 86400000))
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h3 className="font-bold text-gray-900">Printed · Faux Wood</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits} units</p>
+            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits.toLocaleString()} units</p>
           </div>
           <button onClick={onClose}
             className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
@@ -729,29 +735,40 @@ function FauxPrintedModal({ onClose }) {
           <table className="w-full">
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Sales Rep</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Units</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
+                {["Order","Customer","Sidemark","Days","Units","Value"].map(h=>(
+                  <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order","Customer","Sidemark"].includes(h)?"text-left":"text-right"}`}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No printed faux orders</td></tr>
-              ) : rows.map((r,i)=>(
-                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
-                  <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
-                  <td className="px-5 py-3 text-sm text-gray-500">{r.sales_rep || '—'}</td>
-                  <td className="px-5 py-3 text-right text-sm text-gray-700 tabular-nums">{r.total_units || 0}</td>
-                  <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
-                    ${Number(r.order_amount || 0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No printed faux orders</td></tr>
+              ) : rows.map((r,i)=>{
+                const days = daysSince(r.epic_status_date)
+                return (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
+                    <td className="px-5 py-3 text-xs text-gray-500">{r.sidemark || '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      {days !== null ? (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          days > 5 ? "bg-red-100 text-red-600" :
+                          days > 2 ? "bg-amber-100 text-amber-700" :
+                          "bg-gray-100 text-gray-600"}`}>
+                          {days}d
+                        </span>
+                      ) : <span className="text-xs text-gray-400">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units || 0}</td>
+                    <td className="px-5 py-3 text-right text-sm text-gray-500">
+                      ${Number(r.order_amount || 0).toLocaleString("en-US",{maximumFractionDigits:0})}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
