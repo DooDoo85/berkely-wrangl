@@ -37,7 +37,6 @@ import OrderDetail from './pages/orders/OrderDetail'
 import OrderForm from './pages/orders/OrderForm'
 
 // Reports
-import ReportsHub from './pages/reports/ReportsHub'
 import ProductionDashboard from './pages/reports/ProductionDashboard'
 import RepActivity from './pages/reports/RepActivity'
 import InventoryHealth from './pages/reports/InventoryHealth'
@@ -130,7 +129,7 @@ function AppRoutes() {
         <Route path="/purchasing/po/:id" element={<PurchaseOrderDetail />} />
 
         {/* Reports */}
-        <Route path="/reports" element={<ReportsHub />} />
+        <Route path="/reports" element={<Navigate to="/reports/sales-activity" replace />} />
         <Route path="/reports/production" element={<ProductionDashboard />} />
         <Route path="/reports/rep-activity" element={<RepActivity />} />
         <Route path="/reports/sales-activity" element={<SalesActivityReport />} />
