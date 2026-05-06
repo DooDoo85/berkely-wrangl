@@ -714,8 +714,19 @@ function FauxPrintedModal({ onClose }) {
 
   const daysSince = (dateStr) => {
     if (!dateStr) return null
-    const ms = Date.now() - new Date(dateStr).getTime()
-    return Math.max(0, Math.floor(ms / 86400000))
+    const start = new Date(dateStr)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date()
+    end.setHours(0, 0, 0, 0)
+    let days = 0
+    const cur = new Date(start)
+    cur.setDate(cur.getDate() + 1) // printed date = day 0, start counting next day
+    while (cur <= end) {
+      const dow = cur.getDay()
+      if (dow !== 0 && dow !== 6) days++ // skip Sat (6) and Sun (0)
+      cur.setDate(cur.getDate() + 1)
+    }
+    return days
   }
 
   return (
