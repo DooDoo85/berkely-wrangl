@@ -31,18 +31,15 @@ function fmt$Full(n) {
 
 function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
   if (!data.length) return <div className="h-10" />;
-  // Use 90th percentile as the visual ceiling so 1-2 outlier days don't flatten the rest.
-  // Anything above the 90th percentile clips to the top of the chart.
-  const sorted = [...data].sort((a, b) => a - b);
-  const p90 = sorted[Math.floor(sorted.length * 0.9)] || 0;
-  const max = Math.max(p90, ...data.slice(0, 1)) || 1; // never use 0 as max
-  const ceiling = Math.max(max, 1);
+  // Sqrt scaling — compresses outliers and expands small variations.
+  // A $100 day shows at sqrt(100)/sqrt(20000) ≈ 7%, vs raw ratio of 0.5% — much more visible.
+  const sqrtData = data.map(v => Math.sqrt(Math.max(0, v)));
+  const max = Math.max(...sqrtData, 1);
   const w = 280, h = 40;
   const step = data.length > 1 ? w / (data.length - 1) : 0;
-  const points = data.map((v, i) => {
+  const points = sqrtData.map((sv, i) => {
     const x = i * step;
-    const clamped = Math.min(v, ceiling); // clip to 90th percentile
-    const y = h - (clamped / ceiling) * (h - 4) - 2;
+    const y = h - (sv / max) * (h - 4) - 2;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   const linePath = points.join(" ");
@@ -129,16 +126,14 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
 
 function DailySalesChart({ data = [] }) {
   if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-gray-400">No data</div>;
-  // 90th percentile ceiling so outlier days don't flatten the rest
-  const sorted = [...data].map(d => d.sales).sort((a, b) => a - b);
-  const p90 = sorted[Math.floor(sorted.length * 0.9)] || 0;
-  const ceiling = Math.max(p90, ...sorted.slice(0, 1), 1);
+  // Sqrt scaling — compresses outliers, expands small days
+  const sqrtSales = data.map(d => Math.sqrt(Math.max(0, d.sales)));
+  const maxSqrt = Math.max(...sqrtSales, 1);
   return (
     <div className="px-1">
       <div className="flex items-end gap-2 h-32 mb-2">
         {data.map((d, i) => {
-          const clamped = Math.min(d.sales, ceiling);
-          const pct = ceiling > 0 ? (clamped / ceiling) * 100 : 0;
+          const pct = maxSqrt > 0 ? (sqrtSales[i] / maxSqrt) * 100 : 0;
           const isToday = i === data.length - 1;
           const hasData = d.sales > 0;
           return (
@@ -150,9 +145,9 @@ function DailySalesChart({ data = [] }) {
               )}
               <div className="w-full rounded-t transition-all"
                 style={{
-                  height: `${Math.max(pct, hasData ? 4 : 0)}%`,
+                  height: `${Math.max(pct, hasData ? 6 : 0)}%`,
                   background: isToday ? '#7c3aed' : hasData ? '#c4b5fd' : 'transparent',
-                  minHeight: hasData ? '4px' : '0',
+                  minHeight: hasData ? '6px' : '0',
                 }}
               />
             </div>
@@ -359,23 +354,33 @@ export default function ExecutiveHome() {
       const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
 
       // ── Team — orders invoiced this week ──────────────────────────────
-      // sales_rep is null on most invoiced orders (ePIC processor doesn't populate it),
-      // so we fall back to credit_ok_orders.salesperson via order_no lookup.
+      // sales_rep is null on most invoiced orders (ePIC processor doesn't populate it).
+      // Fallback chain: orders.sales_rep → credit_ok_orders.salesperson (recent) → customers.sales_rep (always)
       const { data: invoicedRows } = await supabase.from("orders")
-        .select("order_number, sales_rep")
+        .select("order_number, customer_name, sales_rep")
         .eq("status", "invoiced").gte("epic_status_date", weekStartDate);
 
-      // Build a salesperson lookup from credit_ok_orders (already loaded above)
+      // Build rep lookup from credit_ok_orders snapshot (recent passers-through)
       const repByOrderNo = {};
       (creditOkRowsData ?? []).forEach(r => {
-        if (r.order_no && r.salesperson) {
-          repByOrderNo[r.order_no] = r.salesperson;
-        }
+        if (r.order_no && r.salesperson) repByOrderNo[r.order_no] = r.salesperson;
       });
+
+      // Build rep lookup from customers table (most reliable)
+      const customerNames = [...new Set((invoicedRows ?? []).map(r => r.customer_name).filter(Boolean))];
+      const repByCustomer = {};
+      if (customerNames.length) {
+        const { data: customerRows } = await supabase.from("customers")
+          .select("account_name, sales_rep")
+          .in("account_name", customerNames);
+        (customerRows ?? []).forEach(c => {
+          if (c.account_name && c.sales_rep) repByCustomer[c.account_name] = c.sales_rep;
+        });
+      }
 
       const repMap = {};
       (invoicedRows ?? []).forEach(r => {
-        const name = (r.sales_rep || repByOrderNo[r.order_number] || "").trim();
+        const name = (r.sales_rep || repByOrderNo[r.order_number] || repByCustomer[r.customer_name] || "").trim();
         if (name) repMap[name] = (repMap[name] ?? 0) + 1;
       });
       const repOrders = Object.entries(repMap)
