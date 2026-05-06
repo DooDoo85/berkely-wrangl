@@ -123,7 +123,7 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
   return (
     <div onClick={onClick} style={accentStyle}
-      className={`bg-[#ece1c8] rounded-lg px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:bg-[#e0d2b3]" : ""}`}>
+      className={`rounded-lg px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:bg-[#ece1c8]" : ""}`}>
       <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-gray-900 tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
