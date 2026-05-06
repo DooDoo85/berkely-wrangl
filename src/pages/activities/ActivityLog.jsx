@@ -264,7 +264,7 @@ export default function ActivityLog() {
       const { data: custs } = await custQuery
 
       // Aggregate per rep
-      const repsForScorecard = reps.filter(r => ['sales', 'admin', 'owner'].includes(r.role))
+      const repsForScorecard = reps.filter(r => r.role === 'sales')
       const rows = repsForScorecard.map(r => {
         const userActs = (acts || []).filter(a => a.user_id === r.id)
         const newAccountsCount = (custs || []).filter(c => c.sales_rep === r.full_name).length
