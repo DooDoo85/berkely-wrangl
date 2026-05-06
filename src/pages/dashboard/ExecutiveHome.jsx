@@ -123,7 +123,7 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
   return (
     <div onClick={onClick} style={accentStyle}
-      className={`bg-gray-50 rounded-lg px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:bg-gray-100" : ""}`}>
+      className={`bg-[#ece1c8] rounded-lg px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:bg-[#e0d2b3]" : ""}`}>
       <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-gray-900 tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
@@ -155,7 +155,7 @@ function DailySalesChart({ data = [] }) {
               )}
               <div className="w-full h-full rounded-t transition-all"
                 style={{
-                  background: isToday ? '#7c3aed' : hasData ? '#c4b5fd' : 'transparent',
+                  background: isToday ? '#a0573a' : hasData ? '#d4b896' : 'transparent',
                 }}
               />
             </div>
@@ -199,8 +199,8 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#a0573a' }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums whitespace-nowrap w-16 text-right">
                 {c.orders} order{c.orders !== 1 ? 's' : ''}
@@ -506,13 +506,13 @@ export default function ExecutiveHome() {
   const stuckTotal = data.stuckOrders?.length ?? 0;
   const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
 
-  const ROLLER_ACCENT = "#7c3aed";
-  const ROLLER_FILL   = "#ede9fe";
-  const FAUX_ACCENT   = "#d97706";
-  const FAUX_FILL     = "#fef3c7";
+  const ROLLER_ACCENT = "#a0573a";
+  const ROLLER_FILL   = "#f5e2d4";
+  const FAUX_ACCENT   = "#b8854d";
+  const FAUX_FILL     = "#f5e8c8";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#faf6ed]">
       <div className="max-w-screen-xl mx-auto p-8">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -682,8 +682,8 @@ export default function ExecutiveHome() {
                           {rep.count} order{rep.count !== 1 ? 's' : ''}
                         </span>
                       </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#7d8a4a' }} />
                       </div>
                     </div>
                   );
