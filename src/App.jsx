@@ -63,13 +63,17 @@ import PurchaseOrders from './pages/purchasing/PurchaseOrders'
 import ReorderQueue from './pages/purchasing/ReorderQueue'
 import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
 
+import SetPasswordRequired from './components/SetPasswordRequired'
+
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading, needsPassword } = useAuth()
   if (loading) return null
   if (!user) return <Routes><Route path="*" element={<SignIn />} /></Routes>
 
   return (
-    <Routes>
+    <>
+      {needsPassword && <SetPasswordRequired />}
+      <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/dashboard" element={<Home />} />
@@ -149,6 +153,7 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </>
   )
 }
 
