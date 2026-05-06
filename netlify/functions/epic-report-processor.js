@@ -304,6 +304,19 @@ function productTypeToLine(productType) {
   return null  // OTHER, blank, unknown — leave null
 }
 
+// Normalize rep names — ePIC sends 'PETE BOLENUS' uppercase, customers table has 'Pete Bolenus'.
+// Title-case it so the dashboard groups consistently.
+function normalizeRepName(s) {
+  const v = (s || '').trim()
+  if (!v) return ''
+  // Only title-case strings that are entirely uppercase. Preserve mixed case as-is
+  // ('JT D\'Emidio', 'Christian Heffernan' shouldn't be mangled).
+  if (v === v.toUpperCase()) {
+    return v.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+  }
+  return v
+}
+
 async function processPrinted(csvText, orderType) {
   const rows = parseCSV(csvText)
   console.log(`  ${orderType.toUpperCase()} PRINTED: ${rows.length} rows`)
@@ -335,7 +348,7 @@ async function processPrinted(csvText, orderType) {
         order_date:      row.PrintedDate || row.OrderDate || null,
         total_units:     row.TotalUnits ? parseInt(row.TotalUnits) : null,
         order_amount:    row.TotalSales ? parseFloat(row.TotalSales) : null,
-        sales_rep:       row.Salesperson || null,
+        sales_rep:       normalizeRepName(row.Salesperson) || null,
         source:          'epic',
         read_only:       true,
       }])
@@ -657,7 +670,7 @@ async function processCreditOk(csvText) {
 
     toInsert.push({
       order_no:      orderNo,
-      salesperson:   (row.Salesperson || '').trim(),
+      salesperson:   normalizeRepName(row.Salesperson),
       customer_name: (row.CustomerName || '').trim(),
       order_amount:  parseCurrency(row.OrderAmount || 0),
       entered_date:  row.EnteredDate || null,
