@@ -137,17 +137,16 @@ function DailySalesChart({ data = [] }) {
           const isToday = i === data.length - 1;
           const hasData = d.sales > 0;
           return (
-            <div key={i} className="flex-1 flex flex-col items-center group relative">
+            <div key={i} className="flex-1 group relative flex flex-col justify-end"
+              style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%` }}>
               {hasData && (
                 <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                   {fmt$(d.sales)} · {d.orders} orders
                 </div>
               )}
-              <div className="w-full rounded-t transition-all"
+              <div className="w-full h-full rounded-t transition-all"
                 style={{
-                  height: `${Math.max(pct, hasData ? 6 : 0)}%`,
                   background: isToday ? '#7c3aed' : hasData ? '#c4b5fd' : 'transparent',
-                  minHeight: hasData ? '6px' : '0',
                 }}
               />
             </div>
