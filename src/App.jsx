@@ -38,10 +38,12 @@ import OrderForm from './pages/orders/OrderForm'
 
 // Reports
 import ProductionDashboard from './pages/reports/ProductionDashboard'
+import InventoryVelocity from './pages/reports/InventoryVelocity'
 import RepActivity from './pages/reports/RepActivity'
 import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 import SalesActivityReport from './pages/reports/SalesActivityReport'
+
 
 // Quotes
 import QuotesList from './pages/quotes/QuotesList'
@@ -133,8 +135,9 @@ function AppRoutes() {
         <Route path="/reports/production" element={<ProductionDashboard />} />
         <Route path="/reports/rep-activity" element={<RepActivity />} />
         <Route path="/reports/sales-activity" element={<SalesActivityReport />} />
-        <Route path="/reports/inventory-health" element={<InventoryHealth />} />
-        <Route path="/reports/order-status" element={<OrderStatusDashboard />} />
+<Route path="/reports/inventory-health" element={<InventoryHealth />} />
+<Route path="/reports/inventory-velocity" element={<InventoryVelocity />} />
+<Route path="/reports/order-status" element={<OrderStatusDashboard />} />
 
         {/* Quotes */}
         <Route path="/quotes" element={<QuotesList />} />
