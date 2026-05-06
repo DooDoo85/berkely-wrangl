@@ -505,6 +505,188 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
+async function processMasterSalesReport(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  MASTER SALES REPORT: ${rows.length} rows total`)
+
+  const mapStatus = (s) => {
+    const upper = (s || '').trim().toUpperCase()
+    if (upper === 'QUOTE')        return 'quote'
+    if (upper === 'CREDIT HOLD')  return 'credit_hold'
+    if (upper === 'CREDIT OK')    return 'credit_ok'
+    if (upper === 'PO SENT')      return 'po_sent'
+    if (upper === 'PRINTED')      return 'printed'
+    if (upper === 'FULL SHIP')    return 'invoiced'   // NEW: shipped = invoiced
+    if (upper === 'INVOICED')     return 'invoiced'
+    if (upper === 'PAID')         return 'invoiced'
+    // skip REVIEW HOLD, MANUAL HOLD, FULL PACK, UNPACKED, PARTIAL SHIP
+    return null
+  }
+
+  const mapProductLine = (pt) => {
+    const upper = (pt || '').trim().toUpperCase()
+    if (upper === 'FAUX')   return 'faux'
+    if (upper === 'ROLLER') return 'roller'
+    return null
+  }
+
+  const cleanDate = (s) => {
+    const t = (s || '').trim()
+    if (!t || t === '0000-00-00') return null
+    return t
+  }
+
+  // 1. Build incoming data per order_number
+  const incomingMap = {}
+  for (const row of rows) {
+    const orderNo = (row.OrderNo || '').trim()
+    if (!orderNo) continue
+    const wranglStatus = mapStatus(row.OrderStatus)
+    if (!wranglStatus) continue
+
+    incomingMap[orderNo] = {
+      epicStatus:    (row.OrderStatus || '').trim().toUpperCase(),
+      wranglStatus,
+      productLine:   mapProductLine(row.ProductType),
+      salesRep:      normalizeRepName(row.Salesperson),
+      customerName:  (row.CustomerName || '').trim(),
+      totalUnits:    parseInt(row.TotalUnits || 0) || 0,
+      orderAmount:   parseCurrency(row.OrderAmount || 0),
+      enteredDate:   cleanDate(row.EnteredDate),
+      statusDate:    cleanDate(row.StatusDate),
+      printedDate:   cleanDate(row.PrintedDate),
+      invoicedDate:  cleanDate(row.InvoicedDate),
+      daysInStatus:  parseInt(row.DaysInStatus || 0) || 0,
+    }
+  }
+
+  // 2. Look up existing orders to detect status transitions
+  const orderNumbers = Object.keys(incomingMap)
+  const existingMap  = {}
+  for (let i = 0; i < orderNumbers.length; i += 500) {
+    const batch = orderNumbers.slice(i, i + 500)
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?select=id,order_number,status,sales_rep,customer_name&order_number=in.(${batch.map(n => `"${n}"`).join(',')})`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      data.forEach(o => { existingMap[o.order_number] = o })
+    }
+  }
+
+  // 3. Build upserts + status history
+  const toUpsert = []
+  const historyRows = []
+  let transitions = 0
+  const today = new Date().toISOString().slice(0, 10)
+
+  for (const [orderNo, inc] of Object.entries(incomingMap)) {
+    const existing   = existingMap[orderNo]
+    const prevStatus = existing?.status || null
+
+    const upsertRow = {
+      order_number:     orderNo,
+      epic_status:      inc.epicStatus,
+      epic_status_date: inc.statusDate,
+      status:           inc.wranglStatus,
+      product_line:     inc.productLine,
+      total_units:      inc.totalUnits,
+      order_amount:     inc.orderAmount,
+      order_date:       inc.enteredDate,
+      customer_name:    inc.customerName || existing?.customer_name || null,
+      updated_at:       new Date().toISOString(),
+    }
+    // Preserve existing sales_rep if set; otherwise populate from report
+    if (existing?.sales_rep) {
+      upsertRow.sales_rep = existing.sales_rep
+    } else if (inc.salesRep) {
+      upsertRow.sales_rep = inc.salesRep
+    }
+
+    toUpsert.push(upsertRow)
+
+    // Log status transition (skip if currently in_production — manual override)
+    if (prevStatus && prevStatus !== inc.wranglStatus && prevStatus !== 'in_production') {
+      historyRows.push({
+        order_number: orderNo,
+        order_id:     existing?.id || null,
+        from_status:  prevStatus,
+        to_status:    inc.wranglStatus,
+        status_date:  inc.statusDate || today,
+        source:       'epic',
+        notes:        'Master Sales Report sync',
+      })
+      transitions++
+    } else if (!prevStatus) {
+      historyRows.push({
+        order_number: orderNo,
+        order_id:     null,
+        from_status:  null,
+        to_status:    inc.wranglStatus,
+        status_date:  inc.statusDate || today,
+        source:       'epic',
+        notes:        'New order from Master Sales Report',
+      })
+    }
+  }
+
+  // 4. Upsert orders in batches
+  let upserted = 0
+  for (let i = 0; i < toUpsert.length; i += 500) {
+    const batch = toUpsert.slice(i, i + 500)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=order_number`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(batch),
+    })
+    if (!res.ok) {
+      console.error(`  Batch error: ${res.status} ${await res.text()}`)
+    } else {
+      upserted += batch.length
+    }
+  }
+
+  // 5. Log status transitions
+  if (historyRows.length > 0) {
+    for (let i = 0; i < historyRows.length; i += 500) {
+      const batch = historyRows.slice(i, i + 500)
+      await fetch(`${SUPABASE_URL}/rest/v1/order_status_history`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify(batch),
+      })
+    }
+    console.log(`  Status transitions logged: ${transitions}`)
+  }
+
+  // 6. Preserve in_production manual flags (sticky until ePIC marks invoiced)
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=not.in.(INVOICED,PAID,FULL SHIP)`, {
+    method: 'PATCH',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'in_production' }),
+  })
+  // Clear wrangl_status once ePIC moves to invoiced
+  await fetch(`${SUPABASE_URL}/rest/v1/orders?wrangl_status=eq.in_production&epic_status=in.(INVOICED,PAID,FULL SHIP)`, {
+    method: 'PATCH',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ wrangl_status: null }),
+  })
+
+  console.log(`  Master sales report done — upserted: ${upserted}, transitions: ${transitions}`)
+  return upserted
+}
+
 async function processSalesReport(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  SALES REPORT: ${rows.length} rows total`)
@@ -967,6 +1149,13 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processRollerWIP(csvText)
           await markProcessed(messageId, 'roller_wip', count)
+          results.processed++
+
+        } else if (subject.includes('MASTER SALES REPORT')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processMasterSalesReport(csvText)
+          await markProcessed(messageId, 'master_sales_report', count)
           results.processed++
 
         } else if (subject.includes('SALES REPORT')) {
