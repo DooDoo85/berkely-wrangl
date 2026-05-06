@@ -72,7 +72,6 @@ const EXEC_NAV = [
           { to: '/reports/sales-activity',  label: 'Sales Activity' },
           { to: '/reports/rep-activity',    label: 'Rep Activity'   },
            { to: '/reports/inventory-velocity', label: 'Inventory Velocity' },
-],
         ],
       },
     ],
