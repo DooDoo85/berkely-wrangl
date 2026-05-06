@@ -294,6 +294,15 @@ async function relieveCommittedForShippedOrders(rows) {
   console.log(`  Relieved ${relieved} committed stock lines`)
 }
 
+// Map ProductType from CSV → product_line in DB
+function productTypeToLine(productType) {
+  if (!productType) return null
+  const t = productType.toUpperCase()
+  if (t.includes('FAUX'))   return 'faux'
+  if (t.includes('ROLLER')) return 'roller'
+  return null  // OTHER, blank, unknown — leave null
+}
+
 async function processPrinted(csvText, orderType) {
   const rows = parseCSV(csvText)
   console.log(`  ${orderType.toUpperCase()} PRINTED: ${rows.length} rows`)
@@ -303,6 +312,10 @@ async function processPrinted(csvText, orderType) {
     const orderNo = (row.OrderNo || row.Wo || '').trim()
     if (!orderNo) continue
 
+    // Determine product line: from CSV ProductType column if present, else from orderType arg
+    const csvLine = productTypeToLine(row.ProductType)
+    const productLine = csvLine || (orderType === 'faux' ? 'faux' : orderType === 'roller' ? 'roller' : null)
+
     const existing = await sbQuery('orders', `epic_id=eq.${orderNo}&select=id,status&limit=1`)
     if (!Array.isArray(existing) || !existing[0]) {
       await sbUpsert('orders', [{
@@ -310,6 +323,7 @@ async function processPrinted(csvText, orderType) {
         order_number:  orderNo,
         customer_name: row.Customer || row.CustomerName || '',
         status:        'printed',
+        product_line:  productLine,
         order_date:    row.PrintedDate || row.OrderDate || null,
         sales_rep:     row.Salesperson || null,
         source:        'epic',
@@ -322,10 +336,17 @@ async function processPrinted(csvText, orderType) {
     const current = existing[0].status
     if (['draft', 'submitted'].includes(current)) {
       await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        status:     'printed',
-        updated_at: new Date().toISOString(),
+        status:       'printed',
+        product_line: productLine,
+        updated_at:   new Date().toISOString(),
       })
       updated++
+    } else {
+      // Even if status is unchanged, still backfill product_line if missing
+      await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
+        product_line: productLine,
+        updated_at:   new Date().toISOString(),
+      })
     }
   }
   console.log(`  Updated ${updated} orders to printed`)
@@ -591,12 +612,15 @@ async function processCreditOk(csvText) {
   })
 
   const toInsert = []
+  let okCount = 0, holdCount = 0
   for (const row of rows) {
     const status = (row.OrderStatus || '').trim().toUpperCase()
-    if (status !== 'CREDIT OK') continue
+    if (status !== 'CREDIT OK' && status !== 'CREDIT HOLD') continue
 
     const orderNo = (row.OrderNo || '').trim()
     if (!orderNo) continue
+
+    const productLine = productTypeToLine(row.ProductType)
 
     toInsert.push({
       order_no:      orderNo,
@@ -604,15 +628,27 @@ async function processCreditOk(csvText) {
       customer_name: (row.CustomerName || '').trim(),
       order_amount:  parseCurrency(row.OrderAmount || 0),
       entered_date:  row.EnteredDate || null,
-      order_status:  'CREDIT OK',
+      order_status:  status,
+      product_line:  productLine,
       imported_at:   new Date().toISOString(),
     })
+
+    if (status === 'CREDIT OK') okCount++
+    else holdCount++
+
+    // Also tag the corresponding row in `orders` with product_line if missing
+    if (productLine) {
+      await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
+        product_line: productLine,
+        updated_at:   new Date().toISOString(),
+      })
+    }
   }
 
   if (toInsert.length) await sbUpsert('credit_ok_orders', toInsert)
 
   const totalAmount = toInsert.reduce((s, r) => s + r.order_amount, 0)
-  console.log(`  Credit OK loaded: ${toInsert.length} orders / $${totalAmount.toFixed(2)}`)
+  console.log(`  Credit loaded: ${okCount} OK + ${holdCount} HOLD / $${totalAmount.toFixed(2)}`)
   return toInsert.length
 }
 
@@ -853,6 +889,14 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processPrinted(csvText, 'faux')
           await markProcessed(messageId, 'faux_printed', count)
+          results.processed++
+
+        } else if (subject.includes('PRINTED ORDERS')) {
+          // Combined Roller + Faux printed report — line determined by ProductType column
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processPrinted(csvText, 'combined')
+          await markProcessed(messageId, 'printed_orders_combined', count)
           results.processed++
 
         } else if (subject.includes('ROLLER SHADE INVOICE BY PRODUCT')) {
