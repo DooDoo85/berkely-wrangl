@@ -200,7 +200,7 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#a0573a' }} />
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#ee5e3a' }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums whitespace-nowrap w-16 text-right">
                 {c.orders} order{c.orders !== 1 ? 's' : ''}
@@ -683,7 +683,7 @@ export default function ExecutiveHome() {
                         </span>
                       </div>
                       <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#7d8a4a' }} />
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#5b8c5a' }} />
                       </div>
                     </div>
                   );
