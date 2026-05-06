@@ -152,7 +152,7 @@ function TeamScorecard({ rows, goals, multiplier, loading, period, onCellClick, 
   )
 }
 
-
+function KpiScorecard({ label, icon, actual, target, loading }) {
   const pct      = target > 0 ? Math.min(Math.round((actual / target) * 100), 100) : 100
   const onTrack  = target === 0 || actual >= target
   const behind   = target > 0 && actual >= target * 0.5 && actual < target
