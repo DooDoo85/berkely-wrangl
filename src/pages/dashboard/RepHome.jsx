@@ -92,17 +92,17 @@ function QuickAction({ icon, label, primary, onClick }) {
 
 // ─── Pipeline Card ──────────────────────────────────────────────────────────
 
-function PipelineCard({ label, count, accentColor, dotColor, icon, onClick, loading }) {
+function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotStyle, icon, onClick, loading }) {
   return (
     <button
       onClick={onClick}
       className="relative bg-white border border-gray-200 rounded-xl p-5 text-left transition-all duration-200 hover:shadow-sm hover:-translate-y-px overflow-hidden w-full"
     >
       {/* Top accent border */}
-      <div className={`absolute top-0 left-0 right-0 h-0.5 ${accentColor}`} />
+      <div className={`absolute top-0 left-0 right-0 h-0.5 ${accentColor || ''}`} style={accentStyle} />
 
       <div className="flex items-center gap-2 mb-3">
-        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+        <div className={`w-2 h-2 rounded-full ${dotColor || ''}`} style={dotStyle} />
         <span className="text-sm font-medium text-gray-700">{label}</span>
       </div>
 
@@ -111,7 +111,7 @@ function PipelineCard({ label, count, accentColor, dotColor, icon, onClick, load
           <div className="text-3xl font-bold text-gray-900 tabular-nums leading-none">
             {loading ? "—" : count}
           </div>
-          <div className="text-xs text-emerald-700 font-medium mt-2">View all →</div>
+          <div className="text-xs font-medium mt-2" style={{ color: '#5a3a24' }}>View all →</div>
         </div>
         <div className="opacity-60">{icon}</div>
       </div>
@@ -357,7 +357,8 @@ export default function RepHome() {
   const fullDate   = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   return (
-    <div className="p-8 max-w-screen-xl mx-auto">
+    <div className="min-h-screen" style={{ backgroundColor: '#faf6ed' }}>
+      <div className="p-8 max-w-screen-xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -484,45 +485,53 @@ export default function RepHome() {
           <PipelineCard
             label="Quotes"
             count={data.pipeline.quotes}
-            accentColor="bg-gray-400"
-            dotColor="bg-gray-400"
-            icon={<div className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">{Icon.fileText}</div>}
+            accentColor="bg-stone-400"
+            dotColor="bg-stone-400"
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5f0e8', color: '#8a7560' }}>{Icon.fileText}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=quote")}
           />
           <PipelineCard
             label="Printed"
             count={data.pipeline.printed}
-            accentColor="bg-blue-500"
-            dotColor="bg-blue-500"
-            icon={<div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">{Icon.send}</div>}
+            accentColor=""
+            dotColor=""
+            accentStyle={{ backgroundColor: '#a0573a' }}
+            dotStyle={{ backgroundColor: '#a0573a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5e2d4', color: '#a0573a' }}>{Icon.send}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=printed")}
           />
           <PipelineCard
             label="In Production"
             count={data.pipeline.inProduction}
-            accentColor="bg-amber-500"
-            dotColor="bg-amber-500"
-            icon={<div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">{Icon.settings}</div>}
+            accentColor=""
+            dotColor=""
+            accentStyle={{ backgroundColor: '#b8854d' }}
+            dotStyle={{ backgroundColor: '#b8854d' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5e8c8', color: '#b8854d' }}>{Icon.settings}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=in_production")}
           />
           <PipelineCard
             label="On Hold"
             count={data.pipeline.onHold}
-            accentColor="bg-red-500"
-            dotColor="bg-red-500"
-            icon={<div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-500">{Icon.package}</div>}
+            accentColor=""
+            dotColor=""
+            accentStyle={{ backgroundColor: '#ee5e3a' }}
+            dotStyle={{ backgroundColor: '#ee5e3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#fde4dc', color: '#ee5e3a' }}>{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders/on-hold")}
           />
           <PipelineCard
             label="Invoiced WTD"
             count={data.pipeline.invoicedWtd}
-            accentColor="bg-emerald-500"
-            dotColor="bg-emerald-500"
-            icon={<div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">{Icon.package}</div>}
+            accentColor=""
+            dotColor=""
+            accentStyle={{ backgroundColor: '#5b8c5a' }}
+            dotStyle={{ backgroundColor: '#5b8c5a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#e0ecdf', color: '#5b8c5a' }}>{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=invoiced")}
           />
@@ -576,6 +585,7 @@ export default function RepHome() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
