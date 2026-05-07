@@ -505,6 +505,146 @@ async function processRollerWIP(csvText) {
   return toInsert.length
 }
 
+// ─── PromptAnswers decoder ────────────────────────────────────────────────
+// Format: "PromptID\fCode\fValue\f\vPromptID\fCode\fValue\f\v..."
+// where \f = 0x0c (form feed) and \v = 0x0b (vertical tab)
+function decodePromptAnswers(raw) {
+  if (!raw) return {}
+  const decoded = {}
+  const rows = raw.split('\v')
+  for (const row of rows) {
+    const cleaned = row.replace(/\f$/, '')
+    if (!cleaned) continue
+    const parts = cleaned.split('\f')
+    if (parts.length >= 3) {
+      const promptId = parts[0]
+      const value = parts[2]
+      decoded[promptId] = value
+    }
+  }
+  return decoded
+}
+
+// Map decoded prompt IDs to friendly column names. Mapping derived from
+// observed quote PDFs vs decoded blobs (see Quote 114958 reference).
+function promptAnswersToFields(raw) {
+  const d = decodePromptAnswers(raw)
+  const numOrNull = v => {
+    const n = parseFloat(v)
+    return isNaN(n) ? null : n
+  }
+  return {
+    width:               numOrNull(d['1']),
+    height:              numOrNull(d['2']),
+    mount:               d['3'] || null,            // IM / OM
+    top_treatment:       d['8'] || null,            // 3SQF, etc.
+    top_treatment_color: d['9'] || null,            // W = White
+    room_location:       d['10'] || null,
+    light_block:         d['12'] || null,           // Y / N
+    channel:             d['13'] || null,           // Y / N (often blank)
+  }
+}
+
+async function processQuoteDetail(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  QUOTE DETAIL: ${rows.length} line items total`)
+
+  // Group by quote number
+  const quotesMap = {}    // quote_no -> header info (built once per quote)
+  const lineItems = []    // all line items
+
+  for (const row of rows) {
+    const quoteNo = (row.QuoteNo || '').trim()
+    if (!quoteNo) continue
+    const lineNumber = parseInt(row.LineNumber || 0)
+    if (!lineNumber) continue
+
+    // First time seeing this quote — build the header
+    if (!quotesMap[quoteNo]) {
+      quotesMap[quoteNo] = {
+        quote_no:      quoteNo,
+        customer_name: (row.CustomerName || '').trim(),
+        salesperson:   normalizeRepName((row.Salesperson || '').trim()),
+        quote_date:    row.QuoteDate || null,
+        status:        (row.QuoteStatus || 'QUOTE').trim(),
+        subtotal:      parseCurrency(row.QuoteSubtotal || 0),
+        freight:       parseCurrency(row.Freight || 0),
+        total:         parseCurrency(row.Total || 0),
+        line_count:    0,
+        synced_at:     new Date().toISOString(),
+      }
+    }
+    quotesMap[quoteNo].line_count += 1
+
+    // Decode shade specs from PromptAnswers blob
+    const specs = promptAnswersToFields(row.PromptAnswers || '')
+
+    lineItems.push({
+      quote_no:            quoteNo,
+      line_number:         lineNumber,
+      product_desc:        (row.ProductDescription || '').trim(),
+      fabric_color:        (row.FabricColor || '').trim() || null,
+      fabric_spec:         (row.FabricSpec || '').trim() || null,
+      room:                (row.Room || '').trim() || null,
+      window_no:           (row.WindowNo || '').trim() || null,
+      quantity:            parseInt(row.Quantity || 0) || 0,
+      unit_price:          parseCurrency(row.UnitPrice || 0),
+      line_extended:       parseCurrency(row.LineExtended || 0),
+      ...specs,
+      prompt_answers_raw:  row.PromptAnswers || null,
+      synced_at:           new Date().toISOString(),
+    })
+  }
+
+  const quotes = Object.values(quotesMap)
+  console.log(`  Distinct quotes: ${quotes.length}, line items: ${lineItems.length}`)
+
+  // Upsert quotes in batches
+  let qUpserted = 0
+  for (let i = 0; i < quotes.length; i += 200) {
+    const batch = quotes.slice(i, i + 200)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/epic_quotes?on_conflict=quote_no`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(batch),
+    })
+    if (!res.ok) {
+      console.error(`  Quotes batch error: ${res.status} ${await res.text()}`)
+    } else {
+      qUpserted += batch.length
+    }
+  }
+
+  // Upsert line items in batches
+  let liUpserted = 0
+  for (let i = 0; i < lineItems.length; i += 500) {
+    const batch = lineItems.slice(i, i + 500)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/epic_quote_line_items?on_conflict=quote_no,line_number`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(batch),
+    })
+    if (!res.ok) {
+      console.error(`  Line items batch error: ${res.status} ${await res.text()}`)
+    } else {
+      liUpserted += batch.length
+    }
+  }
+
+  console.log(`  Quote detail done — quotes: ${qUpserted}, line items: ${liUpserted}`)
+  return qUpserted
+}
+
 async function processMasterSalesReport(csvText) {
   const rows = parseCSV(csvText)
   console.log(`  MASTER SALES REPORT: ${rows.length} rows total`)
@@ -1149,6 +1289,13 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processRollerWIP(csvText)
           await markProcessed(messageId, 'roller_wip', count)
+          results.processed++
+
+        } else if (subject.includes('QUOTE DETAIL') || subject.includes('QUOTE_DETAIL')) {
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processQuoteDetail(csvText)
+          await markProcessed(messageId, 'quote_detail', count)
           results.processed++
 
         } else if (subject.includes('MASTER SALES REPORT')) {
