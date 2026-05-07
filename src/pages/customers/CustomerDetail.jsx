@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
@@ -107,6 +107,107 @@ function SpecField({ label, value }) {
   )
 }
 
+const ACTIVITY_TYPES = [
+  { value: 'call',              label: '📞 Phone Call' },
+  { value: 'cold_call',         label: '☎️ Cold Call' },
+  { value: 'scheduled_meeting', label: '📅 Scheduled Meeting' },
+  { value: 'email',             label: '📧 Email' },
+  { value: 'sample_book',       label: '📖 Sample Book' },
+  { value: 'note',              label: '📝 Note' },
+  { value: 'other',             label: '✏️ Other' },
+]
+
+function ActivityQuickLogModal({ customerId, customerName, onClose, onSaved }) {
+  const [activityType, setActivityType] = useState('call')
+  const [subject,   setSubject]   = useState('')
+  const [body,      setBody]      = useState('')
+  const [followUp,  setFollowUp]  = useState('')
+  const [saving,    setSaving]    = useState(false)
+  const today = new Date().toISOString().slice(0, 10)
+
+  async function save() {
+    if (!subject.trim()) { alert('Add a brief subject'); return }
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.from('activities').insert({
+      customer_id:    customerId,
+      activity_type:  activityType,
+      subject:        subject.trim(),
+      body:           body.trim() || null,
+      activity_date:  today,
+      follow_up_date: followUp || null,
+      completed:      true,
+      user_id:        user?.id,
+    })
+    setSaving(false)
+    if (error) { alert('Failed to save: ' + error.message); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-stone-100">
+          <h3 className="font-bold text-stone-800">Log Activity</h3>
+          <div className="text-xs text-stone-500 mt-0.5">{customerName}</div>
+        </div>
+
+        <div className="px-6 py-4 space-y-3">
+          <div>
+            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {ACTIVITY_TYPES.map(t => (
+                <button key={t.value}
+                  onClick={() => setActivityType(t.value)}
+                  className={`px-3 py-2 text-sm text-left rounded-lg border transition-colors ${
+                    activityType === t.value
+                      ? 'bg-stone-700 text-white border-stone-700'
+                      : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Subject *</label>
+            <input value={subject} onChange={e => setSubject(e.target.value)}
+              autoFocus
+              placeholder="e.g. Discussed Q3 reorder timing"
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Notes</label>
+            <textarea value={body} onChange={e => setBody(e.target.value)}
+              rows={3}
+              placeholder="What was discussed? Next steps?"
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Follow-up Date (optional)</label>
+            <input type="date" value={followUp} onChange={e => setFollowUp(e.target.value)}
+              min={today}
+              className="px-3 py-2 text-sm border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+          </div>
+        </div>
+
+        <div className="px-6 py-3 bg-stone-50 border-t border-stone-100 flex justify-end gap-2 rounded-b-2xl">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg text-stone-600 hover:bg-stone-100">Cancel</button>
+          <button onClick={save} disabled={saving || !subject.trim()}
+            className="px-4 py-2 text-sm font-semibold rounded-lg bg-stone-700 text-white hover:bg-stone-800 disabled:opacity-50">
+            {saving ? 'Saving…' : 'Log Activity'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ContactEditForm({ draft, setDraft, onSave, onCancel, saving, isNew = false }) {
   const set = (k, v) => setDraft({ ...draft, [k]: v })
   return (
@@ -167,6 +268,9 @@ export default function CustomerDetail() {
   const [quotes,     setQuotes]     = useState([])
   const [quoteLineItems, setQuoteLineItems] = useState({})  // quote_no → array of line items
   const [expandedQuoteNo, setExpandedQuoteNo] = useState(null)
+  const [orderLineItems, setOrderLineItems] = useState({})  // order_number → array of line items
+  const [expandedOrderId, setExpandedOrderId] = useState(null)
+  const [showActivityModal, setShowActivityModal] = useState(false)
   const [loading,    setLoading]    = useState(true)
   const [deleting,   setDeleting]   = useState(false)
   const [activeTab,  setActiveTab]  = useState('activity')
@@ -331,6 +435,23 @@ export default function CustomerDetail() {
     setQuoteLineItems(prev => ({ ...prev, [quoteNo]: data || [] }))
   }
 
+  // ── Order line items (lazy loaded on expand) ──────────────────────────────
+  // Matches orders.order_number to epic_quote_line_items.quote_no — works for
+  // any order that originated as a quote in our 2-week sync window.
+  async function toggleOrderExpand(order) {
+    if (expandedOrderId === order.id) {
+      setExpandedOrderId(null)
+      return
+    }
+    setExpandedOrderId(order.id)
+    if (orderLineItems[order.order_number]) return
+    const { data } = await supabase.from('epic_quote_line_items')
+      .select('*')
+      .eq('quote_no', order.order_number)
+      .order('line_number', { ascending: true })
+    setOrderLineItems(prev => ({ ...prev, [order.order_number]: data || [] }))
+  }
+
   // Compute pipeline metrics from orders
   const pipeline = useMemo(() => {
     if (!orders.length) return { quotes: 0, printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 }
@@ -423,7 +544,7 @@ export default function CustomerDetail() {
         <div className="flex items-start justify-between mb-5">
           <button onClick={() => navigate('/customers')} className="btn-ghost text-sm">← Customers</button>
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/activities/new', { state: { customer_id: id } })}
+            <button onClick={() => setShowActivityModal(true)}
               className="btn-secondary text-sm">📞 Log Activity</button>
             <button onClick={() => navigate(`/customers/${id}/edit`)} className="btn-ghost text-sm">Edit</button>
             <button onClick={handleDelete} disabled={deleting}
@@ -639,31 +760,101 @@ export default function CustomerDetail() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredOrders.map(o => (
-                          <tr key={o.id}
-                            onClick={() => navigate(`/orders/${o.id}`)}
-                            className="border-b border-stone-50 hover:bg-stone-50 cursor-pointer">
-                            <td className="px-3 py-2 font-mono font-medium text-stone-800">#{o.order_number}</td>
-                            <td className="px-3 py-2">
-                              {ORDER_STATUS_BADGE[o.status] && (
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                                  style={{ backgroundColor: ORDER_STATUS_BADGE[o.status].bg, color: ORDER_STATUS_BADGE[o.status].color }}>
-                                  {ORDER_STATUS_BADGE[o.status].label}
-                                </span>
+                        {filteredOrders.map(o => {
+                          const expanded = expandedOrderId === o.id
+                          const lines = orderLineItems[o.order_number]
+                          return (
+                            <Fragment key={o.id}>
+                              <tr
+                                onClick={() => toggleOrderExpand(o)}
+                                className="border-b border-stone-50 hover:bg-stone-50 cursor-pointer">
+                                <td className="px-3 py-2 font-mono font-medium text-stone-800">
+                                  <span className="text-stone-400 text-xs mr-1">{expanded ? '▼' : '▶'}</span>
+                                  #{o.order_number}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {ORDER_STATUS_BADGE[o.status] && (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                      style={{ backgroundColor: ORDER_STATUS_BADGE[o.status].bg, color: ORDER_STATUS_BADGE[o.status].color }}>
+                                      {ORDER_STATUS_BADGE[o.status].label}
+                                    </span>
+                                  )}
+                                  {o.on_hold && (
+                                    <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+                                      HOLD
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-stone-600 text-xs">{o.sales_rep || '—'}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-stone-700">{o.total_units || 0}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold text-stone-800">{fmt$(o.order_amount)}</td>
+                                <td className="px-3 py-2 text-stone-500 text-xs">{fmtDate(o.order_date)}</td>
+                                <td className="px-3 py-2 text-stone-400 text-xs">{relTime(o.epic_status_date || o.updated_at)}</td>
+                              </tr>
+                              {expanded && (
+                                <tr key={o.id + '-detail'}>
+                                  <td colSpan={7} className="bg-stone-50 px-4 py-3 border-b border-stone-200">
+                                    {!lines ? (
+                                      <div className="text-xs text-stone-400 py-2">Loading line items…</div>
+                                    ) : lines.length === 0 ? (
+                                      <div className="text-xs text-stone-400 py-2">
+                                        No line item details available — order may pre-date our quote sync, or it didn't originate as a quote in Wrangl.
+                                        <button onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}`) }}
+                                          className="ml-2 text-stone-700 underline hover:text-stone-900">
+                                          Open full order →
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {lines.map(li => (
+                                          <div key={li.id} className="bg-white rounded-lg p-3 border border-stone-100">
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <span className="text-[10px] font-bold text-stone-400 tabular-nums">#{li.line_number}</span>
+                                                  <span className="text-sm font-semibold text-stone-800">{li.product_desc}</span>
+                                                </div>
+                                                {(li.fabric_color || li.fabric_spec) && (
+                                                  <div className="text-xs text-stone-500 mb-1">
+                                                    {li.fabric_spec && <span>{li.fabric_spec}</span>}
+                                                    {li.fabric_spec && li.fabric_color && <span> · </span>}
+                                                    {li.fabric_color && <span className="font-mono">{li.fabric_color}</span>}
+                                                  </div>
+                                                )}
+                                                <div className="grid grid-cols-4 gap-x-4 gap-y-0.5 mt-2">
+                                                  {li.width != null && <SpecField label="Width"  value={`${li.width}"`} />}
+                                                  {li.height != null && <SpecField label="Height" value={`${li.height}"`} />}
+                                                  {li.mount && <SpecField label="Mount" value={li.mount === 'IM' ? 'Inside' : li.mount === 'OM' ? 'Outside' : li.mount} />}
+                                                  {li.top_treatment && <SpecField label="Top" value={li.top_treatment} />}
+                                                  {li.room_location && <SpecField label="Room" value={li.room_location} />}
+                                                  {li.light_block && <SpecField label="Light Block" value={li.light_block} />}
+                                                </div>
+                                              </div>
+                                              <div className="text-right flex-shrink-0">
+                                                <div className="text-xs text-stone-400 tabular-nums">
+                                                  {li.quantity} × {fmt$(li.unit_price)}
+                                                </div>
+                                                <div className="text-sm font-bold text-stone-800 tabular-nums mt-0.5">
+                                                  {fmt$(li.line_extended)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="flex items-center justify-end gap-3 pt-2 mt-2 border-t border-stone-200 text-xs">
+                                          <button onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}`) }}
+                                            className="text-stone-700 underline hover:text-stone-900">
+                                            Open full order →
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
                               )}
-                              {o.on_hold && (
-                                <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">
-                                  HOLD
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-stone-600 text-xs">{o.sales_rep || '—'}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-stone-700">{o.total_units || 0}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-stone-800">{fmt$(o.order_amount)}</td>
-                            <td className="px-3 py-2 text-stone-500 text-xs">{fmtDate(o.order_date)}</td>
-                            <td className="px-3 py-2 text-stone-400 text-xs">{relTime(o.epic_status_date || o.updated_at)}</td>
-                          </tr>
-                        ))}
+                            </Fragment>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -856,6 +1047,16 @@ export default function CustomerDetail() {
 
           </div>
         </div>
+
+        {/* Quick activity log modal */}
+        {showActivityModal && (
+          <ActivityQuickLogModal
+            customerId={id}
+            customerName={customer.account_name}
+            onClose={() => setShowActivityModal(false)}
+            onSaved={() => { setShowActivityModal(false); loadData() }}
+          />
+        )}
 
       </div>
     </div>
