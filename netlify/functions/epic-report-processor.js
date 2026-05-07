@@ -1095,40 +1095,67 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
       matchScore  = 1.0
       stats.auto_matched++
     } else {
-      // Fuzzy match against this part type's parts only
-      let bestScore = 0
-      let bestPart  = null
-
+      // First try exact match with inch-mark (") stripped — handles ePIC vs Wrangl
+      // naming difference where ePIC sends '24 X 48 ... 2 FW BLIND' and Wrangl
+      // stores '24 X 48 ... 2" FW BLIND'.
+      const normalizedDesc = description.replace(/"/g, '').toLowerCase().trim()
+      let exactMatch = null
       for (const part of partsList) {
-        const score = stringSimilarity(description, part.name)
-        if (score > bestScore) {
-          bestScore = score
-          bestPart  = part
+        const normalizedName = part.name.replace(/"/g, '').toLowerCase().trim()
+        if (normalizedName === normalizedDesc) {
+          exactMatch = part
+          break
         }
       }
 
-      if (bestScore >= 0.95) {
-        partId      = bestPart.id
+      if (exactMatch) {
+        partId      = exactMatch.id
         matchStatus = 'auto_matched'
-        matchScore  = bestScore
+        matchScore  = 1.0
         stats.auto_matched++
 
         // Save mapping for future imports
         await sbUpsert('epic_part_mappings', [{
           epic_description: description,
-          wrangl_part_id:   bestPart.id,
-          wrangl_part_name: bestPart.name,
+          wrangl_part_id:   exactMatch.id,
+          wrangl_part_name: exactMatch.name,
           approved_at:      new Date().toISOString(),
         }])
-      } else if (bestScore >= 0.85) {
-        partId      = bestPart.id
-        matchStatus = 'pending_review'
-        matchScore  = bestScore
-        stats.pending_review++
       } else {
-        matchStatus = 'unmatched'
-        matchScore  = bestScore
-        stats.unmatched++
+        // Fall back to fuzzy match
+        let bestScore = 0
+        let bestPart  = null
+
+        for (const part of partsList) {
+          const score = stringSimilarity(description, part.name)
+          if (score > bestScore) {
+            bestScore = score
+            bestPart  = part
+          }
+        }
+
+        if (bestScore >= 0.95) {
+          partId      = bestPart.id
+          matchStatus = 'auto_matched'
+          matchScore  = bestScore
+          stats.auto_matched++
+
+          await sbUpsert('epic_part_mappings', [{
+            epic_description: description,
+            wrangl_part_id:   bestPart.id,
+            wrangl_part_name: bestPart.name,
+            approved_at:      new Date().toISOString(),
+          }])
+        } else if (bestScore >= 0.85) {
+          partId      = bestPart.id
+          matchStatus = 'pending_review'
+          matchScore  = bestScore
+          stats.pending_review++
+        } else {
+          matchStatus = 'unmatched'
+          matchScore  = bestScore
+          stats.unmatched++
+        }
       }
     }
 
