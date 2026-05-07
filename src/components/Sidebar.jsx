@@ -55,10 +55,11 @@ const EXEC_NAV = [
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops/production', label: 'Start Production' },
-      { to: '/ops',            label: 'Warehouse'        },
-      { to: '/purchasing',     label: 'Purchasing'       },
-      { to: '/freight',        label: 'Freight'          },
+      { to: '/ops/production',     label: 'Start Production' },
+      { to: '/ops',                label: 'Warehouse'        },
+      { to: '/ops/cycle-counts',   label: 'Cycle Counts'     },
+      { to: '/purchasing',         label: 'Purchasing'       },
+      { to: '/freight',            label: 'Freight'          },
     ],
   },
 
@@ -69,9 +70,9 @@ const EXEC_NAV = [
       {
         type: 'group', label: 'Reports', icon: '📊',
         children: [
-          { to: '/reports/sales-activity',  label: 'Sales Activity' },
-          { to: '/reports/rep-activity',    label: 'Rep Activity'   },
-           { to: '/reports/inventory-velocity', label: 'Inventory Velocity' },
+          { to: '/reports/sales-activity',     label: 'Sales Activity'     },
+          { to: '/reports/rep-activity',       label: 'Rep Activity'       },
+          { to: '/reports/inventory-velocity', label: 'Inventory Velocity' },
         ],
       },
     ],
@@ -131,11 +132,12 @@ const PRODUCTION_NAV = [
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops/production', label: 'Start Production' },
-      { to: '/orders/on-hold', label: 'Orders on Hold'   },
-      { to: '/ops',            label: 'Warehouse'        },
-      { to: '/ops/receive',    label: 'Receive Stock'    },
-      { to: '/purchasing',     label: 'Purchasing'       },
+      { to: '/ops/production',     label: 'Start Production' },
+      { to: '/orders/on-hold',     label: 'Orders on Hold'   },
+      { to: '/ops',                label: 'Warehouse'        },
+      { to: '/ops/receive',        label: 'Receive Stock'    },
+      { to: '/ops/cycle-counts',   label: 'Cycle Counts'     },
+      { to: '/purchasing',         label: 'Purchasing'       },
     ],
   },
 ]
