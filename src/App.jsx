@@ -29,6 +29,7 @@ import ReceiveStock from './pages/ops/ReceiveStock'
 import ReceiveAgainstPO from './pages/ops/ReceiveAgainstPO'
 import TransactionLog from './pages/ops/TransactionLog'
 import ProductionHub from './pages/ops/ProductionHub'
+import CycleCounts from './pages/ops/CycleCounts'
 import OrdersOnHold from './pages/orders/OrdersOnHold'
 
 // Orders
@@ -43,7 +44,6 @@ import RepActivity from './pages/reports/RepActivity'
 import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 import SalesActivityReport from './pages/reports/SalesActivityReport'
-
 
 // Quotes
 import QuotesList from './pages/quotes/QuotesList'
@@ -121,6 +121,7 @@ function AppRoutes() {
         <Route path="/ops/receive" element={<ReceiveStock />} />
         <Route path="/ops/receive-po/:id" element={<ReceiveAgainstPO />} />
         <Route path="/ops/transactions" element={<TransactionLog />} />
+        <Route path="/ops/cycle-counts" element={<CycleCounts />} />
 
         {/* Orders on Hold */}
         <Route path="/orders/on-hold" element={<OrdersOnHold />} />
@@ -135,9 +136,9 @@ function AppRoutes() {
         <Route path="/reports/production" element={<ProductionDashboard />} />
         <Route path="/reports/rep-activity" element={<RepActivity />} />
         <Route path="/reports/sales-activity" element={<SalesActivityReport />} />
-<Route path="/reports/inventory-health" element={<InventoryHealth />} />
-<Route path="/reports/inventory-velocity" element={<InventoryVelocity />} />
-<Route path="/reports/order-status" element={<OrderStatusDashboard />} />
+        <Route path="/reports/inventory-health" element={<InventoryHealth />} />
+        <Route path="/reports/inventory-velocity" element={<InventoryVelocity />} />
+        <Route path="/reports/order-status" element={<OrderStatusDashboard />} />
 
         {/* Quotes */}
         <Route path="/quotes" element={<QuotesList />} />
