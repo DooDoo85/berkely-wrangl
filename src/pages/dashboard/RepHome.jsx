@@ -220,7 +220,7 @@ export default function RepHome() {
       sample_books:       3,
       cold_calls:         0,
     },
-    pipeline: { quotesDraft: 0, quotesSent: 0, ordersSubmitted: 0, inProduction: 0 },
+    pipeline: { quotes: 0, printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 },
     followUps: [],
     upcomingTasks: [],
   });
@@ -246,10 +246,11 @@ export default function RepHome() {
         scheduledMeetingsRes,
         coldCallsRes,
         sampleBooksRes,
-        quotesDraftRes,
-        quotesSentRes,
-        ordersSubRes,
+        quotesRes,
+        printedRes,
         inProdRes,
+        onHoldRes,
+        invoicedWtdRes,
         followUpsRes,
         upcomingTasksRes,
       ] = await Promise.all([
@@ -269,20 +270,36 @@ export default function RepHome() {
         supabase.from("activities").select("id", { count: "exact", head: true })
           .eq("user_id", profile.id).eq("activity_type", "sample_book").gte("activity_date", weekStartDate),
 
-        supabase.from("quotes").select("id", { count: "exact", head: true })
-          .eq("sales_rep", profile.email).eq("status", "draft"),
-
-        supabase.from("quotes").select("id", { count: "exact", head: true })
-          .eq("sales_rep", profile.email).eq("status", "sent"),
-
+        // QUOTES — orders in quote status
         repName
           ? supabase.from("orders").select("id", { count: "exact", head: true })
-              .eq("sales_rep", repName).eq("status", "submitted")
+              .eq("sales_rep", repName).eq("status", "quote")
           : Promise.resolve({ count: 0 }),
 
+        // PRINTED — orders in printed status (excluding wrangl-overridden in_production)
         repName
           ? supabase.from("orders").select("id", { count: "exact", head: true })
-              .eq("sales_rep", repName).eq("status", "in_production")
+              .eq("sales_rep", repName).eq("status", "printed")
+          : Promise.resolve({ count: 0 }),
+
+        // IN PRODUCTION — wrangl-tracked production OR ePIC-tracked in_production
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .or("wrangl_status.eq.in_production,status.eq.in_production")
+          : Promise.resolve({ count: 0 }),
+
+        // ORDERS ON HOLD — anything with on_hold flag
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName).eq("on_hold", true)
+          : Promise.resolve({ count: 0 }),
+
+        // INVOICED WTD — invoiced this week (uses epic_status_date for actual invoice date)
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName).eq("status", "invoiced")
+              .gte("epic_status_date", weekStartDate)
           : Promise.resolve({ count: 0 }),
 
         supabase.from("activities")
@@ -311,10 +328,11 @@ export default function RepHome() {
         },
         goals: goalsMap,
         pipeline: {
-          quotesDraft:     quotesDraftRes.count ?? 0,
-          quotesSent:      quotesSentRes.count ?? 0,
-          ordersSubmitted: ordersSubRes.count ?? 0,
-          inProduction:    inProdRes.count ?? 0,
+          quotes:       quotesRes.count ?? 0,
+          printed:      printedRes.count ?? 0,
+          inProduction: inProdRes.count ?? 0,
+          onHold:       onHoldRes.count ?? 0,
+          invoicedWtd:  invoicedWtdRes.count ?? 0,
         },
         followUps:     followUpsRes.data ?? [],
         upcomingTasks: upcomingTasksRes.data ?? [],
@@ -462,42 +480,51 @@ export default function RepHome() {
       {/* My Pipeline */}
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">My pipeline</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <PipelineCard
-            label="Quotes Draft"
-            count={data.pipeline.quotesDraft}
+            label="Quotes"
+            count={data.pipeline.quotes}
             accentColor="bg-gray-400"
             dotColor="bg-gray-400"
             icon={<div className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">{Icon.fileText}</div>}
             loading={loading}
-            onClick={() => navigate("/quotes")}
+            onClick={() => navigate("/orders?status=quote")}
           />
           <PipelineCard
-            label="Quotes Sent"
-            count={data.pipeline.quotesSent}
+            label="Printed"
+            count={data.pipeline.printed}
             accentColor="bg-blue-500"
             dotColor="bg-blue-500"
             icon={<div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">{Icon.send}</div>}
             loading={loading}
-            onClick={() => navigate("/quotes")}
-          />
-          <PipelineCard
-            label="Orders Submitted"
-            count={data.pipeline.ordersSubmitted}
-            accentColor="bg-amber-500"
-            dotColor="bg-amber-500"
-            icon={<div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">{Icon.package}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders")}
+            onClick={() => navigate("/orders?status=printed")}
           />
           <PipelineCard
             label="In Production"
             count={data.pipeline.inProduction}
+            accentColor="bg-amber-500"
+            dotColor="bg-amber-500"
+            icon={<div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">{Icon.settings}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=in_production")}
+          />
+          <PipelineCard
+            label="On Hold"
+            count={data.pipeline.onHold}
+            accentColor="bg-red-500"
+            dotColor="bg-red-500"
+            icon={<div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-500">{Icon.package}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders/on-hold")}
+          />
+          <PipelineCard
+            label="Invoiced WTD"
+            count={data.pipeline.invoicedWtd}
             accentColor="bg-emerald-500"
             dotColor="bg-emerald-500"
-            icon={<div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">{Icon.settings}</div>}
+            icon={<div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">{Icon.package}</div>}
             loading={loading}
-            onClick={() => navigate("/orders")}
+            onClick={() => navigate("/orders?status=invoiced")}
           />
         </div>
       </div>
