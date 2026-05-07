@@ -98,6 +98,15 @@ function AddressBlock({ label, address }) {
   )
 }
 
+function SpecField({ label, value }) {
+  return (
+    <div className="text-xs">
+      <span className="text-stone-400">{label}: </span>
+      <span className="text-stone-700 font-medium">{value}</span>
+    </div>
+  )
+}
+
 function ContactEditForm({ draft, setDraft, onSave, onCancel, saving, isNew = false }) {
   const set = (k, v) => setDraft({ ...draft, [k]: v })
   return (
@@ -155,6 +164,9 @@ export default function CustomerDetail() {
   const [customer,   setCustomer]   = useState(null)
   const [orders,     setOrders]     = useState([])
   const [activities, setActivities] = useState([])
+  const [quotes,     setQuotes]     = useState([])
+  const [quoteLineItems, setQuoteLineItems] = useState({})  // quote_no → array of line items
+  const [expandedQuoteNo, setExpandedQuoteNo] = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [deleting,   setDeleting]   = useState(false)
   const [activeTab,  setActiveTab]  = useState('activity')
@@ -186,8 +198,8 @@ export default function CustomerDetail() {
 
     if (!cust) { setLoading(false); return }
 
-    // 2. Load orders + activities in parallel (orders match by customer_name since that's what ePIC populates)
-    const [ordersRes, activitiesRes] = await Promise.all([
+    // 2. Load orders + activities + quotes in parallel
+    const [ordersRes, activitiesRes, quotesRes] = await Promise.all([
       supabase.from('orders')
         .select('id, order_number, status, epic_status, sales_rep, total_units, order_amount, order_date, epic_status_date, on_hold, hold_reason, wrangl_status, updated_at')
         .eq('customer_name', cust.account_name)
@@ -199,10 +211,17 @@ export default function CustomerDetail() {
         .eq('customer_id', id)
         .order('activity_date', { ascending: false })
         .limit(50),
+
+      supabase.from('epic_quotes')
+        .select('id, quote_no, customer_name, salesperson, quote_date, status, subtotal, freight, total, line_count')
+        .eq('customer_name', cust.account_name)
+        .order('quote_date', { ascending: false, nullsFirst: false })
+        .limit(100),
     ])
 
     setOrders(ordersRes.data || [])
     setActivities(activitiesRes.data || [])
+    setQuotes(quotesRes.data || [])
     setLoading(false)
   }
 
@@ -295,6 +314,21 @@ export default function CustomerDetail() {
     const { error } = await supabase.from('customer_contacts').delete().eq('id', contactId)
     if (error) { alert('Failed to delete: ' + error.message); return }
     loadData()
+  }
+
+  // ── Quote line items (lazy loaded on expand) ──────────────────────────────
+  async function toggleQuoteExpand(quoteNo) {
+    if (expandedQuoteNo === quoteNo) {
+      setExpandedQuoteNo(null)
+      return
+    }
+    setExpandedQuoteNo(quoteNo)
+    if (quoteLineItems[quoteNo]) return  // already loaded
+    const { data } = await supabase.from('epic_quote_line_items')
+      .select('*')
+      .eq('quote_no', quoteNo)
+      .order('line_number', { ascending: true })
+    setQuoteLineItems(prev => ({ ...prev, [quoteNo]: data || [] }))
   }
 
   // Compute pipeline metrics from orders
@@ -480,7 +514,7 @@ export default function CustomerDetail() {
         <div className="mb-5">
           <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Pipeline</h3>
           <div className="grid grid-cols-5 gap-3">
-            <PipelineTile label="Quotes"        count={pipeline.quotes}       color="#8a7560" bg="#f5f0e8" onClick={() => { setActiveTab('orders'); setOrderStatusFilter('quote') }} />
+            <PipelineTile label="Quotes"        count={pipeline.quotes}       color="#8a7560" bg="#f5f0e8" onClick={() => setActiveTab('quotes')} />
             <PipelineTile label="Printed"       count={pipeline.printed}      color="#a0573a" bg="#f5e2d4" onClick={() => { setActiveTab('orders'); setOrderStatusFilter('printed') }} />
             <PipelineTile label="In Production" count={pipeline.inProduction} color="#b8854d" bg="#f5e8c8" onClick={() => { setActiveTab('orders'); setOrderStatusFilter('in_production') }} />
             <PipelineTile label="On Hold"       count={pipeline.onHold}       color="#ee5e3a" bg="#fde4dc" onClick={() => { setActiveTab('orders'); setOrderStatusFilter('on_hold') }} />
@@ -494,6 +528,7 @@ export default function CustomerDetail() {
             {[
               { key: 'activity',   label: 'Activity'  },
               { key: 'orders',     label: `Orders (${orders.length})` },
+              { key: 'quotes',     label: `Quotes (${quotes.length})` },
               { key: 'contacts',   label: 'Contacts'  },
               { key: 'addresses',  label: 'Addresses' },
             ].map(tab => (
@@ -631,6 +666,102 @@ export default function CustomerDetail() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* QUOTES TAB */}
+            {activeTab === 'quotes' && (
+              <div>
+                {quotes.length === 0 ? (
+                  <div className="text-center py-12 text-stone-400 text-sm">
+                    No quotes synced yet for this customer.<br/>
+                    <span className="text-xs">Quotes from the past 2 weeks sync from ePIC every few hours.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {quotes.map(q => {
+                      const expanded = expandedQuoteNo === q.quote_no
+                      const lines = quoteLineItems[q.quote_no]
+                      return (
+                        <div key={q.quote_no} className="border border-stone-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => toggleQuoteExpand(q.quote_no)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-stone-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <span className="text-stone-400 text-xs">{expanded ? '▼' : '▶'}</span>
+                              <span className="font-mono font-semibold text-stone-800 text-sm">#{q.quote_no}</span>
+                              <span className="text-xs text-stone-500">{fmtDate(q.quote_date)}</span>
+                              <span className="text-xs text-stone-400">·</span>
+                              <span className="text-xs text-stone-500">{q.salesperson}</span>
+                              <span className="text-xs text-stone-400">·</span>
+                              <span className="text-xs text-stone-500">{q.line_count} {q.line_count === 1 ? 'line' : 'lines'}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="text-xs text-stone-400">Subtotal {fmt$(q.subtotal)}</span>
+                              <span className="text-sm font-bold text-stone-800 tabular-nums">{fmt$(q.total)}</span>
+                            </div>
+                          </button>
+
+                          {expanded && (
+                            <div className="border-t border-stone-100 bg-stone-50 px-4 py-3">
+                              {!lines ? (
+                                <div className="text-xs text-stone-400 py-3">Loading line items…</div>
+                              ) : lines.length === 0 ? (
+                                <div className="text-xs text-stone-400 py-3">No line item details available.</div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {lines.map(li => (
+                                    <div key={li.id} className="bg-white rounded-lg p-3 border border-stone-100">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-bold text-stone-400 tabular-nums">#{li.line_number}</span>
+                                            <span className="text-sm font-semibold text-stone-800">{li.product_desc}</span>
+                                          </div>
+                                          {(li.fabric_color || li.fabric_spec) && (
+                                            <div className="text-xs text-stone-500 mb-1">
+                                              {li.fabric_spec && <span>{li.fabric_spec}</span>}
+                                              {li.fabric_spec && li.fabric_color && <span> · </span>}
+                                              {li.fabric_color && <span className="font-mono">{li.fabric_color}</span>}
+                                            </div>
+                                          )}
+                                          {/* Shade specs grid */}
+                                          <div className="grid grid-cols-4 gap-x-4 gap-y-0.5 mt-2">
+                                            {li.width != null && <SpecField label="Width"  value={`${li.width}"`} />}
+                                            {li.height != null && <SpecField label="Height" value={`${li.height}"`} />}
+                                            {li.mount && <SpecField label="Mount" value={li.mount === 'IM' ? 'Inside' : li.mount === 'OM' ? 'Outside' : li.mount} />}
+                                            {li.top_treatment && <SpecField label="Top" value={li.top_treatment} />}
+                                            {li.room_location && <SpecField label="Room" value={li.room_location} />}
+                                            {li.light_block && <SpecField label="Light Block" value={li.light_block} />}
+                                          </div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0">
+                                          <div className="text-xs text-stone-400 tabular-nums">
+                                            {li.quantity} × {fmt$(li.unit_price)}
+                                          </div>
+                                          <div className="text-sm font-bold text-stone-800 tabular-nums mt-0.5">
+                                            {fmt$(li.line_extended)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {/* Quote total footer */}
+                                  <div className="flex items-center justify-end gap-4 pt-2 mt-2 border-t border-stone-200 text-xs">
+                                    <span className="text-stone-500">Subtotal {fmt$(q.subtotal)}</span>
+                                    {q.freight > 0 && <span className="text-stone-500">Freight {fmt$(q.freight)}</span>}
+                                    <span className="font-bold text-stone-800">Total {fmt$(q.total)}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
