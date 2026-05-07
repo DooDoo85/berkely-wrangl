@@ -21,7 +21,7 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen bg-brand-dark flex items-center justify-center p-4"
-         style={{ backgroundImage: 'radial-gradient(ellipse at 20% 50%, #2D4A31 0%, #1C2B1E 60%)' }}>
+         style={{ backgroundImage: 'radial-gradient(ellipse at 20% 50%, #382618 0%, #261810 60%)' }}>
 
       {/* Decorative grain overlay */}
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none"
