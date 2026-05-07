@@ -65,6 +65,9 @@ import PurchaseOrders from './pages/purchasing/PurchaseOrders'
 import ReorderQueue from './pages/purchasing/ReorderQueue'
 import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
 
+// Settings
+import EmailPreferences from './pages/settings/EmailPreferences'
+
 import SetPasswordRequired from './components/SetPasswordRequired'
 
 function AppRoutes() {
@@ -155,6 +158,7 @@ function AppRoutes() {
         {/* Freight / Settings */}
         <Route path="/freight" element={<Placeholder title="Freight" />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />
+        <Route path="/settings/email-preferences" element={<EmailPreferences />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
