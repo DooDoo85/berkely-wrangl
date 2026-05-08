@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthProvider'
 
 export default function SetPasswordRequired() {
-  const { user, refreshUser, signOut } = useAuth()
+  const { user, refreshUser, signOut, isPasswordRecovery } = useAuth()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [show, setShow] = useState(false)
@@ -31,19 +31,26 @@ export default function SetPasswordRequired() {
       return
     }
 
-    // Refresh user to update needsPassword state
+    // Refresh user to update needsPassword + isPasswordRecovery state
     await refreshUser()
     setSaving(false)
   }
+
+  // Copy varies based on whether user is resetting vs setting up for the first time
+  const heading = isPasswordRecovery ? 'Reset Your Password' : 'Welcome to Wrangl'
+  const subtext = isPasswordRecovery
+    ? 'Enter a new password below. You\'ll use this to log in going forward.'
+    : 'One last step — set a password so you can log in directly next time.'
+  const submitLabel = isPasswordRecovery ? 'Update Password' : 'Set Password & Continue'
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-3">🐄</div>
-          <h2 className="text-2xl font-display font-bold text-stone-800">Welcome to Wrangl</h2>
+          <div className="text-4xl mb-3">{isPasswordRecovery ? '🔑' : '🐄'}</div>
+          <h2 className="text-2xl font-display font-bold text-stone-800">{heading}</h2>
           <p className="text-sm text-stone-500 mt-2">
-            One last step — set a password so you can log in directly next time.
+            {subtext}
           </p>
         </div>
 
@@ -105,7 +112,7 @@ export default function SetPasswordRequired() {
             disabled={saving || !password || !confirm}
             className="w-full py-2.5 rounded-xl bg-[#5a3a24] text-[#f5e6d0] text-sm font-semibold hover:bg-[#6e4a30] disabled:opacity-40 transition-colors"
           >
-            {saving ? 'Saving...' : 'Set Password & Continue'}
+            {saving ? 'Saving...' : submitLabel}
           </button>
 
           <button
@@ -113,7 +120,7 @@ export default function SetPasswordRequired() {
             onClick={signOut}
             className="w-full text-xs text-stone-400 hover:text-stone-600"
           >
-            Log out
+            {isPasswordRecovery ? 'Cancel and sign out' : 'Log out'}
           </button>
         </form>
       </div>
