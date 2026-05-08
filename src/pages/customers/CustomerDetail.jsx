@@ -28,6 +28,14 @@ function startOfWeek() {
   return d.toISOString().slice(0, 10)
 }
 
+// "On Hold" = manually flagged in Wrangl (mirrors the wrangl_status='in_production' pattern).
+// `status='credit_hold'` is a transient system step in the order lifecycle and does NOT count.
+// Hold management UI not built yet — until then, this returns false for everything,
+// which is correct (no manually held orders exist).
+function isOnHold(o) {
+  return o?.wrangl_status === 'on_hold'
+}
+
 function startOfYear() {
   const d = new Date()
   d.setMonth(0, 1)
@@ -305,7 +313,7 @@ export default function CustomerDetail() {
     // 2. Load orders + activities + quotes in parallel
     const [ordersRes, activitiesRes, quotesRes] = await Promise.all([
       supabase.from('orders')
-        .select('id, order_number, status, epic_status, sales_rep, total_units, order_amount, order_date, epic_status_date, on_hold, hold_reason, wrangl_status, updated_at')
+        .select('id, order_number, status, epic_status, sales_rep, total_units, order_amount, order_date, epic_status_date, wrangl_status, updated_at')
         .eq('customer_id', id)
         .order('order_date', { ascending: false, nullsFirst: false })
         .limit(500),
@@ -460,7 +468,7 @@ export default function CustomerDetail() {
       quotes:       orders.filter(o => o.status === 'quote').length,
       printed:      orders.filter(o => o.status === 'printed').length,
       inProduction: orders.filter(o => o.wrangl_status === 'in_production' || o.status === 'in_production').length,
-      onHold:       orders.filter(o => o.on_hold === true).length,
+      onHold:       orders.filter(o => isOnHold(o)).length,
       invoicedWtd:  orders.filter(o => o.status === 'invoiced' && o.epic_status_date >= weekStart).length,
     }
   }, [orders])
@@ -493,7 +501,7 @@ export default function CustomerDetail() {
   // Filtered orders for the Orders tab
   const filteredOrders = useMemo(() => {
     if (orderStatusFilter === 'all') return orders
-    if (orderStatusFilter === 'on_hold') return orders.filter(o => o.on_hold)
+    if (orderStatusFilter === 'on_hold') return orders.filter(o => isOnHold(o))
     return orders.filter(o => o.status === orderStatusFilter)
   }, [orders, orderStatusFilter])
 
@@ -779,7 +787,7 @@ export default function CustomerDetail() {
                                       {ORDER_STATUS_BADGE[o.status].label}
                                     </span>
                                   )}
-                                  {o.on_hold && (
+                                  {isOnHold(o) && (
                                     <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">
                                       HOLD
                                     </span>
