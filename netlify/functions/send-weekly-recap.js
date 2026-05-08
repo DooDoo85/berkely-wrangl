@@ -74,6 +74,43 @@ function fmtNum(n) {
 }
 
 // ─── Data queries ───────────────────────────────────────────────
+
+// Reads from the same product_line_sales view the Executive Home dashboard uses.
+// Returns { roller: { wtd, mtd, ytd, units_wtd, units_mtd, units_ytd }, faux: {...} }
+// Single round-trip. WTD/MTD/YTD here will EXACTLY match the dashboard.
+async function fetchProductLineSales() {
+  const { data, error } = await supabase
+    .from('product_line_sales')
+    .select('product_line, sales_wtd, sales_mtd, sales_ytd, units_wtd, units_mtd, units_ytd')
+  if (error) {
+    console.error('fetchProductLineSales error:', error)
+    return { roller: {}, faux: {} }
+  }
+  const roller = (data || []).find(p => p.product_line === 'Roller Shades') || {}
+  const faux   = (data || []).find(p => p.product_line === 'Faux Wood Blinds') || {}
+  return {
+    roller: {
+      wtd:       Number(roller.sales_wtd || 0),
+      mtd:       Number(roller.sales_mtd || 0),
+      ytd:       Number(roller.sales_ytd || 0),
+      units_wtd: Number(roller.units_wtd || 0),
+      units_mtd: Number(roller.units_mtd || 0),
+      units_ytd: Number(roller.units_ytd || 0),
+    },
+    faux: {
+      wtd:       Number(faux.sales_wtd || 0),
+      mtd:       Number(faux.sales_mtd || 0),
+      ytd:       Number(faux.sales_ytd || 0),
+      units_wtd: Number(faux.units_wtd || 0),
+      units_mtd: Number(faux.units_mtd || 0),
+      units_ytd: Number(faux.units_ytd || 0),
+    },
+  }
+}
+
+// Prior week comparison — the view doesn't expose this, so we query orders directly.
+// Match the dashboard's filter (status='invoiced', epic_status_date in window).
+// If WTD here doesn't reconcile with the view's WTD, we know to refine.
 async function fetchPeriodTotals(productLine, fromDate, toDate) {
   const { data, error } = await supabase
     .from('orders')
@@ -440,25 +477,26 @@ export const handler = async (event) => {
 
     // Parallel data fetches
     const [
-      roller, faux,
+      productLineSales,
       rollerPrior, fauxPrior,
-      rollerMtd, fauxMtd,
-      rollerYtd, fauxYtd,
       team, topCustomers, ops, purchasing,
     ] = await Promise.all([
-      fetchPeriodTotals('roller', weekStart, weekEnd),
-      fetchPeriodTotals('faux', weekStart, weekEnd),
-      fetchPeriodTotals('roller', priorStart, priorEnd),
-      fetchPeriodTotals('faux', priorStart, priorEnd),
-      fetchPeriodTotals('roller', monthStart, weekEnd),
-      fetchPeriodTotals('faux', monthStart, weekEnd),
-      fetchPeriodTotals('roller', yearStart, weekEnd),
-      fetchPeriodTotals('faux', yearStart, weekEnd),
+      fetchProductLineSales(),                              // ← canonical WTD/MTD/YTD from dashboard view
+      fetchPeriodTotals('roller', priorStart, priorEnd),    // for vs-last-week comparison only
+      fetchPeriodTotals('faux',   priorStart, priorEnd),
       fetchTeamActivity(weekStart, weekEnd),
       fetchTopCustomers(weekStart, weekEnd, 5),
       fetchOperations(weekStart, weekEnd),
       fetchPurchasing(weekStart, weekEnd),
     ])
+
+    // Adapt view shape into the {sales, units} shape the email template expects
+    const roller    = { sales: productLineSales.roller.wtd, units: productLineSales.roller.units_wtd }
+    const faux      = { sales: productLineSales.faux.wtd,   units: productLineSales.faux.units_wtd }
+    const rollerMtd = { sales: productLineSales.roller.mtd, units: productLineSales.roller.units_mtd }
+    const fauxMtd   = { sales: productLineSales.faux.mtd,   units: productLineSales.faux.units_mtd }
+    const rollerYtd = { sales: productLineSales.roller.ytd, units: productLineSales.roller.units_ytd }
+    const fauxYtd   = { sales: productLineSales.faux.ytd,   units: productLineSales.faux.units_ytd }
 
     const html = buildHtml({
       weekStart, weekEnd,
