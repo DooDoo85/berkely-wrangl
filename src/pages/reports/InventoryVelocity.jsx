@@ -168,7 +168,7 @@ export default function InventoryVelocity() {
     const headers = [
       'Part Name','Type','Vendor','Tier','On Hand','Committed','Available',
       `Used (${winLabel})`,'Win Avg/Day',
-      'Wrangl 30d/Day','PIC Baseline/Day','Effective/Day','Source','Trend %',
+      'Wrangl 30d/Wk','PIC Baseline/Wk','Effective/Wk','Source','Trend %',
       'Days Supply','Status',
     ]
     const rows = sorted.map(r => [
@@ -181,9 +181,9 @@ export default function InventoryVelocity() {
       r.available,
       r.used,
       r.avg_per_day.toFixed(2),
-      Number(r.wrangl_velocity_30d || 0).toFixed(2),
-      Number(r.pic_baseline_velocity || 0).toFixed(2),
-      Number(r.effective_velocity   || 0).toFixed(2),
+      (Number(r.wrangl_velocity_30d || 0) * 7).toFixed(2),
+      (Number(r.pic_baseline_velocity || 0) * 7).toFixed(2),
+      (Number(r.effective_velocity   || 0) * 7).toFixed(2),
       r.velocity_source || 'none',
       r.velocity_trend_pct == null ? '' : r.velocity_trend_pct,
       isFinite(r.days_supply) ? Math.round(r.days_supply) : '∞',
@@ -298,9 +298,9 @@ export default function InventoryVelocity() {
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Available</th>
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Used ({windowKey}d)</th>
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Win/d</th>
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Wrangl 30d/d</th>
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">PIC Base/d</th>
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Effective/d</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Wrangl 30d/wk</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">PIC Base/wk</th>
+                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Effective/wk</th>
                 <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Src</th>
                 <th className="text-center px-3 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Trend</th>
                 <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Days Supply</th>
@@ -340,13 +340,13 @@ export default function InventoryVelocity() {
                       {row.avg_per_day > 0 ? row.avg_per_day.toFixed(1) : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-stone-700">
-                      {row.wrangl_velocity_30d > 0 ? Number(row.wrangl_velocity_30d).toFixed(1) : '—'}
+                      {row.wrangl_velocity_30d > 0 ? (Number(row.wrangl_velocity_30d) * 7).toFixed(1) : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-stone-700">
-                      {row.pic_baseline_velocity > 0 ? Number(row.pic_baseline_velocity).toFixed(1) : '—'}
+                      {row.pic_baseline_velocity > 0 ? (Number(row.pic_baseline_velocity) * 7).toFixed(1) : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-stone-900">
-                      {row.effective_velocity > 0 ? Number(row.effective_velocity).toFixed(1) : '—'}
+                      {row.effective_velocity > 0 ? (Number(row.effective_velocity) * 7).toFixed(1) : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${srcCfg.cls}`}>
@@ -382,12 +382,12 @@ export default function InventoryVelocity() {
 
       <p className="text-xs text-stone-400 mt-3">
         Click any row to view the part's transaction history.
-        <strong className="text-stone-500"> Win/d</strong> is your selected window's burn rate.
-        <strong className="text-stone-500"> Wrangl 30d/d</strong> is the rolling 30-day rate from inventory transactions.
-        <strong className="text-stone-500"> PIC Base/d</strong> is the one-time Jan-Apr 2026 PIC baseline.
-        <strong className="text-stone-500"> Effective/d</strong> is the velocity the engine is using right now —
+        <strong className="text-stone-500"> Win/d</strong> is your selected window's daily burn rate.
+        <strong className="text-stone-500"> Wrangl 30d/wk</strong> is the rolling 30-day rate from inventory transactions, shown weekly.
+        <strong className="text-stone-500"> PIC Base/wk</strong> is the one-time Jan-Apr 2026 PIC baseline, shown weekly.
+        <strong className="text-stone-500"> Effective/wk</strong> is the velocity the engine is using right now —
         Wrangl once a part has &gt;30 days of history and ≥3 consumption transactions in the last 90 days, otherwise PIC.
-        <strong className="text-stone-500"> Days Supply</strong> is computed off Effective/d.
+        <strong className="text-stone-500"> Days Supply</strong> is computed off the daily effective velocity.
       </p>
     </div>
   )
