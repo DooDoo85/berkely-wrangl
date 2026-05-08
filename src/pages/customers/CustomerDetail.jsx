@@ -306,7 +306,7 @@ export default function CustomerDetail() {
     const [ordersRes, activitiesRes, quotesRes] = await Promise.all([
       supabase.from('orders')
         .select('id, order_number, status, epic_status, sales_rep, total_units, order_amount, order_date, epic_status_date, on_hold, hold_reason, wrangl_status, updated_at')
-        .eq('customer_name', cust.account_name)
+        .eq('customer_id', id)
         .order('order_date', { ascending: false, nullsFirst: false })
         .limit(500),
 
