@@ -70,6 +70,7 @@ const EXEC_NAV = [
       {
         type: 'group', label: 'Reports', icon: '📊',
         children: [
+          { to: '/reports/sales-intelligence', label: 'Sales Intelligence', executiveOrOwner: true },
           { to: '/reports/sales-activity',     label: 'Sales Activity'     },
           { to: '/reports/rep-activity',       label: 'Rep Activity'       },
           { to: '/reports/inventory-velocity', label: 'Inventory Velocity' },
@@ -156,6 +157,8 @@ function getInitials(profile) {
 function roleLabel(role) {
   if (role === 'owner')      return 'Owner'
   if (role === 'sales')      return 'Sales Representative'
+  if (role === 'sales_rep')  return 'Sales Representative'
+  if (role === 'executive')  return 'Executive'
   if (role === 'admin')      return 'Executive'
   if (role === 'production') return 'Production Lead'
   return role || ''
@@ -167,7 +170,10 @@ export default function Sidebar() {
   const location = useLocation()
   const { profile, signOut } = useAuth()
   const role = profile?.role
-  const NAV = role === 'sales' ? SALES_NAV : role === 'production' ? PRODUCTION_NAV : EXEC_NAV
+  const NAV =
+    (role === 'sales' || role === 'sales_rep') ? SALES_NAV :
+    role === 'production'                       ? PRODUCTION_NAV :
+                                                  EXEC_NAV
 
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
@@ -231,7 +237,9 @@ export default function Sidebar() {
           </button>
           {open && (
             <div className="ml-9 mt-0.5 space-y-0.5">
-              {item.children.map(child => (
+              {item.children
+                .filter(child => !child.executiveOrOwner || role === 'owner' || role === 'executive')
+                .map(child => (
                 <NavLink key={child.to} to={child.to}
                   className={({ isActive }) =>
                     `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
