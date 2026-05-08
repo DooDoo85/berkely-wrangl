@@ -13,3 +13,15 @@
 
 [functions."epic-report-processor"]
   schedule = "*/15 * * * *"
+
+# Friday 3pm CDT executive recap.
+# Cron is in UTC. CDT = UTC-5 in summer, so 3pm CDT = 20:00 UTC.
+# (When DST ends and we shift to CST = UTC-6, this would need to be 21:00 UTC.
+#  Re-check in Nov when clocks fall back.)
+[functions."send-weekly-recap"]
+  schedule = "0 20 * * 5"
+
+# Monday 8am CDT rep rollup.
+# 8am CDT = 13:00 UTC.
+[functions."send-rep-rollup"]
+  schedule = "0 13 * * 1"
