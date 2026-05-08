@@ -325,6 +325,64 @@ async function processPrinted(csvText, orderType) {
   // Track faux order numbers seen in this report — used for purge step below
   const fauxOrdersInReport = new Set()
 
+  // Customer name → customer_id map. Auto-create missing customers so new orders
+  // never land orphaned (Customer 360 broken the way it was for BLINDSTER).
+  const norm = (s) => (s || '').trim().toUpperCase()
+  const customerMap = {}
+  {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/customers?select=id,account_name`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      data.forEach(c => {
+        const key = norm(c.account_name)
+        if (key) customerMap[key] = c.id
+      })
+    }
+  }
+  // Auto-create any missing real customers from this report
+  const reportNames = new Set()
+  for (const row of rows) {
+    const n = (row.Customer || row.CustomerName || '').trim()
+    if (n) reportNames.add(norm(n))
+  }
+  const missingCustomers = []
+  for (const key of reportNames) {
+    if (customerMap[key]) continue
+    if (key.includes('TEST CUSTOMER') || key.includes('TEST ACCOUNT') || key.startsWith('TEST ')) continue
+    // Find original casing + sales rep from the report
+    const sample = rows.find(r => norm(r.Customer || r.CustomerName) === key)
+    missingCustomers.push({
+      account_name: (sample?.Customer || sample?.CustomerName || key).trim(),
+      sales_rep:    normalizeRepName(sample?.Salesperson) || null,
+      status:       'active',
+      active:       true,
+      created_at:   new Date().toISOString(),
+      updated_at:   new Date().toISOString(),
+    })
+  }
+  if (missingCustomers.length > 0) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/customers`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(missingCustomers),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      created.forEach(c => { customerMap[norm(c.account_name)] = c.id })
+      console.log(`  Auto-created ${created.length} new customer record(s) from PRINTED report`)
+    } else {
+      console.error(`  Customer auto-create failed: ${res.status} ${await res.text()}`)
+    }
+  }
+
   for (const row of rows) {
     const orderNo = (row.OrderNo || row.Wo || '').trim()
     if (!orderNo) continue
@@ -337,10 +395,12 @@ async function processPrinted(csvText, orderType) {
 
     const existing = await sbQuery('orders', `epic_id=eq.${orderNo}&select=id,status&limit=1`)
     if (!Array.isArray(existing) || !existing[0]) {
+      const customerName = row.Customer || row.CustomerName || ''
       await sbUpsert('orders', [{
         epic_id:         orderNo,
         order_number:    orderNo,
-        customer_name:   row.Customer || row.CustomerName || '',
+        customer_name:   customerName,
+        customer_id:     customerMap[norm(customerName)] || null,
         sidemark:        row.Sidemark || null,
         status:          'printed',
         product_line:    productLine,
