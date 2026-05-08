@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
@@ -18,6 +18,11 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
+
+  // Ref mirror of isPasswordRecovery so the auth-state callback (which captures
+  // a stale closure) can always read the current value.
+  const recoveryRef = useRef(false)
 
   useEffect(() => {
     // Get initial session
@@ -29,9 +34,30 @@ export function AuthProvider({ children }) {
     })
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // ── Password recovery: user clicked reset link ──────────────────────
+      // Supabase fires PASSWORD_RECOVERY when the user lands from a reset
+      // email. Force them through the password-set modal even though they
+      // already have an email identity (they're an existing user resetting).
+      if (event === 'PASSWORD_RECOVERY') {
+        recoveryRef.current = true
+        setIsPasswordRecovery(true)
+        setNeedsPassword(true)
+        setUser(session?.user ?? null)
+        if (session?.user) fetchProfile(session.user.id)
+        return
+      }
+
       setUser(session?.user ?? null)
-      setNeedsPassword(session?.user ? !userHasPassword(session.user) : false)
+
+      // If we're mid-recovery, keep the modal up regardless of identity state.
+      if (recoveryRef.current) {
+        setNeedsPassword(true)
+      } else {
+        // Normal flow: invited users (no email identity yet) need to set a password
+        setNeedsPassword(session?.user ? !userHasPassword(session.user) : false)
+      }
+
       if (session?.user) fetchProfile(session.user.id)
       else { setProfile(null); setLoading(false) }
     })
@@ -55,6 +81,9 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    recoveryRef.current = false
+    setIsPasswordRecovery(false)
+    setNeedsPassword(false)
     await supabase.auth.signOut()
   }
 
@@ -62,11 +91,22 @@ export function AuthProvider({ children }) {
   async function refreshUser() {
     const { data: { user: refreshedUser } } = await supabase.auth.getUser()
     setUser(refreshedUser)
+    recoveryRef.current = false
+    setIsPasswordRecovery(false)
     setNeedsPassword(refreshedUser ? !userHasPassword(refreshedUser) : false)
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, needsPassword, signIn, signOut, refreshUser }}>
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      loading,
+      needsPassword,
+      isPasswordRecovery,
+      signIn,
+      signOut,
+      refreshUser,
+    }}>
       {children}
     </AuthContext.Provider>
   )
