@@ -130,6 +130,9 @@ export default function ReorderQueue() {
       const vendorId = vendors?.[0]?.id || null
       const vendorName = addingPart.vendor || vendors?.[0]?.vendor_name || 'Unknown Vendor'
 
+      // Capture who's adding so the notification can attribute it
+      const { data: { user } } = await supabase.auth.getUser()
+
       await supabase.from('reorder_queue').insert({
         part_id: addingPart.id,
         part_name: addingPart.name,
@@ -138,6 +141,7 @@ export default function ReorderQueue() {
         vendor_name: vendorName,
         qty_requested: parseInt(addQty),
         note: addNote.trim() || null,
+        added_by: user?.id || null,
       })
 
       setAddSuccess(addingPart.name)
