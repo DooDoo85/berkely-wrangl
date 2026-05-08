@@ -1,15 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
+
+// Email allowlist for who sees recommendations panel.
+// Phase A: just David. Add more as we expand rollout.
+const RECOMMENDATIONS_ALLOWLIST = ['david@berkelydistribution.com']
 
 export default function ReorderQueue() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const showRecommendations = user?.email && RECOMMENDATIONS_ALLOWLIST.includes(user.email.toLowerCase())
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [creatingVendor, setCreatingVendor] = useState(null)
   const [selected, setSelected] = useState({})
   const [editingQty, setEditingQty] = useState({})
+
+  // ── Recommendations state ────────────────────────────────────────────────
+  const [recsOpen, setRecsOpen] = useState(false)
+  const [recs, setRecs] = useState([])
+  const [recsLoading, setRecsLoading] = useState(false)
+  const [recAdding, setRecAdding] = useState(null)        // part_id being added
+  const [recDismissing, setRecDismissing] = useState(null) // part_id being dismissed/snoozed
+  const [recExpanded, setRecExpanded] = useState({})      // {part_id: bool} for "show math"
 
   // ── Quick-add state ─────────────────────────────────────────────────────────
   const [showQuickAdd, setShowQuickAdd] = useState(false)
@@ -25,6 +40,92 @@ export default function ReorderQueue() {
   const debounceRef = useRef(null)
 
   useEffect(() => { loadQueue() }, [])
+
+  // Load recommendations whenever the panel is opened
+  useEffect(() => {
+    if (recsOpen && showRecommendations) loadRecommendations()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recsOpen, showRecommendations])
+
+  async function loadRecommendations() {
+    setRecsLoading(true)
+    const { data, error } = await supabase
+      .from('v_purchasing_recommendations')
+      .select('*')
+      .in('status', ['order_now', 'order_soon'])
+      .order('sort_priority', { ascending: true })
+      .order('days_of_supply', { ascending: true, nullsFirst: false })
+      .limit(50)
+    if (error) {
+      console.error('Recommendations load error:', error)
+      setRecs([])
+    } else {
+      setRecs(data || [])
+    }
+    setRecsLoading(false)
+  }
+
+  async function addRecommendationToQueue(rec) {
+    setRecAdding(rec.part_id)
+    try {
+      // Look up vendor for the FK
+      let vendorId = null
+      if (rec.vendor_name) {
+        const { data: vendors } = await supabase
+          .from('vendors')
+          .select('id')
+          .ilike('vendor_name', rec.vendor_name)
+          .limit(1)
+        vendorId = vendors?.[0]?.id || null
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+
+      await supabase.from('reorder_queue').insert({
+        part_id: rec.part_id,
+        part_name: rec.part_name,
+        stock_number: rec.vendor_part_number,
+        vendor_id: vendorId,
+        vendor_name: rec.vendor_name || 'Unknown Vendor',
+        qty_requested: rec.suggested_qty || 1,
+        note: `Auto-suggested · ${Math.round(rec.days_of_supply || 0)}d supply at ${(rec.effective_velocity || 0).toFixed(2)}/day`,
+        added_by: user?.id || null,
+      })
+
+      // Remove this rec from the local list
+      setRecs(prev => prev.filter(r => r.part_id !== rec.part_id))
+      loadQueue()
+    } catch (e) {
+      alert('Error adding recommendation: ' + e.message)
+    } finally {
+      setRecAdding(null)
+    }
+  }
+
+  async function dismissRecommendation(rec, action, days) {
+    setRecDismissing(rec.part_id)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      let snoozedUntil = null
+      if (action === 'snooze' && days) {
+        const d = new Date()
+        d.setDate(d.getDate() + days)
+        snoozedUntil = d.toISOString()
+      }
+      await supabase.from('recommendation_dismissals').insert({
+        part_id: rec.part_id,
+        user_id: user?.id,
+        action,
+        snoozed_until: snoozedUntil,
+      })
+      // Remove from list
+      setRecs(prev => prev.filter(r => r.part_id !== rec.part_id))
+    } catch (e) {
+      alert('Error: ' + e.message)
+    } finally {
+      setRecDismissing(null)
+    }
+  }
 
   // Auto-focus search when quick-add opens
   useEffect(() => {
@@ -130,9 +231,6 @@ export default function ReorderQueue() {
       const vendorId = vendors?.[0]?.id || null
       const vendorName = addingPart.vendor || vendors?.[0]?.vendor_name || 'Unknown Vendor'
 
-      // Capture who's adding so the notification can attribute it
-      const { data: { user } } = await supabase.auth.getUser()
-
       await supabase.from('reorder_queue').insert({
         part_id: addingPart.id,
         part_name: addingPart.name,
@@ -141,7 +239,6 @@ export default function ReorderQueue() {
         vendor_name: vendorName,
         qty_requested: parseInt(addQty),
         note: addNote.trim() || null,
-        added_by: user?.id || null,
       })
 
       setAddSuccess(addingPart.name)
@@ -254,6 +351,24 @@ export default function ReorderQueue() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {showRecommendations && (
+            <button
+              onClick={() => setRecsOpen(!recsOpen)}
+              className={`text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-2 ${
+                recsOpen
+                  ? 'bg-stone-200 text-stone-700'
+                  : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+              }`}
+              title="Velocity-based reorder recommendations (visible only to you)"
+            >
+              {recsOpen ? '✕ Hide' : '🤠 Recommendations'}
+              {!recsOpen && recs.length > 0 && (
+                <span className="bg-amber-700 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  {recs.length}
+                </span>
+              )}
+            </button>
+          )}
           <button
             onClick={() => setShowQuickAdd(!showQuickAdd)}
             className={`text-sm font-semibold px-4 py-2 rounded-xl transition-colors ${
@@ -269,6 +384,21 @@ export default function ReorderQueue() {
           </button>
         </div>
       </div>
+
+      {/* ── Recommendations Panel ──────────────────────────────────────────── */}
+      {showRecommendations && recsOpen && (
+        <RecommendationsPanel
+          recs={recs}
+          loading={recsLoading}
+          adding={recAdding}
+          dismissing={recDismissing}
+          expanded={recExpanded}
+          onToggleExpand={(id) => setRecExpanded(prev => ({ ...prev, [id]: !prev[id] }))}
+          onAdd={addRecommendationToQueue}
+          onDismiss={dismissRecommendation}
+          onRefresh={loadRecommendations}
+        />
+      )}
 
       {/* ── Quick Add Panel ──────────────────────────────────────────────── */}
       {showQuickAdd && (
@@ -516,6 +646,226 @@ export default function ReorderQueue() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Recommendations Panel ──────────────────────────────────────────────────
+// Phase A: gated to David only, velocity-based math from PIC YTD baselines.
+// Each card shows the math (recent vs historical, days supply, suggested qty)
+// and supports Add to Queue / Snooze 7d / Snooze 30d / Dismiss.
+
+function RecommendationsPanel({ recs, loading, adding, dismissing, expanded, onToggleExpand, onAdd, onDismiss, onRefresh }) {
+  if (loading) {
+    return (
+      <div className="card p-8 mb-6 border-2 border-amber-200 bg-amber-50/50">
+        <div className="flex items-center gap-3 text-sm text-amber-800">
+          <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+          Computing recommendations...
+        </div>
+      </div>
+    )
+  }
+
+  const orderNow = recs.filter(r => r.status === 'order_now')
+  const orderSoon = recs.filter(r => r.status === 'order_soon')
+
+  return (
+    <div className="card mb-6 border-2 border-amber-200 bg-gradient-to-br from-amber-50/60 to-stone-50 overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-amber-200/60 flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">🤠 Velocity-Based Recommendations</p>
+          <p className="text-xs text-stone-500 mt-1">
+            Based on Jan–Apr 2026 PIC usage data · {recs.length} item{recs.length !== 1 ? 's' : ''} need attention
+          </p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="text-xs text-stone-500 hover:text-stone-800 px-2 py-1 rounded hover:bg-stone-100"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* Empty state */}
+      {recs.length === 0 && (
+        <div className="p-8 text-center">
+          <div className="text-3xl mb-2">✓</div>
+          <p className="text-sm text-stone-600 font-semibold">All inventory looks healthy</p>
+          <p className="text-xs text-stone-400 mt-1">No parts are running low based on velocity baselines</p>
+        </div>
+      )}
+
+      {/* Order Now section */}
+      {orderNow.length > 0 && (
+        <div>
+          <div className="px-5 py-2 bg-red-50/70 border-b border-red-100 flex items-center gap-2">
+            <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">🔴 Order Now</span>
+            <span className="text-xs text-red-700">— {orderNow.length} part{orderNow.length !== 1 ? 's' : ''} below safety threshold</span>
+          </div>
+          {orderNow.map(rec => (
+            <RecommendationCard
+              key={rec.part_id}
+              rec={rec}
+              expanded={!!expanded[rec.part_id]}
+              adding={adding === rec.part_id}
+              dismissing={dismissing === rec.part_id}
+              onToggleExpand={() => onToggleExpand(rec.part_id)}
+              onAdd={() => onAdd(rec)}
+              onDismiss={(action, days) => onDismiss(rec, action, days)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Order Soon section */}
+      {orderSoon.length > 0 && (
+        <div>
+          <div className="px-5 py-2 bg-amber-50/70 border-b border-amber-100 flex items-center gap-2">
+            <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">🟡 Order Soon</span>
+            <span className="text-xs text-amber-700">— {orderSoon.length} part{orderSoon.length !== 1 ? 's' : ''} approaching reorder point</span>
+          </div>
+          {orderSoon.map(rec => (
+            <RecommendationCard
+              key={rec.part_id}
+              rec={rec}
+              expanded={!!expanded[rec.part_id]}
+              adding={adding === rec.part_id}
+              dismissing={dismissing === rec.part_id}
+              onToggleExpand={() => onToggleExpand(rec.part_id)}
+              onAdd={() => onAdd(rec)}
+              onDismiss={(action, days) => onDismiss(rec, action, days)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecommendationCard({ rec, expanded, adding, dismissing, onToggleExpand, onAdd, onDismiss }) {
+  const supply = rec.days_of_supply
+  const supplyDisplay = supply == null ? '—' : `${Math.round(supply)}d`
+  const supplyColor =
+    supply == null ? 'text-stone-400' :
+    supply < 7 ? 'text-red-700 font-bold' :
+    supply < 14 ? 'text-red-600 font-semibold' :
+    supply < 30 ? 'text-amber-700 font-semibold' :
+    'text-stone-600'
+
+  const trend = rec.trend_pct
+  const trendDisplay = trend == null ? null
+    : trend > 0.10 ? { label: `+${(trend*100).toFixed(0)}%`, color: 'text-green-600', icon: '▲' }
+    : trend < -0.10 ? { label: `${(trend*100).toFixed(0)}%`, color: 'text-stone-500', icon: '▼' }
+    : null
+
+  const cvHigh = rec.velocity_cv != null && rec.velocity_cv > 0.7
+  const tierLabel = rec.velocity_tier || '?'
+  const TIER_BG = { A: 'bg-purple-50 text-purple-700 border-purple-200', B: 'bg-blue-50 text-blue-700 border-blue-200', C: 'bg-stone-50 text-stone-500 border-stone-200' }
+
+  return (
+    <div className="px-5 py-3 border-b border-stone-100 last:border-b-0 hover:bg-white/60 transition-colors">
+      <div className="flex items-start gap-4">
+        {/* Tier badge */}
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide border mt-0.5 ${TIER_BG[tierLabel] || TIER_BG.C}`}>
+          {tierLabel}
+        </span>
+
+        {/* Main info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-stone-800 truncate">{rec.part_name}</p>
+              <div className="flex items-center gap-3 mt-0.5 text-xs text-stone-500 flex-wrap">
+                {rec.vendor_name && <span>{rec.vendor_name}</span>}
+                {rec.vendor_part_number && <span className="font-mono">#{rec.vendor_part_number}</span>}
+                <span className={supplyColor}>{supplyDisplay} supply</span>
+                <span>·</span>
+                <span>velocity {(rec.effective_velocity || 0).toFixed(2)}/{rec.uom?.toLowerCase() || 'day'}/day</span>
+                {trendDisplay && (
+                  <span className={trendDisplay.color}>{trendDisplay.icon} {trendDisplay.label} vs baseline</span>
+                )}
+                {cvHigh && (
+                  <span className="text-amber-700 italic">⚠ high variability</span>
+                )}
+              </div>
+            </div>
+
+            {/* Action: Add to Queue */}
+            <button
+              onClick={onAdd}
+              disabled={adding || dismissing}
+              className="text-xs font-semibold bg-brand-dark text-white px-3 py-1.5 rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-40 whitespace-nowrap"
+            >
+              {adding
+                ? 'Adding...'
+                : `Add ${rec.suggested_qty || '?'} ${rec.uom || ''} to Queue →`
+              }
+            </button>
+          </div>
+
+          {/* Expanded math */}
+          {expanded && (
+            <div className="mt-3 p-3 bg-white border border-stone-200 rounded-lg text-xs">
+              <p className="font-bold text-stone-700 mb-2">📊 The math</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-stone-600">
+                <div>On hand:</div>
+                <div className="font-mono text-right text-stone-800">{Number(rec.qty_on_hand).toLocaleString()} {rec.uom}</div>
+                <div>Committed:</div>
+                <div className="font-mono text-right text-stone-800">{Number(rec.qty_committed).toLocaleString()} {rec.uom}</div>
+                <div className="border-t border-stone-200 pt-1 font-semibold">Available:</div>
+                <div className="font-mono text-right text-stone-800 border-t border-stone-200 pt-1 font-semibold">{Number(rec.qty_available).toLocaleString()} {rec.uom}</div>
+                <div className="mt-2">Recent (3mo) velocity:</div>
+                <div className="font-mono text-right text-stone-800 mt-2">{(rec.velocity_3mo_avg || 0).toFixed(2)} {rec.uom}/day</div>
+                <div>Baseline (4mo) velocity:</div>
+                <div className="font-mono text-right text-stone-800">{(rec.velocity_4mo_avg || 0).toFixed(2)} {rec.uom}/day</div>
+                <div>Variability (CV):</div>
+                <div className="font-mono text-right text-stone-800">{rec.velocity_cv != null ? rec.velocity_cv.toFixed(2) : '—'} {cvHigh && <span className="text-amber-700">(high)</span>}</div>
+                <div>Days of supply:</div>
+                <div className="font-mono text-right font-semibold text-stone-800">{supplyDisplay}</div>
+                <div>Tier:</div>
+                <div className="font-mono text-right text-stone-800">{tierLabel} ({tierLabel === 'A' ? 'top 80%' : tierLabel === 'B' ? 'next 15%' : 'long tail'})</div>
+                <div>Suggested qty covers:</div>
+                <div className="font-mono text-right text-stone-800">{tierLabel === 'A' ? '60 days' : tierLabel === 'B' ? '90 days' : '30 days'}</div>
+              </div>
+              <p className="mt-2 text-[10px] text-stone-400">Source: {rec.velocity_period}</p>
+            </div>
+          )}
+
+          {/* Action row */}
+          <div className="flex items-center gap-3 mt-2 text-xs">
+            <button
+              onClick={onToggleExpand}
+              className="text-stone-500 hover:text-stone-800 transition-colors"
+            >
+              {expanded ? '▴ Hide math' : '▾ Show math'}
+            </button>
+            <span className="text-stone-300">·</span>
+            <button
+              onClick={() => onDismiss('snooze', 7)}
+              disabled={dismissing}
+              className="text-stone-500 hover:text-stone-800 transition-colors disabled:opacity-40"
+            >
+              Snooze 7d
+            </button>
+            <button
+              onClick={() => onDismiss('snooze', 30)}
+              disabled={dismissing}
+              className="text-stone-500 hover:text-stone-800 transition-colors disabled:opacity-40"
+            >
+              Snooze 30d
+            </button>
+            <button
+              onClick={() => onDismiss('dismiss', null)}
+              disabled={dismissing}
+              className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-40"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
