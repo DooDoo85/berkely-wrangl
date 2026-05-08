@@ -715,6 +715,77 @@ async function processMasterSalesReport(csvText) {
     }
   }
 
+  // 2.5. Build a normalized customer_name → customer_id map.
+  //      Auto-create customers that show up in the report but don't exist yet.
+  //      This is what fixes the "Customer 360 shows zeros" bug — without it,
+  //      orders.customer_id stays NULL and Customer 360 has nothing to join on.
+  const norm = (s) => (s || '').trim().toUpperCase()
+
+  // Pull all customers (small table; ~160 rows)
+  const customerMap = {}  // normalized account_name → customer_id
+  {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/customers?select=id,account_name`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      data.forEach(c => {
+        const key = norm(c.account_name)
+        if (key) customerMap[key] = c.id
+      })
+    }
+  }
+
+  // Find names in this report that have no matching customer record
+  const reportNames = new Set()
+  for (const inc of Object.values(incomingMap)) {
+    if (inc.customerName) reportNames.add(norm(inc.customerName))
+  }
+  const missingNames = []
+  for (const key of reportNames) {
+    if (!customerMap[key]) {
+      // Skip obvious test data — we don't want auto-created junk customers
+      if (key.includes('TEST CUSTOMER') || key.includes('TEST ACCOUNT') || key.startsWith('TEST ')) continue
+      missingNames.push(key)
+    }
+  }
+
+  // Auto-create the missing customers in one batch
+  if (missingNames.length > 0) {
+    // Look up each missing name's display form (use first occurrence's salesRep)
+    const newCustomers = missingNames.map(key => {
+      // Find first incoming order matching this normalized name to grab original casing + sales_rep
+      const sample = Object.values(incomingMap).find(inc => norm(inc.customerName) === key)
+      return {
+        account_name: sample?.customerName || key,
+        sales_rep:    sample?.salesRep || null,
+        status:       'active',
+        active:       true,
+        created_at:   new Date().toISOString(),
+        updated_at:   new Date().toISOString(),
+      }
+    })
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/customers`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(newCustomers),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      created.forEach(c => { customerMap[norm(c.account_name)] = c.id })
+      console.log(`  Auto-created ${created.length} new customer record(s) from report`)
+    } else {
+      console.error(`  Customer auto-create failed: ${res.status} ${await res.text()}`)
+    }
+  }
+
   // 3. Build upserts + status history
   const toUpsert = []
   const historyRows = []
@@ -735,6 +806,7 @@ async function processMasterSalesReport(csvText) {
       order_amount:     inc.orderAmount,
       order_date:       inc.enteredDate,
       customer_name:    inc.customerName || existing?.customer_name || null,
+      customer_id:      customerMap[norm(inc.customerName)] || null,
       updated_at:       new Date().toISOString(),
     }
     // Preserve existing sales_rep if set; otherwise populate from report
