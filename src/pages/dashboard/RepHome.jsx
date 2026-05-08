@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../components/AuthProvider";
 import { supabase } from "../../lib/supabase";
+import NeedsAttention from "../../components/NeedsAttention";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -404,6 +405,16 @@ export default function RepHome() {
           iconBg="bg-amber-50"    iconColor="text-amber-600"   icon={Icon.message}
         />
       </div>
+
+      {/* Needs Attention — aging quote follow-ups, ranked by attention_score */}
+      {profile && (
+        <div className="mb-8">
+          <NeedsAttention
+            currentUser={profile}
+            repName={profile.full_name}
+          />
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="mb-6">
