@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_COLORS = {
   active:   'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -270,6 +271,7 @@ function ContactEditForm({ draft, setDraft, onSave, onCancel, saving, isNew = fa
 export default function CustomerDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
+  const { isImpersonating } = useAuth()
   const [customer,   setCustomer]   = useState(null)
   const [orders,     setOrders]     = useState([])
   const [activities, setActivities] = useState([])
@@ -553,11 +555,17 @@ export default function CustomerDetail() {
           <button onClick={() => navigate('/customers')} className="btn-ghost text-sm">← Customers</button>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowActivityModal(true)}
-              className="btn-secondary text-sm">📞 Log Activity</button>
-            <button onClick={() => navigate(`/customers/${id}/edit`)} className="btn-ghost text-sm">Edit</button>
-            <button onClick={handleDelete} disabled={deleting}
+              disabled={isImpersonating}
+              title={isImpersonating ? 'Exit impersonation to log activity' : ''}
+              className="btn-secondary text-sm disabled:opacity-40 disabled:cursor-not-allowed">📞 Log Activity</button>
+            <button onClick={() => navigate(`/customers/${id}/edit`)}
+              disabled={isImpersonating}
+              title={isImpersonating ? 'Exit impersonation to edit' : ''}
+              className="btn-ghost text-sm disabled:opacity-40 disabled:cursor-not-allowed">Edit</button>
+            <button onClick={handleDelete} disabled={deleting || isImpersonating}
+              title={isImpersonating ? 'Exit impersonation to archive' : ''}
               className="text-red-400 hover:text-red-600 border border-red-200 hover:border-red-300
-                         bg-white px-3 py-1.5 rounded-lg text-sm transition-all">
+                         bg-white px-3 py-1.5 rounded-lg text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               Archive
             </button>
           </div>
@@ -603,7 +611,7 @@ export default function CustomerDetail() {
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Notes</span>
-              {!editingNotes && (
+              {!editingNotes && !isImpersonating && (
                 <button onClick={startEditNotes}
                   className="text-xs text-stone-500 hover:text-stone-700 transition-colors">
                   ✏ Edit
@@ -971,7 +979,7 @@ export default function CustomerDetail() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-stone-700 text-sm">Contacts</h3>
-                  {!addingContact && !editingContactId && (
+                  {!addingContact && !editingContactId && !isImpersonating && (
                     <button onClick={startAddContact}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-stone-700 text-white hover:bg-stone-800">
                       + Add Contact
@@ -1028,12 +1036,14 @@ export default function CustomerDetail() {
                               {c.phone && <div className="text-xs text-stone-500">{c.phone}</div>}
                             </div>
                           </div>
-                          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => startEditContact(c)}
-                              className="text-xs text-stone-500 hover:text-stone-800 px-1">✏</button>
-                            <button onClick={() => deleteContact(c.id, c.name)}
-                              className="text-xs text-red-400 hover:text-red-600 px-1">🗑</button>
-                          </div>
+                          {!isImpersonating && (
+                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => startEditContact(c)}
+                                className="text-xs text-stone-500 hover:text-stone-800 px-1">✏</button>
+                              <button onClick={() => deleteContact(c.id, c.name)}
+                                className="text-xs text-red-400 hover:text-red-600 px-1">🗑</button>
+                            </div>
+                          )}
                         </div>
                       )
                     ))}
