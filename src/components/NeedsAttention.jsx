@@ -38,6 +38,7 @@ export default function NeedsAttention({ currentUser, repName, max = 8, onLogAct
   const { isImpersonating } = useAuth()
   const [cards, setCards]     = useState([])
   const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(false)  // false = compact horizontal top-5; true = full vertical top-8
   const shownLogged           = useRef(false)  // gate so we only fire 'shown' events once per load
 
   useEffect(() => {
@@ -160,69 +161,149 @@ export default function NeedsAttention({ currentUser, repName, max = 8, onLogAct
     <section style={sectionStyle}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
         <h3 style={headerStyle}>Needs Attention</h3>
-        <span style={{ fontSize: 12, color: '#9d8b73' }}>
-          {cards.length} {cards.length === 1 ? 'quote' : 'quotes'} aging
-        </span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 }}>
-        {cards.map(card => {
-          const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
-          const lastActivityLabel = card.last_activity_at
-            ? `Last activity ${fmtDays(card.days_since_activity)} ago`
-            : 'No activity logged yet'
-
-          return (
-            <div
-              key={card.customer_id}
-              onClick={() => handleOpenCustomer(card)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 12, color: '#9d8b73' }}>
+            {cards.length} {cards.length === 1 ? 'customer' : 'customers'} aging
+          </span>
+          {cards.length > 5 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
               style={{
-                background: style.bg,
-                border:     `1px solid ${style.border}`,
-                borderRadius: 10,
-                padding: 14,
+                background: 'transparent',
+                border: 'none',
+                color: '#5a3a24',
+                fontSize: 12,
+                fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'transform 80ms ease, box-shadow 80ms ease',
+                padding: 0,
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(58,40,24,0.06)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: style.dot, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                {style.label}
-              </div>
-
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#3a2818', marginBottom: 2 }}>
-                {card.account_name}
-              </div>
-
-              <div style={{ fontSize: 12, color: '#6b5640', marginBottom: 10 }}>
-                {card.aging_quote_count} {card.aging_quote_count === 1 ? 'quote' : 'quotes'} · {fmtMoney(card.aging_quote_total_value)} · oldest {fmtDays(card.oldest_quote_age_days)}
-              </div>
-
-              <div style={{ fontSize: 11, color: '#8a7560', marginBottom: 12, fontStyle: 'italic' }}>
-                {lastActivityLabel}
-              </div>
-
-              <button
-                onClick={(e) => handleLogActivity(card, e)}
-                disabled={isImpersonating}
-                title={isImpersonating ? 'Exit impersonation to log activity' : ''}
-                style={{
-                  width: '100%',
-                  background: isImpersonating ? '#9d8b73' : '#3a2818',
-                  color: '#fff',
-                  border: 'none', borderRadius: 6,
-                  padding: '7px 10px', fontSize: 12, fontWeight: 600,
-                  cursor: isImpersonating ? 'not-allowed' : 'pointer',
-                  opacity: isImpersonating ? 0.6 : 1,
-                }}
-              >
-                {isImpersonating ? '🎭 Read-only' : '📞 Log Activity'}
-              </button>
-            </div>
-          )
-        })}
+              {expanded ? 'Show less ↑' : `View all ${cards.length} →`}
+            </button>
+          )}
+        </div>
       </div>
+
+      {expanded ? (
+        // ───── Expanded: vertical cards (full info per card) ─────
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 }}>
+          {cards.map(card => {
+            const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
+            const lastActivityLabel = card.last_activity_at
+              ? `Last activity ${fmtDays(card.days_since_activity)} ago`
+              : 'No activity logged yet'
+
+            return (
+              <div
+                key={card.customer_id}
+                onClick={() => handleOpenCustomer(card)}
+                style={{
+                  background: style.bg,
+                  border:     `1px solid ${style.border}`,
+                  borderRadius: 10,
+                  padding: 14,
+                  cursor: 'pointer',
+                  transition: 'transform 80ms ease, box-shadow 80ms ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(58,40,24,0.06)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: style.dot, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  {style.label}
+                </div>
+
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#3a2818', marginBottom: 2 }}>
+                  {card.account_name}
+                </div>
+
+                <div style={{ fontSize: 12, color: '#6b5640', marginBottom: 10 }}>
+                  {card.aging_quote_count} {card.aging_quote_count === 1 ? 'quote' : 'quotes'} · {fmtMoney(card.aging_quote_total_value)} · oldest {fmtDays(card.oldest_quote_age_days)}
+                </div>
+
+                <div style={{ fontSize: 11, color: '#8a7560', marginBottom: 12, fontStyle: 'italic' }}>
+                  {lastActivityLabel}
+                </div>
+
+                <button
+                  onClick={(e) => handleLogActivity(card, e)}
+                  disabled={isImpersonating}
+                  title={isImpersonating ? 'Exit impersonation to log activity' : ''}
+                  style={{
+                    width: '100%',
+                    background: isImpersonating ? '#9d8b73' : '#3a2818',
+                    color: '#fff',
+                    border: 'none', borderRadius: 6,
+                    padding: '7px 10px', fontSize: 12, fontWeight: 600,
+                    cursor: isImpersonating ? 'not-allowed' : 'pointer',
+                    opacity: isImpersonating ? 0.6 : 1,
+                  }}
+                >
+                  {isImpersonating ? '🎭 Read-only' : '📞 Log Activity'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        // ───── Compact: top-5 horizontal scroll ─────
+        <div style={{
+          display: 'flex',
+          gap: 10,
+          overflowX: 'auto',
+          paddingBottom: 4,  // room for shadow on hover without clipping
+          scrollSnapType: 'x mandatory',
+        }}>
+          {cards.slice(0, 5).map(card => {
+            const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
+            const lastActivityLabel = card.last_activity_at
+              ? `${fmtDays(card.days_since_activity)} quiet`
+              : 'no activity'
+
+            return (
+              <div
+                key={card.customer_id}
+                onClick={() => handleOpenCustomer(card)}
+                style={{
+                  flex: '0 0 200px',
+                  background: style.bg,
+                  border: `1px solid ${style.border}`,
+                  borderRadius: 10,
+                  padding: 12,
+                  cursor: 'pointer',
+                  scrollSnapAlign: 'start',
+                  transition: 'transform 80ms ease, box-shadow 80ms ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  minHeight: 100,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(58,40,24,0.06)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+                title={`${card.account_name} — open customer`}
+              >
+                <div style={{
+                  fontSize: 9, fontWeight: 700, color: style.dot,
+                  textTransform: 'uppercase', letterSpacing: 0.5,
+                }}>
+                  {style.label}
+                </div>
+                <div style={{
+                  fontSize: 13, fontWeight: 700, color: '#3a2818',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {card.account_name}
+                </div>
+                <div style={{ fontSize: 11, color: '#6b5640' }}>
+                  {card.aging_quote_count} {card.aging_quote_count === 1 ? 'quote' : 'quotes'} · {fmtMoney(card.aging_quote_total_value)}
+                </div>
+                <div style={{ fontSize: 11, color: '#8a7560', fontStyle: 'italic', marginTop: 'auto' }}>
+                  {lastActivityLabel}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
