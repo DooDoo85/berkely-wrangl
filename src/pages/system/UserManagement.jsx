@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../components/AuthProvider'
 
 const ROLE_LABELS = {
   owner:      'Owner',
@@ -41,6 +43,10 @@ async function callManageUser(action, body) {
 }
 
 export default function UserManagement() {
+  const navigate = useNavigate()
+  const { realProfile, startImpersonation } = useAuth()
+  const isOwnerViewing = realProfile?.role === 'owner'
+
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -48,6 +54,25 @@ export default function UserManagement() {
   const [createdInfo, setCreatedInfo] = useState(null) // for showing temp password
   const [resetting, setResetting] = useState(null) // user_id currently sending reset
   const [resetInfo, setResetInfo] = useState(null) // success/failure message
+  const [impersonateTarget, setImpersonateTarget] = useState(null) // user object being confirmed for impersonation
+  const [impersonateReason, setImpersonateReason] = useState('')
+  const [impersonating, setImpersonating] = useState(false)
+
+  async function handleImpersonate() {
+    if (!impersonateTarget) return
+    setImpersonating(true)
+    const { error } = await startImpersonation(impersonateTarget.id, impersonateReason || null)
+    setImpersonating(false)
+    if (error) {
+      setResetInfo({ type: 'error', message: `Couldn't start impersonation: ${error.message}` })
+      setImpersonateTarget(null)
+      setImpersonateReason('')
+      return
+    }
+    setImpersonateTarget(null)
+    setImpersonateReason('')
+    navigate('/')
+  }
 
   useEffect(() => { loadUsers() }, [])
 
@@ -235,6 +260,15 @@ export default function UserManagement() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-3">
+                      {isOwnerViewing && u.id !== realProfile.id && u.active !== false && (
+                        <button
+                          onClick={() => { setImpersonateTarget(u); setImpersonateReason('') }}
+                          className="text-xs font-semibold text-stone-500 hover:text-[#5a3a24] hover:underline"
+                          title={`View Wrangl as ${u.full_name || u.email}`}
+                        >
+                          👁 View as
+                        </button>
+                      )}
                       {u.role !== 'owner' && u.active !== false && (
                         <button
                           onClick={() => sendPasswordReset(u)}
@@ -267,6 +301,57 @@ export default function UserManagement() {
 
       {/* Edit User Modal */}
       {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); loadUsers() }} />}
+
+      {/* Impersonation confirmation */}
+      {impersonateTarget && (
+        <div
+          onClick={() => !impersonating && setImpersonateTarget(null)}
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+          >
+            <div className="text-2xl mb-2">🎭</div>
+            <h2 className="text-lg font-bold text-stone-800 mb-1">View as User</h2>
+            <p className="text-sm text-stone-600 mb-4">
+              You'll see Wrangl exactly as <strong>{impersonateTarget.full_name || impersonateTarget.email}</strong> sees it.
+              All actions are <strong>read-only</strong> while impersonating.
+              An audit record is logged.
+            </p>
+
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1">
+              Reason (optional)
+            </label>
+            <input
+              type="text"
+              value={impersonateReason}
+              onChange={(e) => setImpersonateReason(e.target.value)}
+              placeholder="e.g. 1:1 prep, debugging stale quotes"
+              disabled={impersonating}
+              className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              maxLength={200}
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setImpersonateTarget(null)}
+                disabled={impersonating}
+                className="px-4 py-2 text-sm font-semibold text-stone-600 hover:text-stone-800 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImpersonate}
+                disabled={impersonating}
+                className="px-4 py-2 text-sm font-semibold rounded bg-[#3a2818] text-white hover:bg-[#5a3a24] disabled:opacity-40"
+              >
+                {impersonating ? 'Starting…' : 'Start Impersonation →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
