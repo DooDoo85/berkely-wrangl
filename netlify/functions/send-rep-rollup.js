@@ -7,8 +7,8 @@ import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -116,9 +116,11 @@ async function fetchRepInvoiced(repName, weekStart, weekEnd) {
 
 async function fetchRepPipeline(repName) {
   // Current pipeline state — quotes, printed, in_production, on_hold, invoiced WTD
+  // Note: on_hold is a wrangl_status value, NOT a separate column on orders.
+  // Mirrors the convention used elsewhere (in_production also lives in wrangl_status).
   const { data, error } = await supabase
     .from('orders')
-    .select('status, wrangl_status, on_hold')
+    .select('status, wrangl_status')
     .eq('sales_rep', repName)
 
   if (error) {
@@ -128,7 +130,7 @@ async function fetchRepPipeline(repName) {
 
   let quotes = 0, printed = 0, in_production = 0, on_hold = 0
   for (const r of data || []) {
-    if (r.on_hold) on_hold++
+    if (r.wrangl_status === 'on_hold') on_hold++
     if (r.status === 'quote') quotes++
     if (r.status === 'printed') printed++
     if (r.wrangl_status === 'in_production' || r.status === 'in_production') in_production++
@@ -137,12 +139,14 @@ async function fetchRepPipeline(repName) {
 }
 
 async function fetchRepActivities(repId, weekStart, weekEnd) {
+  // Use activity_date (when the activity happened) not created_at (when the row was inserted)
+  // to match what the rep sees in their KPI strip on RepHome.
   const { data, error } = await supabase
     .from('activities')
     .select('activity_type')
     .eq('user_id', repId)
-    .gte('created_at', weekStart.toISOString())
-    .lte('created_at', weekEnd.toISOString())
+    .gte('activity_date', weekStart.toISOString().slice(0, 10))
+    .lte('activity_date', weekEnd.toISOString().slice(0, 10))
 
   if (error) {
     console.error(`fetchRepActivities:`, error)
