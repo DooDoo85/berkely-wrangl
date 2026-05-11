@@ -29,12 +29,13 @@ function startOfWeek() {
   return d.toISOString().slice(0, 10)
 }
 
-// "On Hold" = manually flagged in Wrangl (mirrors the wrangl_status='in_production' pattern).
-// `status='credit_hold'` is a transient system step in the order lifecycle and does NOT count.
-// Hold management UI not built yet — until then, this returns false for everything,
-// which is correct (no manually held orders exist).
+// "On Hold" is a first-class order status — `status='on_hold'`. After today's
+// migration this is the canonical signal. Friday we briefly tried
+// wrangl_status='on_hold' as a workaround for the check constraint error,
+// but the UI was always built around status='on_hold' — and that's the
+// semantically correct home (an order is in_production OR on_hold, not both).
 function isOnHold(o) {
-  return o?.wrangl_status === 'on_hold'
+  return o?.status === 'on_hold'
 }
 
 function startOfYear() {
