@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './AuthProvider'
 
 // =====================================================================
 // NeedsAttention
@@ -34,6 +35,7 @@ const fmtDays  = (n) => n === 1 ? '1 day' : `${n} days`
 
 export default function NeedsAttention({ currentUser, repName, max = 8, onLogActivity }) {
   const navigate = useNavigate()
+  const { isImpersonating } = useAuth()
   const [cards, setCards]     = useState([])
   const [loading, setLoading] = useState(true)
   const shownLogged           = useRef(false)  // gate so we only fire 'shown' events once per load
@@ -69,6 +71,9 @@ export default function NeedsAttention({ currentUser, repName, max = 8, onLogAct
   }
 
   async function logShownEvents(visibleCards) {
+    // Skip event logging while owner is impersonating — would pollute the
+    // target rep's engagement funnel with views the owner triggered.
+    if (isImpersonating) return
     const rows = visibleCards.map((card, idx) => ({
       event_type:    'shown',
       user_id:       currentUser.id,
@@ -89,6 +94,8 @@ export default function NeedsAttention({ currentUser, repName, max = 8, onLogAct
 
   async function logEvent(card, eventType, extra = {}) {
     if (!currentUser?.id) return
+    // Same reason — don't taint the rep's funnel with impersonator clicks.
+    if (isImpersonating) return
     await supabase.from('attention_events').insert({
       event_type:  eventType,
       user_id:     currentUser.id,
@@ -198,15 +205,19 @@ export default function NeedsAttention({ currentUser, repName, max = 8, onLogAct
 
               <button
                 onClick={(e) => handleLogActivity(card, e)}
+                disabled={isImpersonating}
+                title={isImpersonating ? 'Exit impersonation to log activity' : ''}
                 style={{
                   width: '100%',
-                  background: '#3a2818', color: '#fff',
+                  background: isImpersonating ? '#9d8b73' : '#3a2818',
+                  color: '#fff',
                   border: 'none', borderRadius: 6,
                   padding: '7px 10px', fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: isImpersonating ? 'not-allowed' : 'pointer',
+                  opacity: isImpersonating ? 0.6 : 1,
                 }}
               >
-                📞 Log Activity
+                {isImpersonating ? '🎭 Read-only' : '📞 Log Activity'}
               </button>
             </div>
           )
