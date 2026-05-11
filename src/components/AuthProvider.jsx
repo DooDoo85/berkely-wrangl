@@ -20,6 +20,26 @@ export function AuthProvider({ children }) {
   const [needsPassword, setNeedsPassword] = useState(false)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
 
+  // ── Impersonation state ───────────────────────────────────────────────
+  // Owner-only feature. impersonatedProfile is the target user's profile row
+  // when an owner has used "View as User"; null otherwise. Persisted in
+  // sessionStorage so it survives page reloads but clears on tab close.
+  const [impersonatedProfile, setImpersonatedProfile] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('wrangl_impersonation')
+      return raw ? JSON.parse(raw).profile : null
+    } catch { return null }
+  })
+  const impersonationSessionIdRef = useRef(
+    (() => {
+      try {
+        const raw = sessionStorage.getItem('wrangl_impersonation')
+        return raw ? JSON.parse(raw).sessionId : null
+      } catch { return null }
+    })()
+  )
+  const isImpersonating = !!impersonatedProfile
+
   // Ref mirror of isPasswordRecovery so the auth-state callback (which captures
   // a stale closure) can always read the current value.
   const recoveryRef = useRef(false)
@@ -84,6 +104,10 @@ export function AuthProvider({ children }) {
     recoveryRef.current = false
     setIsPasswordRecovery(false)
     setNeedsPassword(false)
+    // Clear impersonation state too — stale sessionStorage shouldn't survive a sign-out
+    sessionStorage.removeItem('wrangl_impersonation')
+    impersonationSessionIdRef.current = null
+    setImpersonatedProfile(null)
     await supabase.auth.signOut()
   }
 
@@ -96,16 +120,88 @@ export function AuthProvider({ children }) {
     setNeedsPassword(refreshedUser ? !userHasPassword(refreshedUser) : false)
   }
 
+  // ── Impersonation: start ──────────────────────────────────────────────
+  // Owners only (RLS on impersonation_sessions enforces this server-side too).
+  // Fetches the target user's profile, persists it to sessionStorage so it
+  // survives page reloads, and inserts an audit row.
+  async function startImpersonation(targetUserId, reason) {
+    if (!profile || profile.role !== 'owner') {
+      console.warn('Impersonation requires owner role')
+      return { error: new Error('Forbidden') }
+    }
+    if (targetUserId === user?.id) {
+      return { error: new Error("Can't impersonate yourself") }
+    }
+
+    // Fetch the target profile
+    const { data: target, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', targetUserId)
+      .single()
+
+    if (profileError || !target) {
+      return { error: profileError || new Error('Target user not found') }
+    }
+
+    // Audit row — RLS rejects this if caller isn't owner
+    const { data: session, error: sessionError } = await supabase
+      .from('impersonation_sessions')
+      .insert({
+        real_user_id:   user.id,
+        target_user_id: targetUserId,
+        reason:         reason || null,
+      })
+      .select()
+      .single()
+
+    if (sessionError) {
+      return { error: sessionError }
+    }
+
+    // Persist to sessionStorage so page reloads survive it
+    sessionStorage.setItem('wrangl_impersonation', JSON.stringify({
+      profile:   target,
+      sessionId: session.id,
+    }))
+
+    impersonationSessionIdRef.current = session.id
+    setImpersonatedProfile(target)
+    return { data: session }
+  }
+
+  // ── Impersonation: end ────────────────────────────────────────────────
+  async function endImpersonation() {
+    // Close out the audit row
+    if (impersonationSessionIdRef.current) {
+      await supabase
+        .from('impersonation_sessions')
+        .update({ ended_at: new Date().toISOString() })
+        .eq('id', impersonationSessionIdRef.current)
+    }
+    sessionStorage.removeItem('wrangl_impersonation')
+    impersonationSessionIdRef.current = null
+    setImpersonatedProfile(null)
+  }
+
   return (
     <AuthContext.Provider value={{
       user,
-      profile,
+      // When impersonating, profile returns the target user's profile.
+      // This is what 99% of the app should read — gives accurate UI.
+      profile: impersonatedProfile || profile,
+      // realProfile always returns the actual signed-in user — for permission
+      // checks, audit logging, and the impersonation banner.
+      realProfile: profile,
       loading,
       needsPassword,
       isPasswordRecovery,
+      isImpersonating,
       signIn,
       signOut,
       refreshUser,
+      startImpersonation,
+      endImpersonation,
     }}>
       {children}
     </AuthContext.Provider>
