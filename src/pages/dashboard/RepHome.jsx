@@ -406,6 +406,16 @@ export default function RepHome() {
         />
       </div>
 
+      {/* Needs Attention — compact horizontal cards (top-5), expandable to vertical top-N */}
+      {profile && (
+        <div className="mb-8">
+          <NeedsAttention
+            currentUser={profile}
+            repName={profile.full_name}
+          />
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick actions</h2>
@@ -587,16 +597,6 @@ export default function RepHome() {
           )}
         </div>
       </div>
-
-      {/* Needs Attention — aging quote follow-ups, ranked by attention_score */}
-      {profile && (
-        <div className="mt-8">
-          <NeedsAttention
-            currentUser={profile}
-            repName={profile.full_name}
-          />
-        </div>
-      )}
       </div>
     </div>
   );
