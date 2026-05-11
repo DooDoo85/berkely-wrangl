@@ -14,6 +14,8 @@
 //   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (RS PART only)
 //   COMMITTED EXTRUSIONS            → epic_committed_stock, qty_committed on extrusion parts (RS COMP)
 //   FAUX COMMITTED                  → epic_committed_stock, qty_committed on blind parts (FW)
+//   PARTS SHIPPED (daily)           → inventory_transactions (consume), qty_on_hand decrement
+//   FAUX SHIPPED (daily)            → inventory_transactions (consume), qty_on_hand decrement
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
@@ -1152,6 +1154,185 @@ async function processCreditOk(csvText) {
   return toInsert.length
 }
 
+// ── Parts/Faux Shipped processor ─────────────────────────────────────────────
+// Reads PIC's PARTS_SHIPPED or FAUX_SHIPPED report and applies consumption:
+//   - matches each row to a Wrangl part (by name, then by pic_aliases)
+//   - skips if already processed (work_order + description + shipped_date key)
+//   - writes inventory_transactions row (type='consume', negative quantity)
+//   - decrements parts.qty_on_hand (CLAMPED AT 0)
+//   - logs unmatched rows to match_failures table for later cleanup
+//
+// Source argument: 'parts_shipped' or 'faux_shipped' (for audit trail)
+async function processPartsShipped(csvText, source) {
+  const rows = parseCSV(csvText)
+  console.log(`  ${source.toUpperCase()}: ${rows.length} rows`)
+
+  if (rows.length === 0) return 0
+
+  // Filter to expected stock classes — defensive (PARTS_SHIPPED should be RS PART/RS COMP, FAUX_SHIPPED should be FW)
+  const allowedClasses = source === 'faux_shipped' ? ['FW'] : ['RS PART', 'RS COMP']
+  const validRows = rows.filter(r => allowedClasses.includes((r.StockClass || '').trim()))
+
+  if (validRows.length === 0) {
+    console.log(`  No rows matched expected stock classes ${allowedClasses.join('/')} for ${source}`)
+    return 0
+  }
+
+  // Step 1: load all active parts (id, name, pic_aliases) once
+  const partsRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/parts?select=id,name,pic_aliases,qty_on_hand&active=eq.true`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  )
+  const allParts = await partsRes.json()
+
+  // Build lookup: normalized_name → part_id
+  // Each part can be addressed by its primary name OR any pic_alias
+  const nameToPartId = new Map()
+  for (const p of allParts) {
+    const key = (p.name || '').trim().toUpperCase()
+    if (key) nameToPartId.set(key, p.id)
+    if (Array.isArray(p.pic_aliases)) {
+      for (const alias of p.pic_aliases) {
+        const aliasKey = (alias || '').trim().toUpperCase()
+        if (aliasKey) nameToPartId.set(aliasKey, p.id)
+      }
+    }
+  }
+
+  // Step 2: build a set of already-processed (work_order, description, shipped_date) keys
+  // We query existing consume transactions where the reason matches our backfill/sync source
+  // Idempotency check: the notes field contains the work_order, so we use that
+  const existingTxnsRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/inventory_transactions?select=notes&transaction_type=eq.consume&reason=ilike.${encodeURIComponent('%' + source + '%')}`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  )
+  const existingTxns = await existingTxnsRes.json()
+  const processedKeys = new Set()
+  for (const t of existingTxns) {
+    // Notes format: "Order #114663 · ELEGANT WINDOWS · {description} · qty 2 EA"
+    // We extract a stable key from the notes field
+    const m = (t.notes || '').match(/Order #(\S+) · [^·]+ · (.+?) · qty/)
+    if (m) {
+      processedKeys.add(`${m[1].trim()}|${m[2].trim().toUpperCase()}`)
+    }
+  }
+  console.log(`  ${source}: ${processedKeys.size} previously-processed rows will be skipped`)
+
+  // Step 3: aggregate per-part consumption (in case the report has multiple lines for same part on same order)
+  const transactions = []
+  const partDeltas = new Map()  // part_id → total consumed
+  const failures = []
+  let skipped = 0
+
+  for (const row of validRows) {
+    const workOrder    = (row.WorkOrder || '').trim()
+    const shippedDate  = (row.ShippedDate || '').trim()
+    const customer     = (row.Customer || '').trim()
+    const description  = (row.ComponentDescription || '').trim()
+    const stockCode    = (row.StockCode || '').trim()
+    const stockClass   = (row.StockClass || '').trim()
+    const uom          = (row.UOM || '').trim()
+    const qty          = parseFloat(row.TotalRequiredQty)
+
+    if (!workOrder || !description || isNaN(qty) || qty <= 0) continue
+
+    const idempotencyKey = `${workOrder}|${description.toUpperCase()}`
+    if (processedKeys.has(idempotencyKey)) {
+      skipped++
+      continue
+    }
+
+    const partId = nameToPartId.get(description.toUpperCase())
+    if (!partId) {
+      failures.push({
+        source: source,
+        work_order: workOrder,
+        shipped_date: shippedDate || null,
+        stock_code: stockCode,
+        description: description,
+        required_qty: qty,
+        uom: uom,
+        stock_class: stockClass,
+        reason: 'No matching part in Wrangl parts table (name + alias lookup failed)',
+      })
+      continue
+    }
+
+    // Build the consume transaction
+    transactions.push({
+      transaction_type: 'consume',
+      part_id: partId,
+      quantity: -qty,
+      reason: `${source} daily sync`,
+      notes: `Order #${workOrder} · ${customer} · ${description} · qty ${qty} ${uom}`,
+      created_at: shippedDate
+        ? `${shippedDate}T12:00:00Z`
+        : new Date().toISOString(),
+    })
+
+    // Track per-part consumption for the on_hand decrement
+    partDeltas.set(partId, (partDeltas.get(partId) || 0) + qty)
+  }
+
+  console.log(`  ${source}: ${transactions.length} new transactions, ${skipped} skipped (already processed), ${failures.length} unmatched`)
+
+  // Step 4: write transactions in batches (Supabase REST has row limits)
+  if (transactions.length > 0) {
+    const BATCH_SIZE = 500
+    for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+      const batch = transactions.slice(i, i + BATCH_SIZE)
+      await fetch(`${SUPABASE_URL}/rest/v1/inventory_transactions`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify(batch),
+      })
+    }
+  }
+
+  // Step 5: decrement on_hand for each affected part (clamped at 0)
+  for (const [partId, delta] of partDeltas.entries()) {
+    // Find current on_hand
+    const part = allParts.find(p => p.id === partId)
+    if (!part) continue
+    const currentOnHand = Number(part.qty_on_hand) || 0
+    const newOnHand = Math.max(0, currentOnHand - delta)
+
+    await fetch(`${SUPABASE_URL}/rest/v1/parts?id=eq.${partId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ qty_on_hand: newOnHand, updated_at: new Date().toISOString() }),
+    })
+  }
+
+  // Step 6: write match failures
+  if (failures.length > 0) {
+    await fetch(`${SUPABASE_URL}/rest/v1/match_failures`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(failures),
+    })
+  }
+
+  console.log(`  ${source} done: applied ${transactions.length} consume txns, decremented ${partDeltas.size} parts, logged ${failures.length} failures`)
+  return transactions.length
+}
+
+
 // ── Committed stock processor (shared) ───────────────────────────────────────
 // Used by all three committed reports — scoped by stockClass and partType so
 // each report only touches its own slice of parts and committed stock rows.
@@ -1476,6 +1657,22 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCreditOk(csvText)
           await markProcessed(messageId, 'credit_ok_orders', count)
+          results.processed++
+
+        } else if (subject.includes('ROLLER PARTS/EXTRUSIONS SHIPPED') || subject.includes('PARTS SHIPPED') || subject.includes('PARTS_SHIPPED')) {
+          // Daily roller parts + extrusions consumption sync
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processPartsShipped(csvText, 'parts_shipped')
+          await markProcessed(messageId, 'parts_shipped', count)
+          results.processed++
+
+        } else if (subject.includes('FAUX SHIPPED') || subject.includes('FAUX_SHIPPED')) {
+          // Daily faux blind consumption sync
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processPartsShipped(csvText, 'faux_shipped')
+          await markProcessed(messageId, 'faux_shipped', count)
           results.processed++
 
         } else if (subject.includes('COMMITTED EXTRUSIONS')) {
