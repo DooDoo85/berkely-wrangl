@@ -28,24 +28,27 @@
 }
 
 [data-page-mode="executive"] {
-  --surface-page:        #e8dec9;     /* parchment — warm atmosphere */
-  --surface-card:        #faf5e8;     /* clean ivory — precise operational surface */
-  --surface-card-priority: #f5eed8;   /* slightly deeper but still clean */
-  --surface-card-soft:   var(--surface-page);
-  --surface-border:      rgba(180,158,118,0.45);   /* clear but soft */
-  --surface-border-priority: rgba(184,135,76,0.5);
-  --surface-border-soft: rgba(180,158,118,0.25);
-  /* Edge definition over shadow weight — single ambient lift only */
-  --card-shadow:         0 1px 2px rgba(74,42,18,0.04);
+  --surface-page:        #f4eee2;     /* warm paper — atmosphere */
+  --surface-card:        #faf6f0;     /* clean cream — precise operational surface */
+  --surface-card-priority: #f3edde;   /* sits between page and card — subtle differentiation */
+  --surface-card-soft:   #faf6f0;     /* unified with card — Stuck Orders alone earns differentiation */
+  --surface-border:      rgba(92,67,42,0.10);   /* nearly imperceptible — color contrast does the work */
+  --surface-border-priority: rgba(184,93,58,0.30);
+  --surface-border-soft: rgba(92,67,42,0.08);
+  --card-shadow:         none;        /* color contrast separates cards; no shadow needed */
 
-  /* Atmospheric texture — reduced to subconscious threshold.
-     1. Soft radial warmth at top-left (was 32% peak, now 20%)
-     2. Cloud noise opacity dropped from 0.018 to 0.010
-     3. Corner vignettes dropped to 1-1.5% per corner */
+  /* Atmospheric paper texture — layered per design spec.
+     Three highlight passes + warm shadow + inset corner darkening + ultra-low noise.
+     Each pass invisible alone; accumulate into paper feel. */
   --page-grain:
-    radial-gradient(ellipse 70% 60% at 20% 10%, rgba(255,245,220,0.20) 0%, transparent 60%),
-    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(120,80,40,0.03) 0%, transparent 55%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='1' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0 0.08  0 0 0 0.010 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    /* Soft white highlight at top */
+    radial-gradient(ellipse 1200px 700px at 30% -20%, rgba(255,255,255,0.25), transparent 60%),
+    /* Secondary highlight, lower right */
+    radial-gradient(ellipse 1200px 700px at 80% 0%, rgba(255,255,255,0.10), transparent 80%),
+    /* Warm shadow ground, centered low */
+    radial-gradient(ellipse 1200px 800px at 50% 120%, rgba(92,67,42,0.04), transparent 60%),
+    /* Ultra-low cloud noise at finer frequency */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch' seed='4'/><feColorMatrix values='0 0 0 0 0.36  0 0 0 0 0.26  0 0 0 0 0.16  0 0 0 0.004 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 
   --h1-size:             2rem;        /* 32px */
   --h1-tracking:         -0.02em;
@@ -93,25 +96,10 @@
     position: relative;
   }
 
-  /* Faint corner vignette — only on executive pages. Adds page-edge
-     grounding without being visible as a "vignette". Quieted further. */
-  [data-page-mode="executive"].page-surface::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(ellipse 30% 25% at 0% 0%, rgba(42,29,16,0.012), transparent 70%),
-      radial-gradient(ellipse 30% 25% at 100% 0%, rgba(42,29,16,0.010), transparent 70%),
-      radial-gradient(ellipse 35% 30% at 0% 100%, rgba(42,29,16,0.012), transparent 70%),
-      radial-gradient(ellipse 35% 30% at 100% 100%, rgba(42,29,16,0.015), transparent 70%);
-    z-index: 0;
-  }
-
-  /* Keep content above the vignette pseudo-element */
-  .page-surface > * {
-    position: relative;
-    z-index: 1;
+  /* Inset corner vignette — elegant single-shadow approach per design spec.
+     Replaces previous 4-corner radial-gradient pseudo-element. */
+  [data-page-mode="executive"].page-surface {
+    box-shadow: inset 0 0 120px rgba(92,67,42,0.06);
   }
 
   /* Merriweather for true headings only (H1, H2). H3 stays Inter. */
@@ -145,8 +133,8 @@
 @layer components {
 
   /* ── Cards ──────────────────────────────────────────────────────────── */
-  /* Cards always paint a solid surface — they never inherit page texture.
-     `position: relative` ensures they sit cleanly above the page-surface vignette. */
+  /* Color contrast between page and card does the separating work.
+     Borders are nearly imperceptible; shadows are absent. */
   .card {
     background-color: var(--surface-card);
     border: 1px solid var(--surface-border);
@@ -155,16 +143,19 @@
     position: relative;
   }
 
+  /* Operationally important — Stuck Orders, alerts. Slightly deeper surface
+     creates the separation; 2px clay top edge calls attention. */
   .card-priority {
     background-color: var(--surface-card-priority);
     border: 1px solid var(--surface-border-priority);
-    border-left: 2px solid rgba(184,93,58,0.35);
+    border-top: 2px solid rgba(184,93,58,0.6);
     border-radius: 12px;
     box-shadow: var(--card-shadow);
     position: relative;
   }
 
-  /* `card-soft` recedes into page background, but still sits above vignette. */
+  /* `card-soft` is now identical to `card` per unification decision.
+     Kept as alias so existing code doesn't break. */
   .card-soft {
     background-color: var(--surface-card-soft);
     border: 1px solid var(--surface-border-soft);
@@ -246,7 +237,7 @@
 
   .label {
     @apply block text-xs font-semibold uppercase tracking-wide mb-1.5;
-    color: #7a6644;
+    color: #8d7b68;
     letter-spacing: 0.06em;
   }
 
@@ -271,7 +262,7 @@
   /* ── Section header (sidebar, page sections) ─────────────────────────── */
   .section-header {
     @apply text-xxs uppercase;
-    color: #7a6644;
+    color: #8d7b68;
     letter-spacing: 0.16em;
     font-weight: 600;
   }
