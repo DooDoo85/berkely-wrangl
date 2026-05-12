@@ -17,42 +17,38 @@
   --surface-card:        #ffffff;
   --surface-card-priority: #fbf6e8;   /* slightly deeper than card */
   --surface-card-soft:   var(--surface-page);  /* recedes into page */
-  --surface-border:      #e5e0d4;
-  --surface-border-priority: #d4c9b0; /* slightly stronger */
-  --surface-border-soft: rgba(229,224,212,0.55);
-  --surface-topbar:      #fbf7ee;     /* warm ivory */
-  --card-shadow:         0 1px 2px rgba(42,29,16,0.04);
+  --surface-border:      #d9cfb8;     /* slightly stronger for edge definition */
+  --surface-border-priority: #c9b894;
+  --surface-border-soft: rgba(217,207,184,0.55);
+  --surface-topbar:      #f0e6d2;     /* parchment family, joins page warmth */
+  --card-shadow:         0 1px 2px rgba(74,42,18,0.04);
   --page-grain:          none;
   --h1-size:             1.75rem;     /* 28px */
   --h1-tracking:         -0.01em;
 }
 
 [data-page-mode="executive"] {
-  --surface-page:        #e8dec9;
-  --surface-card:        #f3ead7;
-  --surface-card-priority: #ede2c8;   /* ~3% deeper */
+  --surface-page:        #e8dec9;     /* parchment — warm atmosphere */
+  --surface-card:        #faf5e8;     /* clean ivory — precise operational surface */
+  --surface-card-priority: #f5eed8;   /* slightly deeper but still clean */
   --surface-card-soft:   var(--surface-page);
-  --surface-border:      rgba(195,176,142,0.35);   /* hairline, almost invisible */
-  --surface-border-priority: rgba(184,135,76,0.45);
-  --surface-border-soft: rgba(195,176,142,0.22);
-  /* Warmer shadow with two-stop layering — close ambient + soft drop.
-     Reads as material lift, not crisp drop-shadow. */
-  --card-shadow:
-    0 1px 2px rgba(74,42,18,0.05),
-    0 4px 16px rgba(74,42,18,0.04);
+  --surface-border:      rgba(180,158,118,0.45);   /* clear but soft */
+  --surface-border-priority: rgba(184,135,76,0.5);
+  --surface-border-soft: rgba(180,158,118,0.25);
+  /* Edge definition over shadow weight — single ambient lift only */
+  --card-shadow:         0 1px 2px rgba(74,42,18,0.04);
 
-  /* Layered atmospheric texture — three passes at very low opacity.
-     1. Soft radial light at top-left (warmth source)
-     2. Ultra-low cloud noise overlay (tactile, no visible grain)
-     3. Faint corner vignette (page edges feel grounded)
-     None should be visible individually — they accumulate into atmosphere. */
+  /* Atmospheric texture — reduced to subconscious threshold.
+     1. Soft radial warmth at top-left (was 32% peak, now 20%)
+     2. Cloud noise opacity dropped from 0.018 to 0.010
+     3. Corner vignettes dropped to 1-1.5% per corner */
   --page-grain:
-    radial-gradient(ellipse 70% 60% at 20% 10%, rgba(255,245,220,0.32) 0%, transparent 60%),
-    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(120,80,40,0.05) 0%, transparent 55%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='1' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0 0.08  0 0 0 0.018 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    radial-gradient(ellipse 70% 60% at 20% 10%, rgba(255,245,220,0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(120,80,40,0.03) 0%, transparent 55%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='1' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0 0.08  0 0 0 0.010 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 
   --h1-size:             2rem;        /* 32px */
-  --h1-tracking:         -0.02em;     /* tighter */
+  --h1-tracking:         -0.02em;
 }
 
 [data-page-mode="utility"] {
@@ -60,7 +56,7 @@
   --surface-card:        #ffffff;
   --surface-card-priority: #faf6e8;
   --surface-card-soft:   var(--surface-page);
-  --surface-border:      #e8e8e3;
+  --surface-border:      #e0ddd2;
   --surface-border-priority: #d8d3c2;
   --surface-border-soft: rgba(232,232,227,0.6);
   --card-shadow:         none;
@@ -98,17 +94,17 @@
   }
 
   /* Faint corner vignette — only on executive pages. Adds page-edge
-     grounding without being visible as a "vignette". */
+     grounding without being visible as a "vignette". Quieted further. */
   [data-page-mode="executive"].page-surface::before {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
     background:
-      radial-gradient(ellipse 30% 25% at 0% 0%, rgba(42,29,16,0.025), transparent 70%),
-      radial-gradient(ellipse 30% 25% at 100% 0%, rgba(42,29,16,0.02), transparent 70%),
-      radial-gradient(ellipse 35% 30% at 0% 100%, rgba(42,29,16,0.025), transparent 70%),
-      radial-gradient(ellipse 35% 30% at 100% 100%, rgba(42,29,16,0.03), transparent 70%);
+      radial-gradient(ellipse 30% 25% at 0% 0%, rgba(42,29,16,0.012), transparent 70%),
+      radial-gradient(ellipse 30% 25% at 100% 0%, rgba(42,29,16,0.010), transparent 70%),
+      radial-gradient(ellipse 35% 30% at 0% 100%, rgba(42,29,16,0.012), transparent 70%),
+      radial-gradient(ellipse 35% 30% at 100% 100%, rgba(42,29,16,0.015), transparent 70%);
     z-index: 0;
   }
 
@@ -196,9 +192,9 @@
     background: rgba(247,240,224,0.07);
   }
   .sidebar-link.active {
-    color: #d4a574;
-    background: rgba(212,165,116,0.1);
-    border-left-color: #d4a574;
+    color: #c89860;
+    background: rgba(200,152,96,0.08);
+    border-left-color: #c89860;
   }
 
   /* ── Buttons ────────────────────────────────────────────────────────── */
@@ -250,7 +246,7 @@
 
   .label {
     @apply block text-xs font-semibold uppercase tracking-wide mb-1.5;
-    color: #8c7758;
+    color: #7a6644;
     letter-spacing: 0.06em;
   }
 
@@ -275,7 +271,7 @@
   /* ── Section header (sidebar, page sections) ─────────────────────────── */
   .section-header {
     @apply text-xxs uppercase;
-    color: #8c7758;
+    color: #7a6644;
     letter-spacing: 0.16em;
     font-weight: 600;
   }
