@@ -202,7 +202,7 @@ export default function Sidebar() {
                        transition-colors duration-150
                        ${active
                           ? 'text-[#f7f0e0] bg-[rgba(247,240,224,0.06)]'
-                          : 'text-[rgba(247,240,224,0.62)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`}
+                          : 'text-[rgba(247,240,224,0.82)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)]'}`}
           >
             <span className="flex items-center gap-3">
               <span className="text-base opacity-90">{item.icon}</span>
@@ -220,7 +220,7 @@ export default function Sidebar() {
                       `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
                        ${isActive
                           ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] font-semibold'
-                          : 'text-[rgba(247,240,224,0.55)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`
+                          : 'text-[rgba(247,240,224,0.72)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)]'}`
                     }>
                     {child.label}
                   </NavLink>
@@ -237,7 +237,7 @@ export default function Sidebar() {
           `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150
            border-l-2 ${isActive
               ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] border-[#d4a574] font-semibold'
-              : 'text-[rgba(247,240,224,0.62)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)] border-transparent'}`
+              : 'text-[rgba(247,240,224,0.82)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)] border-transparent'}`
         }>
         <span className="text-base opacity-90">{item.icon}</span>
         <span className="font-medium">{item.label}</span>
@@ -273,7 +273,7 @@ export default function Sidebar() {
             >
               Wrangl
             </div>
-            <div className="text-[10px] uppercase tracking-widest text-[rgba(247,240,224,0.5)] -mt-0.5">
+            <div className="text-[10px] uppercase tracking-widest text-[rgba(247,240,224,0.7)] -mt-0.5">
               Berkely Distribution
             </div>
           </div>
@@ -335,11 +335,11 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-xs text-[#f7f0e0] truncate font-medium">{profile?.email}</div>
-            <div className="text-[11px] text-[rgba(247,240,224,0.55)] truncate">{roleLabel(role)}</div>
+            <div className="text-[11px] text-[rgba(247,240,224,0.72)] truncate">{roleLabel(role)}</div>
           </div>
         </div>
         <button onClick={signOut}
-          className="flex items-center gap-2 text-xs text-[rgba(247,240,224,0.6)] hover:text-[#f7f0e0] transition-colors duration-150">
+          className="flex items-center gap-2 text-xs text-[rgba(247,240,224,0.78)] hover:text-[#f7f0e0] transition-colors duration-150">
           <span>↪</span> Sign out
         </button>
       </div>
