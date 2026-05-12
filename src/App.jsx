@@ -39,7 +39,7 @@ import OrderForm from './pages/orders/OrderForm'
 
 // Reports
 import ProductionDashboard from './pages/reports/ProductionDashboard'
-import InventoryVelocity from './pages/reports/InventoryVelocity'
+import FauxUsage from './pages/reports/FauxUsage'
 import RepActivity from './pages/reports/RepActivity'
 import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
@@ -142,7 +142,7 @@ function AppRoutes() {
         <Route path="/reports/sales-activity" element={<SalesActivityReport />} />
         <Route path="/reports/sales-intelligence" element={<SalesIntelligence />} />
         <Route path="/reports/inventory-health" element={<InventoryHealth />} />
-        <Route path="/reports/inventory-velocity" element={<InventoryVelocity />} />
+        <Route path="/reports/faux-usage" element={<FauxUsage />} />
         <Route path="/reports/order-status" element={<OrderStatusDashboard />} />
 
         {/* Quotes */}
