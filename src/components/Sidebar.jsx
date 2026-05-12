@@ -202,7 +202,7 @@ export default function Sidebar() {
                        transition-colors duration-150
                        ${active
                           ? 'text-[#f7f0e0] bg-[rgba(247,240,224,0.06)]'
-                          : 'text-[rgba(247,240,224,0.7)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`}
+                          : 'text-[rgba(247,240,224,0.62)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`}
           >
             <span className="flex items-center gap-3">
               <span className="text-base opacity-90">{item.icon}</span>
@@ -220,7 +220,7 @@ export default function Sidebar() {
                       `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
                        ${isActive
                           ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] font-semibold'
-                          : 'text-[rgba(247,240,224,0.6)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`
+                          : 'text-[rgba(247,240,224,0.55)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`
                     }>
                     {child.label}
                   </NavLink>
@@ -237,7 +237,7 @@ export default function Sidebar() {
           `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150
            border-l-2 ${isActive
               ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] border-[#d4a574] font-semibold'
-              : 'text-[rgba(247,240,224,0.7)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)] border-transparent'}`
+              : 'text-[rgba(247,240,224,0.62)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)] border-transparent'}`
         }>
         <span className="text-base opacity-90">{item.icon}</span>
         <span className="font-medium">{item.label}</span>
@@ -282,25 +282,28 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-        {NAV.map((item) => {
+        {NAV.map((item, idx) => {
           if (item.type === 'section') {
             const isCollapsible = item.collapsible
             const isOpen = !isCollapsible || openSections[item.label]
             return (
-              <div key={item.label}>
+              <div key={item.label} className={idx > 0 ? 'mt-3' : ''}>
+                {/* Hairline divider above each section, except the first item */}
+                {idx > 1 && <div className="border-t border-[rgba(247,240,224,0.06)] mx-3" />}
+
                 {isCollapsible ? (
                   <button
                     onClick={() => toggleSection(item.label)}
-                    className="w-full pt-4 pb-1 px-3 flex items-center justify-between"
+                    className="w-full pt-5 pb-1.5 px-3 flex items-center justify-between"
                   >
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a08868]">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8c7758]">
                       {item.label}
                     </span>
-                    <span className={`text-[10px] text-[#a08868] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                    <span className={`text-[10px] text-[#8c7758] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
                   </button>
                 ) : (
-                  <div className="pt-4 pb-1 px-3">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a08868]">
+                  <div className="pt-5 pb-1.5 px-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8c7758]">
                       {item.label}
                     </span>
                   </div>
