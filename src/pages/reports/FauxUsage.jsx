@@ -3,27 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 // =====================================================================
-// Faux Usage Dashboard
+// Faux Usage Dashboard (executive mode)
 //
-// Single-purpose view for faux blind inventory. One row per size with:
+// One row per faux blind size with:
 //   - On Hand / Committed / Available
 //   - Avg/Wk usage (4-month rolling baseline)
-//   - Up to 4 upcoming container ETAs as shared columns (next arrivals
-//     across all faux containers). Past-ETA containers stay visible
-//     until their arrival_date is set.
+//   - Up to 4 upcoming container ETAs as shared columns
 //   - Wks Supply at current usage
 //   - Status: stockout / at_risk (< 4 wks) / healthy
-//
-// Data source: v_faux_blind_inventory (Supabase view).
-// YTD KPI source: product_line_sales (Faux Wood Blinds row).
 // =====================================================================
 
 const AT_RISK_WEEKS = 4
 
-const STATUS_BADGE = {
-  stockout: 'bg-red-100 text-red-700',
-  at_risk:  'bg-amber-100 text-amber-700',
-  healthy:  'bg-emerald-50 text-emerald-700',
+const SORT_ORDER = { stockout: 0, at_risk: 1, healthy: 2 }
+
+const STATUS_PILL = {
+  stockout: 'pill-critical',
+  at_risk:  'pill-warning',
+  healthy:  'pill-healthy',
 }
 
 const STATUS_LABEL = {
@@ -31,8 +28,6 @@ const STATUS_LABEL = {
   at_risk:  'At Risk',
   healthy:  'Healthy',
 }
-
-const SORT_ORDER = { stockout: 0, at_risk: 1, healthy: 2 }
 
 export default function FauxUsage() {
   const navigate = useNavigate()
@@ -87,8 +82,6 @@ export default function FauxUsage() {
   }
 
   // ─── Derived ──────────────────────────────────────────────────────────
-
-  // Next 4 distinct ETA dates across all rows (shared column headers)
   const upcomingEtas = useMemo(() => {
     const dates = new Set()
     for (const r of rows) {
@@ -99,7 +92,6 @@ export default function FauxUsage() {
     return [...dates].sort().slice(0, 4)
   }, [rows])
 
-  // Filter + sort
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase()
     const filtered = q
@@ -140,7 +132,6 @@ export default function FauxUsage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  // ─── CSV export ───────────────────────────────────────────────────────
   function exportCSV() {
     const today = new Date().toISOString().slice(0, 10)
     const headers = [
@@ -151,9 +142,14 @@ export default function FauxUsage() {
     const csvRows = visibleRows.map(r => [
       r.size,
       r.avg_per_week > 0 ? r.avg_per_week.toFixed(1) : '',
-      r.qty_on_hand, r.qty_committed, r.qty_available,
-      ...upcomingEtas.map(e => qtyForEta(r, e) ?? ''),
-      r.total_incoming,
+      Math.round(r.qty_on_hand),
+      Math.round(r.qty_committed),
+      Math.round(r.qty_available),
+      ...upcomingEtas.map(e => {
+        const q = qtyForEta(r, e)
+        return q != null ? Math.round(q) : ''
+      }),
+      Math.round(r.total_incoming),
       r.wks_supply_on_hand ?? '',
       STATUS_LABEL[r.status],
     ])
@@ -174,19 +170,18 @@ export default function FauxUsage() {
     URL.revokeObjectURL(url)
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────
-  const fmt      = n => Number(n || 0).toLocaleString()
+  const fmt      = n => Math.round(Number(n || 0)).toLocaleString()
   const fmtMoney = n => `$${Math.round(Number(n || 0) / 1000).toLocaleString()}K`
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <div className="flex items-baseline justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-stone-800">Faux Usage Dashboard</h2>
-          <p className="text-sm text-stone-500 mt-1">
+          <h1>Faux Usage Dashboard</h1>
+          <p className="text-sm text-ink-muted mt-1">
             Stock, incoming containers, and weeks of supply at current usage
             {kpis?.updated_at && (
-              <span className="text-stone-400"> · YTD updated {formatUpdated(kpis.updated_at)}</span>
+              <span className="text-ink-muted"> · YTD updated {formatUpdated(kpis.updated_at)}</span>
             )}
           </p>
         </div>
@@ -198,25 +193,26 @@ export default function FauxUsage() {
           label="YTD Sold"
           value={loading ? '—' : fmt(kpis?.units_ytd)}
           subtext={loading || !kpis ? 'units' : `${fmtMoney(kpis.sales_ytd)} · units`}
-          tone="sky"
+          accent="gold"
         />
         <KpiCard
           label="On Hand"
           value={loading ? '—' : fmt(kpis?.on_hand)}
           subtext="units"
-          tone="emerald"
+          accent="healthy"
         />
         <KpiCard
           label="Incoming"
           value={loading ? '—' : fmt(kpis?.incoming)}
           subtext="across active containers"
-          tone="amber"
+          accent="info"
         />
         <KpiCard
           label="At Risk"
           value={loading ? '—' : fmt(kpis?.at_risk)}
           subtext={`< ${AT_RISK_WEEKS} wks supply`}
-          tone="red"
+          accent="critical"
+          priority={kpis?.at_risk > 0}
         />
       </div>
 
@@ -227,19 +223,18 @@ export default function FauxUsage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Filter by size (e.g. 36 x 84)..."
-          className="flex-1 max-w-md px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white placeholder-stone-400"
+          className="input flex-1 max-w-md"
         />
-        <button onClick={exportCSV}
-          className="ml-auto px-4 py-2 bg-stone-700 hover:bg-stone-800 text-white text-sm font-medium rounded-lg transition-colors">
+        <button onClick={exportCSV} className="btn-primary ml-auto text-sm">
           📥 Export CSV
         </button>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-stone-50 border-b border-stone-200">
+            <thead className="bg-surface-page/40 border-b border-surface-border">
               <tr>
                 <Th align="left">Size</Th>
                 <Th>Avg/Wk</Th>
@@ -248,41 +243,41 @@ export default function FauxUsage() {
                 <Th>Available</Th>
                 {upcomingEtas.map(eta => (
                   <th key={eta}
-                      className="text-right px-3 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider whitespace-nowrap">
+                      className="text-right px-3 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">
                     <div>ETA</div>
-                    <div className={`mt-0.5 normal-case font-semibold ${isPastEta(eta) ? 'text-red-600' : 'text-stone-700'}`}>
+                    <div className={`mt-0.5 normal-case font-semibold ${isPastEta(eta) ? 'text-status-critical' : 'text-ink-mid'}`}>
                       {formatEta(eta)}{isPastEta(eta) ? ' ⚠' : ''}
                     </div>
                   </th>
                 ))}
                 <Th>Wks Supply</Th>
-                <th className="text-center px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                <th className="text-center px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">
                   Status
                 </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7 + upcomingEtas.length} className="px-4 py-12 text-center text-stone-400">Loading…</td></tr>
+                <tr><td colSpan={7 + upcomingEtas.length} className="px-4 py-12 text-center text-ink-muted">Loading…</td></tr>
               ) : visibleRows.length === 0 ? (
-                <tr><td colSpan={7 + upcomingEtas.length} className="px-4 py-12 text-center text-stone-400">No sizes match the filter</td></tr>
+                <tr><td colSpan={7 + upcomingEtas.length} className="px-4 py-12 text-center text-ink-muted">No sizes match the filter</td></tr>
               ) : visibleRows.map(row => (
                 <tr key={row.id} onClick={() => navigate(`/inventory/${row.id}`)}
-                    className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-stone-800 whitespace-nowrap min-w-[240px]">
+                    className="border-b border-surface-border-soft hover:bg-surface-page/40 cursor-pointer transition-colors">
+                  <td className="px-4 py-2.5 font-medium text-ink-strong whitespace-nowrap min-w-[240px]">
                     {row.size}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-stone-700">
+                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-mid">
                     {row.avg_per_week > 0 ? row.avg_per_week.toFixed(1) : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-stone-800">
-                    {row.qty_on_hand.toLocaleString()}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-strong">
+                    {Math.round(row.qty_on_hand).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-stone-500">
-                    {row.qty_committed > 0 ? row.qty_committed.toLocaleString() : '—'}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
+                    {row.qty_committed > 0 ? Math.round(row.qty_committed).toLocaleString() : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-stone-800">
-                    {row.qty_available.toLocaleString()}
+                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-ink-strong">
+                    {Math.round(row.qty_available).toLocaleString()}
                   </td>
 
                   {upcomingEtas.map(eta => {
@@ -290,31 +285,31 @@ export default function FauxUsage() {
                     return (
                       <td key={eta} className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
                         {qty != null
-                          ? <span className={isPastEta(eta) ? 'text-red-600 font-medium' : 'text-stone-700'}>
-                              {qty.toLocaleString()}
+                          ? <span className={isPastEta(eta) ? 'text-status-critical font-medium' : 'text-ink-mid'}>
+                              {Math.round(qty).toLocaleString()}
                             </span>
-                          : <span className="text-stone-300">—</span>}
+                          : <span className="text-ink-muted">—</span>}
                       </td>
                     )
                   })}
 
                   <td className="px-4 py-2.5 text-right tabular-nums">
                     {row.status === 'stockout' ? (
-                      <span className="text-red-700 font-semibold">0</span>
+                      <span className="text-status-critical font-semibold">0</span>
                     ) : row.avg_per_week <= 0 ? (
-                      <span className="text-stone-400">—</span>
+                      <span className="text-ink-muted">—</span>
                     ) : (
                       <span className={
                         row.wks_supply_on_hand < AT_RISK_WEEKS
-                          ? 'text-amber-700 font-semibold'
-                          : 'text-stone-700'
+                          ? 'text-status-warning font-semibold'
+                          : 'text-ink-mid'
                       }>
                         {row.wks_supply_on_hand != null ? `${row.wks_supply_on_hand}w` : '—'}
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-center">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_BADGE[row.status]}`}>
+                    <span className={STATUS_PILL[row.status]}>
                       {STATUS_LABEL[row.status]}
                     </span>
                   </td>
@@ -325,13 +320,13 @@ export default function FauxUsage() {
         </div>
       </div>
 
-      <p className="text-xs text-stone-400 mt-3">
-        <strong className="text-stone-500">On Hand</strong> = physical inventory.
-        {' '}<strong className="text-stone-500">Committed</strong> = reserved for open orders (live from ePIC every 15 min).
-        {' '}<strong className="text-stone-500">Available</strong> = On Hand minus Committed.
-        {' '}<strong className="text-stone-500">Avg/Wk</strong> = 4-month rolling baseline of weekly shipments per size.
-        {' '}<strong className="text-stone-500">ETA columns</strong> = units arriving on the next 4 container dates; past-ETA containers stay visible until marked received.
-        {' '}<strong className="text-stone-500">Wks Supply</strong> = Available ÷ Avg/Wk.
+      <p className="text-xs text-ink-muted mt-3">
+        <strong className="text-ink-mid">On Hand</strong> = physical inventory.
+        {' '}<strong className="text-ink-mid">Committed</strong> = reserved for open orders (live from ePIC every 15 min).
+        {' '}<strong className="text-ink-mid">Available</strong> = On Hand minus Committed.
+        {' '}<strong className="text-ink-mid">Avg/Wk</strong> = 4-month rolling baseline of weekly shipments per size.
+        {' '}<strong className="text-ink-mid">ETA columns</strong> = units arriving on the next 4 container dates; past-ETA containers stay visible until marked received.
+        {' '}<strong className="text-ink-mid">Wks Supply</strong> = Available ÷ Avg/Wk.
         {' '}Click any size for transaction history.
       </p>
     </div>
@@ -339,22 +334,21 @@ export default function FauxUsage() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Subcomponents
-// ═════════════════════════════════════════════════════════════════════════
-
-function KpiCard({ label, value, subtext, tone }) {
-  const tones = {
-    sky:     { bg: 'bg-sky-50',     border: 'border-sky-200',     label: 'text-sky-700',     value: 'text-sky-900',     sub: 'text-sky-700' },
-    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'text-emerald-700', value: 'text-emerald-900', sub: 'text-emerald-700' },
-    amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   label: 'text-amber-700',   value: 'text-amber-900',   sub: 'text-amber-700' },
-    red:     { bg: 'bg-red-50',     border: 'border-red-200',     label: 'text-red-700',     value: 'text-red-900',     sub: 'text-red-700' },
+function KpiCard({ label, value, subtext, accent, priority }) {
+  // accent: 'gold' | 'healthy' | 'info' | 'critical'
+  const accentMap = {
+    gold:     { text: 'text-accent-gold',     value: 'text-ink-strong' },
+    healthy:  { text: 'text-status-healthy',  value: 'text-ink-strong' },
+    info:     { text: 'text-status-info',     value: 'text-ink-strong' },
+    critical: { text: 'text-status-critical', value: 'text-ink-strong' },
   }
-  const t = tones[tone] || tones.sky
+  const t = accentMap[accent] || accentMap.gold
+  const className = priority ? 'card-priority p-4' : 'card p-4'
   return (
-    <div className={`${t.bg} border ${t.border} rounded-xl p-4`}>
-      <p className={`text-[10px] font-semibold ${t.label} uppercase tracking-wider`}>{label}</p>
+    <div className={className}>
+      <p className={`text-[10px] font-semibold ${t.text} uppercase tracking-widest`}>{label}</p>
       <p className={`text-3xl font-bold ${t.value} mt-1 tabular-nums`}>{value}</p>
-      {subtext && <p className={`text-xs ${t.sub} mt-1`}>{subtext}</p>}
+      {subtext && <p className="text-xs text-ink-muted mt-1">{subtext}</p>}
     </div>
   )
 }
@@ -362,7 +356,7 @@ function KpiCard({ label, value, subtext, tone }) {
 function Th({ children, align = 'right' }) {
   const alignCls = align === 'left' ? 'text-left' : 'text-right'
   return (
-    <th className={`${alignCls} px-4 py-3 text-[10px] font-bold text-stone-500 uppercase tracking-wider whitespace-nowrap`}>
+    <th className={`${alignCls} px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap`}>
       {children}
     </th>
   )
