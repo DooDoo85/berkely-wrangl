@@ -219,7 +219,7 @@ export default function Sidebar() {
                     className={({ isActive }) =>
                       `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
                        ${isActive
-                          ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] font-semibold'
+                          ? 'text-[#c89860] bg-[rgba(200,152,96,0.08)] font-semibold'
                           : 'text-[rgba(247,240,224,0.72)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)]'}`
                     }>
                     {child.label}
@@ -236,7 +236,7 @@ export default function Sidebar() {
         className={({ isActive }) =>
           `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150
            border-l-2 ${isActive
-              ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] border-[#d4a574] font-semibold'
+              ? 'text-[#c89860] bg-[rgba(200,152,96,0.08)] border-[#c89860] font-semibold'
               : 'text-[rgba(247,240,224,0.82)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)] border-transparent'}`
         }>
         <span className="text-base opacity-90">{item.icon}</span>
@@ -249,7 +249,7 @@ export default function Sidebar() {
     <div
       className="w-60 flex flex-col h-full flex-shrink-0"
       style={{
-        background: 'linear-gradient(180deg, #2d1f12 0%, #3a2818 100%)',
+        background: 'linear-gradient(180deg, #23180f 0%, #2e2014 100%)',
         color: '#f7f0e0',
       }}
     >
@@ -259,13 +259,13 @@ export default function Sidebar() {
           <div
             className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background: 'linear-gradient(135deg, #d4a574 0%, #b85d3a 100%)',
+              background: 'linear-gradient(135deg, #c89860 0%, #9d4f30 100%)',
               color: '#1a0f08',
               fontFamily: 'Merriweather, Georgia, serif',
               fontWeight: 700,
               fontSize: '20px',
               lineHeight: 1,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.2)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
             }}
           >
             W
@@ -331,7 +331,7 @@ export default function Sidebar() {
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
             style={{
-              background: 'linear-gradient(135deg, #d4a574 0%, #b85d3a 100%)',
+              background: 'linear-gradient(135deg, #c89860 0%, #b85d3a 100%)',
               color: '#1a0f08',
             }}
           >
