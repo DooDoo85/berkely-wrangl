@@ -57,7 +57,7 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
 function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printedCount, loading, onClick }) {
   return (
     <div onClick={onClick}
-      className="card card-hover p-5 cursor-pointer">
+      className="card card-hover p-6 cursor-pointer">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
