@@ -57,7 +57,7 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
 function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printedCount, loading, onClick }) {
   return (
     <div onClick={onClick}
-      className="bg-white border border-gray-200 rounded-xl p-5 cursor-pointer hover:border-gray-300 transition-colors">
+      className="bg-[#faf6ed] border border-[#e8dcc4] rounded-xl p-5 cursor-pointer hover:border-[#d4c4a0] transition-colors">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
@@ -123,7 +123,7 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
   return (
     <div onClick={onClick} style={accentStyle}
-      className={`bg-white border border-gray-200 rounded-xl px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:border-gray-300" : ""}`}>
+      className={`bg-[#faf6ed] border border-[#e8dcc4] rounded-xl px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:border-[#d4c4a0]" : ""}`}>
       <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-gray-900 tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
@@ -512,7 +512,7 @@ export default function ExecutiveHome() {
   const FAUX_FILL     = "#f5e8c8";
 
   return (
-    <div className="min-h-screen bg-[#faf6ed]">
+    <div className="min-h-screen bg-white">
       <div className="max-w-screen-xl mx-auto p-8">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -534,7 +534,7 @@ export default function ExecutiveHome() {
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
             <button onClick={load} disabled={loading}
-              className="text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all font-medium">
+              className="text-xs px-3 py-1.5 bg-[#faf6ed] border border-[#e8dcc4] rounded-lg text-gray-700 hover:bg-[#f0e9d5] hover:border-[#d4c4a0] disabled:opacity-40 transition-all font-medium">
               {loading ? "Refreshing…" : "↻ Refresh"}
             </button>
           </div>
@@ -603,7 +603,7 @@ export default function ExecutiveHome() {
         {/* ── Action Zone: Stuck Orders + Top Customers ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Stuck Orders */}
-          <div className={`rounded-xl border ${stuckTotal > 0 ? "bg-white border-red-200" : "bg-white border-gray-200"} p-5`}>
+          <div className={`rounded-xl border ${stuckTotal > 0 ? "bg-[#faf6ed] border-red-200" : "bg-[#faf6ed] border-[#e8dcc4]"} p-5`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-medium text-gray-900">Stuck Orders</h3>
@@ -648,7 +648,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Top Customers This Week */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-[#faf6ed] border border-[#e8dcc4] rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-900">Top Customers · This Week</h3>
               <button onClick={() => navigate("/customers")}
@@ -665,7 +665,7 @@ export default function ExecutiveHome() {
         {/* ── Context Zone: Team Activity + Daily Sales ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Team Activity */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-[#faf6ed] border border-[#e8dcc4] rounded-xl p-5">
             <h3 className="text-sm font-medium text-gray-900 mb-4">Team · Orders Invoiced This Week</h3>
             {data.repOrders?.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">No orders invoiced this week yet</p>
@@ -693,7 +693,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Daily Sales chart */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-[#faf6ed] border border-[#e8dcc4] rounded-xl p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-900">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-gray-400">orders entered, ex. quotes</span>
