@@ -28,7 +28,10 @@
 }
 
 [data-page-mode="executive"] {
-  --surface-page:        #f4eee2;     /* warm paper — atmosphere */
+  /* Page surface paints as a flat fallback; the radial gradient lives in
+     --page-grain and applies via background-image. This lets us keep the
+     mix-blend-mode noise on a separate pseudo-element (see .page-surface). */
+  --surface-page:        #f4eee2;     /* fallback solid for non-supporting contexts */
   --surface-card:        #faf6f0;     /* clean cream — precise operational surface */
   --surface-card-priority: #f3edde;   /* sits between page and card — subtle differentiation */
   --surface-card-soft:   #faf6f0;     /* unified with card — Stuck Orders alone earns differentiation */
@@ -37,18 +40,10 @@
   --surface-border-soft: rgba(92,67,42,0.08);
   --card-shadow:         none;        /* color contrast separates cards; no shadow needed */
 
-  /* Atmospheric paper texture — layered per design spec.
-     Three highlight passes + warm shadow + inset corner darkening + ultra-low noise.
-     Each pass invisible alone; accumulate into paper feel. */
+  /* Radial gradient — top-center light source, fading to deeper edges.
+     Replaces flat cream and supersedes the prior multi-radial highlight layers. */
   --page-grain:
-    /* Soft white highlight at top */
-    radial-gradient(ellipse 1200px 700px at 30% -20%, rgba(255,255,255,0.25), transparent 60%),
-    /* Secondary highlight, lower right */
-    radial-gradient(ellipse 1200px 700px at 80% 0%, rgba(255,255,255,0.10), transparent 80%),
-    /* Warm shadow ground, centered low */
-    radial-gradient(ellipse 1200px 800px at 50% 120%, rgba(92,67,42,0.04), transparent 60%),
-    /* Ultra-low cloud noise at finer frequency */
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch' seed='4'/><feColorMatrix values='0 0 0 0 0.36  0 0 0 0 0.26  0 0 0 0 0.16  0 0 0 0.004 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    radial-gradient(circle at top center, #f8f3ea 0%, #f4eee2 45%, #efe7d8 100%);
 
   --h1-size:             2rem;        /* 32px */
   --h1-tracking:         -0.02em;
@@ -87,8 +82,13 @@
   }
 
   /* Page-mode-aware page background. Applied to the page wrapper.
-     Composes the layered texture with the base color, with no blend mode
-     trickery — each layer contributes additively at very low opacity. */
+     Layering:
+       - Base color via background-color (solid fallback)
+       - Radial gradient via background-image (via --page-grain)
+       - Inset vignette via box-shadow (executive only)
+       - Multiply-blended noise via ::after (executive only)
+     The multiply blend is isolated to the ::after layer so it doesn't
+     muddy the gradient stops. */
   .page-surface {
     background-color: var(--surface-page);
     background-image: var(--page-grain);
@@ -96,10 +96,30 @@
     position: relative;
   }
 
-  /* Inset corner vignette — elegant single-shadow approach per design spec.
-     Replaces previous 4-corner radial-gradient pseudo-element. */
+  /* Inset corner vignette — elegant single-shadow approach.
+     Subtle warm corner darkening for page-edge grounding. */
   [data-page-mode="executive"].page-surface {
     box-shadow: inset 0 0 120px rgba(92,67,42,0.06);
+  }
+
+  /* Ultra-soft monochromatic noise overlay — multiply-blended at ~1.2% opacity.
+     Breaks digital flatness almost imperceptibly. SVG noise at fine frequency
+     for paper-fiber texture rather than soft cloud. */
+  [data-page-mode="executive"].page-surface::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch' seed='5'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply;
+    opacity: 0.012;
+    z-index: 0;
+  }
+
+  /* Keep content above the ::after noise overlay */
+  .page-surface > * {
+    position: relative;
+    z-index: 1;
   }
 
   /* Merriweather for true headings only (H1, H2). H3 stays Inter. */
