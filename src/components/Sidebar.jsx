@@ -249,19 +249,23 @@ export default function Sidebar() {
     <div
       className="w-60 flex flex-col h-full flex-shrink-0"
       style={{
-        background: 'linear-gradient(180deg, #1a0f08 0%, #2a1d10 100%)',
+        background: 'linear-gradient(180deg, #2d1f12 0%, #3a2818 100%)',
         color: '#f7f0e0',
       }}
     >
       {/* Header */}
-      <div className="px-5 pt-5 pb-4 border-b border-[rgba(247,240,224,0.06)]">
-        <div className="flex items-center gap-2.5">
+      <div className="px-5 pt-5 pb-4 border-b border-[rgba(247,240,224,0.08)]">
+        <div className="flex items-center gap-3">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
+            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
               background: 'linear-gradient(135deg, #d4a574 0%, #b85d3a 100%)',
               color: '#1a0f08',
               fontFamily: 'Merriweather, Georgia, serif',
+              fontWeight: 700,
+              fontSize: '20px',
+              lineHeight: 1,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.2)',
             }}
           >
             W
