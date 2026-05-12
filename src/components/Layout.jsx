@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import FeedbackButton from './FeedbackButton'
 import ImpersonationBanner from './ImpersonationBanner'
+import NotificationBell from './NotificationBell'
 
 const PAGE_TITLES = {
   '/':           'Home',
@@ -33,7 +34,8 @@ export default function Layout() {
           <header className="h-14 min-h-[56px] bg-white border-b border-stone-200
                              flex items-center justify-between px-6 flex-shrink-0">
             <h1 className="text-base font-semibold text-stone-800">{title}</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <NotificationBell />
               <span className="text-xs text-stone-400">
                 {new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' })}
               </span>
