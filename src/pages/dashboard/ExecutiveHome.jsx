@@ -57,7 +57,7 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
 function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printedCount, loading, onClick }) {
   return (
     <div onClick={onClick}
-      className="bg-[#fafaf7] border border-[#e5e5e0] rounded-xl p-5 cursor-pointer hover:border-[#d4d4cc] transition-colors">
+      className="card card-hover p-5 cursor-pointer">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
@@ -123,7 +123,7 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
   return (
     <div onClick={onClick} style={accentStyle}
-      className={`bg-[#fafaf7] border border-[#e5e5e0] rounded-xl px-4 py-3.5 transition-colors ${clickable ? "cursor-pointer hover:border-[#d4d4cc]" : ""}`}>
+      className={`card px-4 py-3.5 ${clickable ? "cursor-pointer card-hover" : ""}`}>
       <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-gray-900 tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
@@ -155,7 +155,7 @@ function DailySalesChart({ data = [] }) {
               )}
               <div className="w-full h-full rounded-t transition-all"
                 style={{
-                  background: isToday ? '#a0573a' : hasData ? '#d4b896' : 'transparent',
+                  background: isToday ? '#b85d3a' : hasData ? '#d4a574' : 'transparent',
                 }}
               />
             </div>
@@ -200,7 +200,7 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#ee5e3a' }} />
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#b85d3a' }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums whitespace-nowrap w-16 text-right">
                 {c.orders} order{c.orders !== 1 ? 's' : ''}
@@ -506,19 +506,19 @@ export default function ExecutiveHome() {
   const stuckTotal = data.stuckOrders?.length ?? 0;
   const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
 
-  const ROLLER_ACCENT = "#a0573a";
-  const ROLLER_FILL   = "#f5e2d4";
-  const FAUX_ACCENT   = "#b8854d";
-  const FAUX_FILL     = "#f5e8c8";
+  const ROLLER_ACCENT = "#b85d3a";  // accent-clay
+  const ROLLER_FILL   = "#f0d8c8";  // accent-clay-soft
+  const FAUX_ACCENT   = "#d4a574";  // accent-gold
+  const FAUX_FILL     = "#f5e8d4";  // accent-gold-soft
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-full">
       <div className="max-w-screen-xl mx-auto p-8">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Business Overview</h1>
+            <h1 className="font-display">Business Overview</h1>
             <p className="text-sm text-gray-500 mt-1">
               {loading ? "Loading…" : (
                 <>
@@ -534,7 +534,7 @@ export default function ExecutiveHome() {
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
             <button onClick={load} disabled={loading}
-              className="text-xs px-3 py-1.5 bg-[#fafaf7] border border-[#e5e5e0] rounded-lg text-gray-700 hover:bg-[#f4f4ef] hover:border-[#d4d4cc] disabled:opacity-40 transition-all font-medium">
+              className="btn-ghost text-xs">
               {loading ? "Refreshing…" : "↻ Refresh"}
             </button>
           </div>
@@ -603,7 +603,7 @@ export default function ExecutiveHome() {
         {/* ── Action Zone: Stuck Orders + Top Customers ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Stuck Orders */}
-          <div className={`rounded-xl border ${stuckTotal > 0 ? "bg-[#fafaf7] border-red-200" : "bg-[#fafaf7] border-[#e5e5e0]"} p-5`}>
+          <div className={`card p-5 ${stuckTotal > 0 ? "!border-status-critical/40" : ""}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-medium text-gray-900">Stuck Orders</h3>
@@ -648,7 +648,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Top Customers This Week */}
-          <div className="bg-[#fafaf7] border border-[#e5e5e0] rounded-xl p-5">
+          <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-900">Top Customers · This Week</h3>
               <button onClick={() => navigate("/customers")}
@@ -665,7 +665,7 @@ export default function ExecutiveHome() {
         {/* ── Context Zone: Team Activity + Daily Sales ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Team Activity */}
-          <div className="bg-[#fafaf7] border border-[#e5e5e0] rounded-xl p-5">
+          <div className="card p-5">
             <h3 className="text-sm font-medium text-gray-900 mb-4">Team · Orders Invoiced This Week</h3>
             {data.repOrders?.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">No orders invoiced this week yet</p>
@@ -693,7 +693,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Daily Sales chart */}
-          <div className="bg-[#fafaf7] border border-[#e5e5e0] rounded-xl p-5">
+          <div className="card p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-900">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-gray-400">orders entered, ex. quotes</span>
