@@ -2,25 +2,14 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 
-// Old western — worn saddle leather
-const BG_BASE       = 'bg-[#261810]'
-const BG_HOVER      = 'hover:bg-[#382618]'
-const BG_ACTIVE     = 'bg-[#5a3a24]'
-const BG_GROUP_OPEN = 'bg-[#382618]'
-const BORDER        = 'border-[#382618]'
-const TEXT_MUTED    = 'text-white/80'
-const TEXT_HOVER    = 'hover:text-white'
-const TEXT_SECTION  = 'text-[#d4aa70]'
-
-// ── Nav structure ─────────────────────────────────────────────────────────────
-// type: 'section' → non-collapsible section header
-// type: 'link'    → single nav item
-// type: 'group'   → collapsible group with children
+// ═══════════════════════════════════════════════════════════════════════
+// Sidebar — premium dark brown with gradient, gold accent for active state
+// Uses new design tokens; same nav structure as before.
+// ═══════════════════════════════════════════════════════════════════════
 
 const EXEC_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
 
-  // ── SALES ──
   { type: 'section', label: 'Sales' },
   { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
   { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
@@ -40,7 +29,6 @@ const EXEC_NAV = [
     ],
   },
 
-  // ── OPERATIONS ──
   { type: 'section', label: 'Operations' },
   {
     type: 'group', label: 'Inventory', icon: '📦',
@@ -55,15 +43,14 @@ const EXEC_NAV = [
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops/production',     label: 'Start Production' },
-      { to: '/ops',                label: 'Warehouse'        },
-      { to: '/ops/cycle-counts',   label: 'Cycle Counts'     },
-      { to: '/purchasing',         label: 'Purchasing'       },
-      { to: '/freight',            label: 'Freight'          },
+      { to: '/ops/production',   label: 'Start Production' },
+      { to: '/ops',              label: 'Warehouse'        },
+      { to: '/ops/cycle-counts', label: 'Cycle Counts'     },
+      { to: '/purchasing',       label: 'Purchasing'       },
+      { to: '/freight',          label: 'Freight'          },
     ],
   },
 
-  // ── REPORTS ── (collapsible)
   {
     type: 'section', label: 'Reports', collapsible: true,
     items: [
@@ -77,7 +64,6 @@ const EXEC_NAV = [
     ],
   },
 
-  // ── SYSTEM ── (collapsible)
   {
     type: 'section', label: 'System', collapsible: true,
     items: [
@@ -92,8 +78,6 @@ const EXEC_NAV = [
 
 const SALES_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
-
-  // ── SALES ──
   { type: 'section', label: 'Sales' },
   { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
   { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
@@ -107,16 +91,12 @@ const SALES_NAV = [
   },
   {
     type: 'group', label: 'Orders', icon: '📋',
-    children: [
-      { to: '/orders', label: 'All Orders' },
-    ],
+    children: [{ to: '/orders', label: 'All Orders' }],
   },
 ]
 
 const PRODUCTION_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
-
-  // ── OPERATIONS ──
   { type: 'section', label: 'Operations' },
   {
     type: 'group', label: 'Inventory', icon: '📦',
@@ -131,17 +111,17 @@ const PRODUCTION_NAV = [
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
-      { to: '/ops/production',     label: 'Start Production' },
-      { to: '/orders/on-hold',     label: 'Orders on Hold'   },
-      { to: '/ops',                label: 'Warehouse'        },
-      { to: '/ops/receive',        label: 'Receive Stock'    },
-      { to: '/ops/cycle-counts',   label: 'Cycle Counts'     },
-      { to: '/purchasing',         label: 'Purchasing'       },
+      { to: '/ops/production',   label: 'Start Production' },
+      { to: '/orders/on-hold',   label: 'Orders on Hold'   },
+      { to: '/ops',              label: 'Warehouse'        },
+      { to: '/ops/receive',      label: 'Receive Stock'    },
+      { to: '/ops/cycle-counts', label: 'Cycle Counts'     },
+      { to: '/purchasing',       label: 'Purchasing'       },
     ],
   },
 ]
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────
 
 function getInitials(profile) {
   if (profile?.full_name) {
@@ -162,7 +142,7 @@ function roleLabel(role) {
   return role || ''
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────────────
 
 export default function Sidebar() {
   const location = useLocation()
@@ -175,19 +155,17 @@ export default function Sidebar() {
 
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {}
-    const scanItems = (items) => {
+    const scan = (items) => {
       items.forEach(item => {
         if (item.type === 'group') {
           initial[item.label] = item.children.some(c =>
             location.pathname === c.to || location.pathname.startsWith(c.to + '/')
           )
         }
-        if (item.type === 'section' && item.items) {
-          scanItems(item.items)
-        }
+        if (item.type === 'section' && item.items) scan(item.items)
       })
     }
-    scanItems(NAV)
+    scan(NAV)
     return initial
   })
 
@@ -206,11 +184,8 @@ export default function Sidebar() {
     return initial
   })
 
-  const toggleGroup = (label) =>
-    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
-
-  const toggleSection = (label) =>
-    setOpenSections(prev => ({ ...prev, [label]: !prev[label] }))
+  const toggleGroup   = (label) => setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
+  const toggleSection = (label) => setOpenSections(prev => ({ ...prev, [label]: !prev[label] }))
 
   const isGroupActive = (item) =>
     item.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
@@ -223,27 +198,32 @@ export default function Sidebar() {
         <div key={item.label}>
           <button
             onClick={() => toggleGroup(item.label)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors duration-150
-              ${active ? `text-[#ffffff] ${BG_GROUP_OPEN}` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm
+                       transition-colors duration-150
+                       ${active
+                          ? 'text-[#f7f0e0] bg-[rgba(247,240,224,0.06)]'
+                          : 'text-[rgba(247,240,224,0.7)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`}
           >
             <span className="flex items-center gap-3">
-              <span className="text-base">{item.icon}</span>
+              <span className="text-base opacity-90">{item.icon}</span>
               <span className="font-medium">{item.label}</span>
             </span>
             <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
           </button>
           {open && (
-            <div className="ml-9 mt-0.5 space-y-0.5">
+            <div className="ml-8 mt-0.5 space-y-0.5 border-l border-[rgba(247,240,224,0.08)] pl-3">
               {item.children
                 .filter(child => !child.executiveOrOwner || role === 'owner' || role === 'executive')
                 .map(child => (
-                <NavLink key={child.to} to={child.to}
-                  className={({ isActive }) =>
-                    `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
-                    ${isActive ? `text-[#ffffff] ${BG_ACTIVE} font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
-                  }>
-                  {child.label}
-                </NavLink>
+                  <NavLink key={child.to} to={child.to}
+                    className={({ isActive }) =>
+                      `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
+                       ${isActive
+                          ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] font-semibold'
+                          : 'text-[rgba(247,240,224,0.6)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)]'}`
+                    }>
+                    {child.label}
+                  </NavLink>
               ))}
             </div>
           )}
@@ -254,31 +234,55 @@ export default function Sidebar() {
     return (
       <NavLink key={item.to} to={item.to} end={item.exact}
         className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150
-          ${isActive ? `${BG_ACTIVE} text-[#ffffff] font-medium` : `${TEXT_MUTED} ${TEXT_HOVER} ${BG_HOVER}`}`
+          `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150
+           border-l-2 ${isActive
+              ? 'text-[#d4a574] bg-[rgba(212,165,116,0.1)] border-[#d4a574] font-semibold'
+              : 'text-[rgba(247,240,224,0.7)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.04)] border-transparent'}`
         }>
-        <span className="text-base">{item.icon}</span>
+        <span className="text-base opacity-90">{item.icon}</span>
         <span className="font-medium">{item.label}</span>
       </NavLink>
     )
   }
 
   return (
-    <div className={`w-60 ${BG_BASE} text-[#ffffff] flex flex-col h-full flex-shrink-0`}>
+    <div
+      className="w-60 flex flex-col h-full flex-shrink-0"
+      style={{
+        background: 'linear-gradient(180deg, #1a0f08 0%, #2a1d10 100%)',
+        color: '#f7f0e0',
+      }}
+    >
       {/* Header */}
-      <div className="px-5 pt-5 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">🐄</span>
-          <span className="text-lg font-bold text-[#ffffff] tracking-tight">Wrangl</span>
+      <div className="px-5 pt-5 pb-4 border-b border-[rgba(247,240,224,0.06)]">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #d4a574 0%, #b85d3a 100%)',
+              color: '#1a0f08',
+              fontFamily: 'Merriweather, Georgia, serif',
+            }}
+          >
+            W
+          </div>
+          <div>
+            <div
+              className="text-lg font-bold tracking-tight"
+              style={{ fontFamily: 'Merriweather, Georgia, serif', color: '#f7f0e0' }}
+            >
+              Wrangl
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-[rgba(247,240,224,0.5)] -mt-0.5">
+              Berkely Distribution
+            </div>
+          </div>
         </div>
-        <div className={`text-xs ${TEXT_MUTED} mt-0.5`}>Berkely Distribution</div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
-        {NAV.map((item, idx) => {
-
-          {/* Section header */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+        {NAV.map((item) => {
           if (item.type === 'section') {
             const isCollapsible = item.collapsible
             const isOpen = !isCollapsible || openSections[item.label]
@@ -289,14 +293,14 @@ export default function Sidebar() {
                     onClick={() => toggleSection(item.label)}
                     className="w-full pt-4 pb-1 px-3 flex items-center justify-between"
                   >
-                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION}`}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a08868]">
                       {item.label}
                     </span>
-                    <span className={`text-[10px] ${TEXT_SECTION} transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                    <span className={`text-[10px] text-[#a08868] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
                   </button>
                 ) : (
                   <div className="pt-4 pb-1 px-3">
-                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${TEXT_SECTION} border-b border-[#4a3020] pb-1 block`}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a08868]">
                       {item.label}
                     </span>
                   </div>
@@ -315,18 +319,24 @@ export default function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className={`px-4 py-4 border-t ${BORDER}`}>
+      <div className="px-4 py-4 border-t border-[rgba(247,240,224,0.08)]">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-[#5a3a24] flex items-center justify-center text-[#ffffff] text-xs font-semibold flex-shrink-0">
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #d4a574 0%, #b85d3a 100%)',
+              color: '#1a0f08',
+            }}
+          >
             {getInitials(profile)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-[#ffffff] truncate font-medium">{profile?.email}</div>
-            <div className={`text-[11px] ${TEXT_MUTED} truncate`}>{roleLabel(role)}</div>
+            <div className="text-xs text-[#f7f0e0] truncate font-medium">{profile?.email}</div>
+            <div className="text-[11px] text-[rgba(247,240,224,0.55)] truncate">{roleLabel(role)}</div>
           </div>
         </div>
         <button onClick={signOut}
-          className={`flex items-center gap-2 text-xs ${TEXT_MUTED} ${TEXT_HOVER} transition-colors duration-150`}>
+          className="flex items-center gap-2 text-xs text-[rgba(247,240,224,0.6)] hover:text-[#f7f0e0] transition-colors duration-150">
           <span>↪</span> Sign out
         </button>
       </div>
