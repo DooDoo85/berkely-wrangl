@@ -21,11 +21,11 @@ export default {
           'border-op': '#e5e0d4', // card border (operational, utility)
         },
 
-        // Ink — text colors (refined for stronger small-text contrast)
+        // Ink — text colors (matched to design spec)
         ink: {
-          strong: '#2a1d10',  // primary text, headings
-          mid:    '#4d3d28',  // secondary text (~10% darker than #5d4a35)
-          muted:  '#7a6644',  // labels, captions, helper text (~12% darker than #8c7758)
+          strong: '#2b1e14',  // primary text, headings (spec: Text Primary)
+          mid:    '#6b5a48',  // secondary text (spec: Text Secondary)
+          muted:  '#8d7b68',  // labels, captions, helper text (spec: Muted Text)
           inverse:'#f7f0e0',  // text on dark surfaces
         },
 
