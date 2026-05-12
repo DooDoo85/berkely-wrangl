@@ -331,7 +331,7 @@ export default function Sidebar() {
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
             style={{
-              background: 'linear-gradient(135deg, #c89860 0%, #b85d3a 100%)',
+              background: 'linear-gradient(135deg, #c89860 0%, #9d4f30 100%)',
               color: '#1a0f08',
             }}
           >
