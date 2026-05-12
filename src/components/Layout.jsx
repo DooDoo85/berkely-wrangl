@@ -67,12 +67,12 @@ export default function Layout() {
         <Sidebar />
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Top bar — same on every page, parchment tone joins page family */}
+          {/* Top bar — parchment matching page, single hairline border below */}
           <header
             className="h-14 min-h-[56px] flex items-center justify-between px-6 flex-shrink-0 border-b"
             style={{
-              background: '#f0e6d2',
-              borderColor: '#d9c9a8',
+              background: '#f4eee2',
+              borderColor: 'rgba(92,67,42,0.10)',
             }}
           >
             <h1 className="text-base font-semibold text-ink-strong" style={{ fontFamily: 'Inter' }}>
