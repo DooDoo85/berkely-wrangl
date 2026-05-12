@@ -4,22 +4,25 @@ import { useAuth } from '../../components/AuthProvider'
 import { supabase } from '../../lib/supabase'
 
 // =====================================================================
-// Sales Activity Report (merged)
+// Sales Activity Report (executive mode)
 //
-// Single page combining:
-//   • Rep performance (period selector, rep cards, summary table)
-//     — visible to everyone
-//   • Executive Intelligence — By Rep / Team Pipeline tabs +
-//     engagement funnel for aging-quote attention cards
-//     — owner + executive only (gated below)
+// Rep performance — visible to everyone
+// Executive Intelligence section — owner + executive only (gated)
 // =====================================================================
 
 const REPS = ['Christian Heffernan', "JT D'Emidio", 'Abigail Davis']
 
-const REP_COLORS = {
-  'Christian Heffernan': { bg: 'bg-blue-50', accent: 'bg-blue-600', text: 'text-blue-700', border: 'border-blue-200', light: 'bg-blue-100' },
-  "JT D'Emidio":         { bg: 'bg-emerald-50', accent: 'bg-emerald-600', text: 'text-emerald-700', border: 'border-emerald-200', light: 'bg-emerald-100' },
-  'Abigail Davis':       { bg: 'bg-purple-50', accent: 'bg-purple-600', text: 'text-purple-700', border: 'border-purple-200', light: 'bg-purple-100' },
+const REP_ACCENT = {
+  'Christian Heffernan': 'info',
+  "JT D'Emidio":         'healthy',
+  'Abigail Davis':       'gold',
+}
+
+const REP_ACCENT_HEX = {
+  info:    '#4a6b8c',
+  healthy: '#5b8c5a',
+  gold:    '#d4a574',
+  clay:    '#b85d3a',
 }
 
 const PERIODS = [
@@ -36,8 +39,8 @@ const ACTIVITY_TYPES = {
 }
 
 const TIER_STYLES = {
-  urgent:  { dot: '#c2410c', bg: '#fef3ec', border: '#f7d4b8', label: '⚠️ Urgent'  },
-  flagged: { dot: '#a0573a', bg: '#fbf6ee', border: '#ecd9c0', label: '⚠️ Flagged' },
+  urgent:  { pill: 'pill-critical', label: 'Urgent'  },
+  flagged: { pill: 'pill-warning',  label: 'Flagged' },
 }
 
 const ALLOWED_INTEL_ROLES = ['owner', 'executive']
@@ -98,16 +101,16 @@ function ActivityBreakdown({ activities }) {
   const counts = { call:0, meeting:0, note:0, email:0 }
   activities.forEach(a => { if (counts[a.activity_type] !== undefined) counts[a.activity_type]++ })
   const total = Object.values(counts).reduce((a,b)=>a+b,0)
-  if (!total) return <div className="text-xs text-gray-400 text-center py-2">No activities logged</div>
+  if (!total) return <div className="text-xs text-ink-muted text-center py-2">No activities logged</div>
 
   return (
     <div className="flex gap-3 justify-center flex-wrap">
       {Object.entries(ACTIVITY_TYPES).map(([type, cfg]) => (
         counts[type] > 0 && (
-          <div key={type} className="flex items-center gap-1 text-xs text-gray-600">
+          <div key={type} className="flex items-center gap-1 text-xs text-ink-mid">
             <span>{cfg.icon}</span>
             <span className="font-semibold">{counts[type]}</span>
-            <span className="text-gray-400">{cfg.label}</span>
+            <span className="text-ink-muted">{cfg.label}</span>
           </div>
         )
       ))}
@@ -118,10 +121,12 @@ function ActivityBreakdown({ activities }) {
 function TrendBadge({ current, previous }) {
   if (!previous || previous === 0) return null
   const pct = Math.round(((current - previous) / previous) * 100)
-  if (pct === 0) return <span className="text-xs text-gray-400">—</span>
+  if (pct === 0) return <span className="text-xs text-ink-muted">—</span>
   const up = pct > 0
   return (
-    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+      up ? 'bg-status-healthy-soft text-status-healthy' : 'bg-status-critical-soft text-status-critical'
+    }`}>
       {up ? '↑' : '↓'} {Math.abs(pct)}%
     </span>
   )
@@ -217,7 +222,6 @@ export default function SalesActivityReport() {
 
   useEffect(() => { load() }, [load])
 
-  // Cache for rep user IDs
   const repUserIdCache = {}
   async function getRepUserId(rep) {
     if (repUserIdCache[rep]) return repUserIdCache[rep]
@@ -242,37 +246,30 @@ export default function SalesActivityReport() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">Sales Activity Report</h1>
+            <h1>Sales Activity Report</h1>
             {isExec && (
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-200">
+              <span className="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 bg-accent-gold-soft text-accent-clay rounded-full border border-accent-gold/30">
                 Executive View
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-500 mt-1">Rep performance for 1:1 reviews</p>
+          <p className="text-sm text-ink-muted mt-1">Rep performance for 1:1 reviews</p>
         </div>
-        <button onClick={load} disabled={loading}
-          className="text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 font-medium">
+        <button onClick={load} disabled={loading} className="btn-ghost text-xs">
           {loading ? 'Loading…' : '↻ Refresh'}
         </button>
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────
-          EXECUTIVE INTELLIGENCE — owner/executive only
-          ──────────────────────────────────────────────────────────── */}
+      {/* Executive Intelligence — owner/executive only */}
       {isExec && <ExecutiveIntelligence profile={profile} />}
-
-      {/* ────────────────────────────────────────────────────────────────
-          REP PERFORMANCE — everyone
-          ──────────────────────────────────────────────────────────── */}
 
       {/* Period selector */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="flex bg-gray-100 rounded-lg p-0.5">
+        <div className="flex bg-surface-page/60 rounded-lg p-0.5 border border-surface-border">
           {PERIODS.map(p => (
             <button key={p.key} onClick={() => { setPeriod(p.key); setOffset(0) }}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all
-                ${period === p.key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors
+                ${period === p.key ? 'bg-surface-card text-ink-strong shadow-sm' : 'text-ink-mid hover:text-ink-strong'}`}>
               {p.label}
             </button>
           ))}
@@ -280,20 +277,20 @@ export default function SalesActivityReport() {
 
         <div className="flex items-center gap-2">
           <button onClick={() => setOffset(o => o - 1)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 text-sm">
+            className="w-7 h-7 flex items-center justify-center rounded-lg border border-surface-border hover:bg-surface-page/40 text-ink-mid text-sm">
             ‹
           </button>
-          <span className="text-sm font-semibold text-gray-900 min-w-[140px] text-center">
+          <span className="text-sm font-semibold text-ink-strong min-w-[140px] text-center">
             {range.label}
           </span>
           <button onClick={() => setOffset(o => Math.min(o + 1, 0))}
             disabled={offset >= 0}
-            className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 text-sm disabled:opacity-30">
+            className="w-7 h-7 flex items-center justify-center rounded-lg border border-surface-border hover:bg-surface-page/40 text-ink-mid text-sm disabled:opacity-30">
             ›
           </button>
         </div>
 
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-ink-muted">
           {range.startStr} → {range.endStr}
         </span>
       </div>
@@ -301,57 +298,60 @@ export default function SalesActivityReport() {
       {/* Rep cards */}
       <div className="grid grid-cols-3 gap-5 mb-6">
         {REPS.map(rep => {
-          const c = REP_COLORS[rep]
+          const accentKey = REP_ACCENT[rep] || 'info'
+          const accentHex = REP_ACCENT_HEX[accentKey]
           const d = repData[rep]
           const initials = rep.split(' ').map(p=>p[0]).join('')
 
           return (
-            <div key={rep} className={`bg-white border ${c.border} rounded-xl overflow-hidden`}>
-              <div className={`${c.bg} px-4 py-3 border-b ${c.border} flex items-center gap-3`}>
-                <div className={`w-9 h-9 rounded-full ${c.accent} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
+            <div key={rep} className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-surface-border flex items-center gap-3"
+                   style={{ background: `${accentHex}12` }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 text-ink-inverse"
+                     style={{ background: accentHex }}>
                   {initials}
                 </div>
                 <div>
-                  <div className={`text-sm font-bold ${c.text}`}>{rep}</div>
-                  <div className="text-xs text-gray-500">{range.label}</div>
+                  <div className="text-sm font-bold text-ink-strong">{rep}</div>
+                  <div className="text-xs text-ink-muted">{range.label}</div>
                 </div>
               </div>
 
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-surface-border-soft">
                 <div className="px-4 py-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invoiced</span>
+                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Invoiced</span>
                     <TrendBadge current={d?.orders.count||0} previous={d?.prev.orders||0} />
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                    <span className="text-2xl font-bold text-ink-strong tabular-nums">
                       {loading ? '—' : d?.orders.count ?? 0}
                     </span>
-                    <span className="text-sm text-gray-500 font-medium">
+                    <span className="text-sm text-ink-mid font-medium">
                       {loading ? '' : fmt$(d?.orders.value)}
                     </span>
                   </div>
                 </div>
 
                 <div className="px-4 py-3">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pipeline Activity</div>
+                  <div className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">Pipeline Activity</div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                    <span className="text-2xl font-bold text-ink-strong tabular-nums">
                       {loading ? '—' : d?.pipeline.count ?? 0}
                     </span>
-                    <span className="text-sm text-gray-500 font-medium">
+                    <span className="text-sm text-ink-mid font-medium">
                       {loading ? '' : fmt$(d?.pipeline.value)}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5">quotes, credit ok, po sent, printed</div>
+                  <div className="text-xs text-ink-muted mt-0.5">quotes, credit ok, po sent, printed</div>
                 </div>
 
                 <div className="px-4 py-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Activities</span>
+                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Activities</span>
                     <TrendBadge current={d?.activities.count||0} previous={d?.prev.activities||0} />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 tabular-nums mb-2">
+                  <div className="text-2xl font-bold text-ink-strong tabular-nums mb-2">
                     {loading ? '—' : d?.activities.count ?? 0}
                   </div>
                   {!loading && d?.activities.items && (
@@ -359,18 +359,18 @@ export default function SalesActivityReport() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-gray-100">
+                <div className="grid grid-cols-2 divide-x divide-surface-border-soft">
                   <div className="px-4 py-3 text-center">
-                    <div className="text-xl font-bold text-gray-900 tabular-nums">
+                    <div className="text-xl font-bold text-ink-strong tabular-nums">
                       {loading ? '—' : d?.newCustomers ?? 0}
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5">New Customers</div>
+                    <div className="text-xs text-ink-muted mt-0.5">New Customers</div>
                   </div>
                   <div className="px-4 py-3 text-center">
-                    <div className="text-xl font-bold text-gray-900 tabular-nums">
+                    <div className="text-xl font-bold text-ink-strong tabular-nums">
                       {loading ? '—' : d?.followUps ?? 0}
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5">Follow-ups Done</div>
+                    <div className="text-xs text-ink-muted mt-0.5">Follow-ups Done</div>
                   </div>
                 </div>
               </div>
@@ -380,57 +380,57 @@ export default function SalesActivityReport() {
       </div>
 
       {/* Summary table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">Team Summary — {range.label}</h2>
+      <div className="card overflow-hidden">
+        <div className="px-5 py-3 border-b border-surface-border">
+          <h2 className="text-sm font-semibold text-ink-strong" style={{ fontFamily: 'Inter' }}>Team Summary — {range.label}</h2>
         </div>
         <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-100">
+          <thead className="bg-surface-page/40 border-b border-surface-border">
             <tr>
-              <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">Rep</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">Invoiced Orders</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">Invoiced Value</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">Pipeline</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">Activities</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">New Customers</th>
-              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide">Follow-ups</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">Rep</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">Invoiced Orders</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">Invoiced Value</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">Pipeline</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">Activities</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">New Customers</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">Follow-ups</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-surface-border-soft">
             {REPS.map(rep => {
               const d = repData[rep]
-              const c = REP_COLORS[rep]
+              const accentHex = REP_ACCENT_HEX[REP_ACCENT[rep] || 'info']
               return (
-                <tr key={rep} className="hover:bg-gray-50 transition-colors">
+                <tr key={rep} className="hover:bg-surface-page/40 transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${c.accent}`} />
-                      <span className="text-sm font-medium text-gray-900">{rep}</span>
+                      <div className="w-2 h-2 rounded-full" style={{ background: accentHex }} />
+                      <span className="text-sm font-medium text-ink-strong">{rep}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm font-semibold text-ink-strong tabular-nums">
                     {loading ? '—' : d?.orders.count ?? 0}
                   </td>
-                  <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm font-semibold text-ink-strong tabular-nums">
                     {loading ? '—' : fmt$(d?.orders.value)}
                   </td>
-                  <td className="px-5 py-3 text-right text-sm text-gray-600 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm text-ink-mid tabular-nums">
                     {loading ? '—' : `${d?.pipeline.count ?? 0} (${fmt$(d?.pipeline.value)})`}
                   </td>
-                  <td className="px-5 py-3 text-right text-sm text-gray-600 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm text-ink-mid tabular-nums">
                     {loading ? '—' : d?.activities.count ?? 0}
                   </td>
-                  <td className="px-5 py-3 text-right text-sm text-gray-600 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm text-ink-mid tabular-nums">
                     {loading ? '—' : d?.newCustomers ?? 0}
                   </td>
-                  <td className="px-5 py-3 text-right text-sm text-gray-600 tabular-nums">
+                  <td className="px-5 py-3 text-right text-sm text-ink-mid tabular-nums">
                     {loading ? '—' : d?.followUps ?? 0}
                   </td>
                 </tr>
               )
             })}
             {!loading && (
-              <tr className="bg-gray-900 text-white">
+              <tr className="bg-ink-strong text-ink-inverse">
                 <td className="px-5 py-3 text-sm font-bold">Total</td>
                 <td className="px-5 py-3 text-right text-sm font-bold tabular-nums">
                   {REPS.reduce((s,r) => s + (repData[r]?.orders.count||0), 0)}
@@ -460,7 +460,7 @@ export default function SalesActivityReport() {
 }
 
 // =====================================================================
-// Executive Intelligence section — merged from old SalesIntelligence
+// Executive Intelligence section
 // =====================================================================
 function ExecutiveIntelligence({ profile }) {
   const navigate = useNavigate()
@@ -562,29 +562,26 @@ function ExecutiveIntelligence({ profile }) {
   }
 
   return (
-    <section style={{ marginBottom: 32, background: '#faf6ed', border: '1px solid #ecd9c0', borderRadius: 12, overflow: 'hidden' }}>
-      {/* Section header — collapsible */}
+    <section className="card-priority mb-8 overflow-hidden">
       <button
         onClick={() => setCollapsed(c => !c)}
-        style={{
-          width: '100%', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: collapsed ? 'none' : '1px solid #ecd9c0',
-        }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#3a2818', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-surface-page/30 transition-colors"
+      >
+        <div className="flex items-baseline gap-3">
+          <span className="text-sm font-bold text-ink-strong uppercase tracking-widest">
             Executive Intelligence
           </span>
-          <span style={{ fontSize: 12, color: '#6b5640' }}>
+          <span className="text-xs text-ink-mid">
             {loading ? 'Loading…' : `${allCards.length} customers flagged across ${reps.length} reps`}
           </span>
         </div>
-        <span style={{ fontSize: 12, color: '#6b5640', transition: 'transform 0.2s', transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>›</span>
+        <span className={`text-xs text-ink-muted transition-transform duration-200 ${collapsed ? '' : 'rotate-90'}`}>›</span>
       </button>
 
       {!collapsed && (
-        <div style={{ padding: 20 }}>
+        <div className="px-5 pb-5 border-t border-surface-border">
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #ecd9c0', marginBottom: 20 }}>
+          <div className="flex gap-1 border-b border-surface-border mb-5 mt-2">
             <TabButton active={tab === 'by_rep'}   onClick={() => setTab('by_rep')}>By Rep</TabButton>
             <TabButton active={tab === 'pipeline'} onClick={() => setTab('pipeline')}>Team Pipeline</TabButton>
           </div>
@@ -621,31 +618,25 @@ function ExecutiveIntelligence({ profile }) {
   )
 }
 
-// =====================================================================
-// Intelligence subcomponents (from old SalesIntelligence page)
-// =====================================================================
-
 function TabButton({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      style={{
-        padding: '10px 18px', border: 'none', background: 'transparent', cursor: 'pointer',
-        fontSize: 14, fontWeight: active ? 700 : 500,
-        color: active ? '#3a2818' : '#9d8b73',
-        borderBottom: active ? '2px solid #3a2818' : '2px solid transparent',
-        marginBottom: -1,
-      }}>
+      className={`px-4 py-2.5 text-sm transition-colors -mb-px border-b-2 ${
+        active
+          ? 'text-ink-strong border-ink-strong font-semibold'
+          : 'text-ink-muted border-transparent hover:text-ink-mid'
+      }`}>
       {children}
     </button>
   )
 }
 
 function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, navigate, loading }) {
-  if (loading) return <div style={{ color: '#9d8b73', fontSize: 13, padding: 16 }}>Loading…</div>
+  if (loading) return <div className="text-ink-muted text-sm p-4">Loading…</div>
   if (reps.length === 0) {
     return (
-      <div style={{ background: '#fff', border: '1px solid #ecd9c0', borderRadius: 12, padding: 24, color: '#6b5640' }}>
+      <div className="card p-6 text-ink-mid">
         ✓ All caught up — no aging quotes across the team.
       </div>
     )
@@ -653,62 +644,54 @@ function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, na
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: '#3a2818' }}>View as rep:</label>
+      <div className="flex items-center gap-3 mb-4">
+        <label className="text-sm font-semibold text-ink-strong">View as rep:</label>
         <select
           value={selectedRep || ''}
           onChange={e => setSelectedRep(e.target.value)}
-          style={{
-            padding: '8px 12px', border: '1px solid #ecd9c0', borderRadius: 8,
-            fontSize: 14, background: '#fff', color: '#3a2818', minWidth: 220,
-          }}>
+          className="input max-w-xs"
+        >
           {reps.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: '#9d8b73' }}>
+        <span className="text-xs text-ink-muted">
           Showing top 8 of {allCardsForRep} flagged
         </span>
       </div>
 
-      <div style={{
-        background: '#fbf6ee', border: '1px solid #ecd9c0', borderRadius: 8,
-        padding: '8px 12px', fontSize: 12, color: '#8a7560', marginBottom: 16,
-      }}>
-        🔍 Viewing as <strong>{selectedRep}</strong>. Engagement events from this view are tracked separately and don't affect rep funnel metrics.
+      <div className="bg-surface-page/40 border border-surface-border rounded-lg px-3 py-2 text-xs text-ink-mid mb-4">
+        🔍 Viewing as <strong className="text-ink-strong">{selectedRep}</strong>. Engagement events from this view are tracked separately and don't affect rep funnel metrics.
       </div>
 
       {cards.length === 0 ? (
-        <div style={{ color: '#9d8b73', fontSize: 13, padding: 16 }}>
-          No flagged cards for this rep right now.
-        </div>
+        <div className="text-ink-muted text-sm p-4">No flagged cards for this rep right now.</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {cards.map(card => {
             const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
             const lastActivityLabel = card.last_activity_at
               ? `Last activity ${fmtDays(card.days_since_activity)} ago`
               : 'No activity logged yet'
+            const cardClass = card.tier === 'urgent' ? 'card-priority' : 'card'
             return (
               <div
                 key={card.customer_id}
                 onClick={() => navigate(`/customers/${card.customer_id}?tab=quotes`)}
-                style={{
-                  background: style.bg, border: `1px solid ${style.border}`, borderRadius: 10,
-                  padding: 14, cursor: 'pointer',
-                }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: style.dot, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  {style.label}
+                className={`${cardClass} card-hover p-4 cursor-pointer`}
+              >
+                <div className="mb-2">
+                  <span className={style.pill}>{style.label}</span>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#3a2818', marginBottom: 2 }}>
+                <div className="text-sm font-bold text-ink-strong mb-1">
                   {card.account_name}
                 </div>
-                <div style={{ fontSize: 12, color: '#6b5640', marginBottom: 10 }}>
+                <div className="text-xs text-ink-mid mb-2.5">
                   {card.aging_quote_count} {card.aging_quote_count === 1 ? 'quote' : 'quotes'} · {fmtMoney(card.aging_quote_total_value)} · oldest {fmtDays(card.oldest_quote_age_days)}
                 </div>
-                <div style={{ fontSize: 11, color: '#8a7560', marginBottom: 10, fontStyle: 'italic' }}>
+                <div className="text-xs text-ink-muted mb-2.5 italic">
                   {lastActivityLabel}
                 </div>
-                <div style={{ fontSize: 11, color: '#9d8b73' }}>
-                  Score: <strong>{card.attention_score}</strong> · YTD revenue: {fmtMoney(card.ytd_revenue || 0)}
+                <div className="text-xs text-ink-muted">
+                  Score: <strong className="text-ink-mid">{card.attention_score}</strong> · YTD revenue: {fmtMoney(card.ytd_revenue || 0)}
                 </div>
               </div>
             )
@@ -720,64 +703,61 @@ function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, na
 }
 
 function PipelineTab({ rows, totals, reps, repFilter, setRepFilter, sortBy, sortDir, toggleSort, navigate, loading }) {
-  if (loading) return <div style={{ color: '#9d8b73', fontSize: 13, padding: 16 }}>Loading…</div>
+  if (loading) return <div className="text-ink-muted text-sm p-4">Loading…</div>
   const arrow = (col) => sortBy === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#3a2818' }}>Rep:</label>
-          <select value={repFilter} onChange={e => setRepFilter(e.target.value)}
-            style={{ padding: '7px 10px', border: '1px solid #ecd9c0', borderRadius: 8, fontSize: 13, background: '#fff', color: '#3a2818' }}>
+      <div className="flex items-center gap-4 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold text-ink-strong">Rep:</label>
+          <select value={repFilter} onChange={e => setRepFilter(e.target.value)} className="input max-w-xs">
             <option value="all">All reps</option>
             {reps.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 12, color: '#6b5640' }}>
-          <span><strong style={{ color: '#3a2818' }}>{totals.customers}</strong> customers</span>
-          <span><strong style={{ color: '#3a2818' }}>{totals.quotes}</strong> quotes</span>
-          <span><strong style={{ color: '#3a2818' }}>{fmtMoney(totals.value)}</strong> at risk</span>
+        <div className="ml-auto flex gap-4 text-xs text-ink-mid">
+          <span><strong className="text-ink-strong">{totals.customers}</strong> customers</span>
+          <span><strong className="text-ink-strong">{totals.quotes}</strong> quotes</span>
+          <span><strong className="text-ink-strong">{fmtMoney(totals.value)}</strong> at risk</span>
           {totals.urgent > 0 && (
-            <span style={{ color: '#c2410c' }}><strong>{totals.urgent}</strong> urgent</span>
+            <span className="text-status-critical"><strong>{totals.urgent}</strong> urgent</span>
           )}
         </div>
       </div>
 
-      <div style={{ background: '#fff', border: '1px solid #ecd9c0', borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ background: '#fbf6ee', borderBottom: '1px solid #ecd9c0' }}>
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-surface-page/40 border-b border-surface-border">
             <tr>
-              <Th onClick={() => toggleSort('rep_name')}>            Rep{arrow('rep_name')}</Th>
-              <Th onClick={() => toggleSort('account_name')}>        Customer{arrow('account_name')}</Th>
-              <Th onClick={() => toggleSort('aging_quote_count')} num>Quotes{arrow('aging_quote_count')}</Th>
-              <Th onClick={() => toggleSort('aging_quote_total_value')} num>Total Value{arrow('aging_quote_total_value')}</Th>
-              <Th onClick={() => toggleSort('oldest_quote_age_days')} num>Oldest{arrow('oldest_quote_age_days')}</Th>
-              <Th onClick={() => toggleSort('days_since_activity')} num>Last Activity{arrow('days_since_activity')}</Th>
-              <Th onClick={() => toggleSort('ytd_revenue')} num>YTD Rev{arrow('ytd_revenue')}</Th>
-              <Th onClick={() => toggleSort('attention_score')} num>Score{arrow('attention_score')}</Th>
+              <ThPipe onClick={() => toggleSort('rep_name')}>            Rep{arrow('rep_name')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('account_name')}>        Customer{arrow('account_name')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('aging_quote_count')} num>Quotes{arrow('aging_quote_count')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('aging_quote_total_value')} num>Total Value{arrow('aging_quote_total_value')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('oldest_quote_age_days')} num>Oldest{arrow('oldest_quote_age_days')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('days_since_activity')} num>Last Activity{arrow('days_since_activity')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('ytd_revenue')} num>YTD Rev{arrow('ytd_revenue')}</ThPipe>
+              <ThPipe onClick={() => toggleSort('attention_score')} num>Score{arrow('attention_score')}</ThPipe>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#9d8b73' }}>No customers flagged.</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-ink-muted">No customers flagged.</td></tr>
             ) : rows.map(r => (
               <tr key={r.customer_id}
                   onClick={() => navigate(`/customers/${r.customer_id}?tab=quotes`)}
-                  style={{ borderBottom: '1px solid #f5ecdf', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#fbf6ee' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}>
-                <Td>{r.rep_name || <span style={{ color: '#9d8b73' }}>—</span>}</Td>
+                  className="border-b border-surface-border-soft hover:bg-surface-page/40 cursor-pointer">
+                <Td>{r.rep_name || <span className="text-ink-muted">—</span>}</Td>
                 <Td bold>{r.account_name}</Td>
                 <Td num>{r.aging_quote_count}</Td>
                 <Td num>{fmtMoney(r.aging_quote_total_value)}</Td>
                 <Td num>{fmtDays(r.oldest_quote_age_days)}</Td>
                 <Td num>
-                  {r.last_activity_at ? fmtDays(r.days_since_activity) + ' ago' : <span style={{ color: '#c2410c' }}>never</span>}
+                  {r.last_activity_at ? fmtDays(r.days_since_activity) + ' ago' : <span className="text-status-critical">never</span>}
                 </Td>
                 <Td num>{fmtMoney(r.ytd_revenue || 0)}</Td>
                 <Td num bold>
-                  {r.tier === 'urgent' && <span style={{ color: '#c2410c', marginRight: 4 }}>⚠️</span>}
+                  {r.tier === 'urgent' && <span className="text-status-critical mr-1">⚠</span>}
                   {r.attention_score}
                 </Td>
               </tr>
@@ -789,13 +769,9 @@ function PipelineTab({ rows, totals, reps, repFilter, setRepFilter, sortBy, sort
   )
 }
 
-function Th({ children, onClick, num }) {
+function ThPipe({ children, onClick, num }) {
   return (
-    <th onClick={onClick} style={{
-      padding: '10px 12px', textAlign: num ? 'right' : 'left', fontSize: 11,
-      fontWeight: 700, color: '#6b5640', textTransform: 'uppercase', letterSpacing: 0.5,
-      cursor: 'pointer', userSelect: 'none',
-    }}>
+    <th onClick={onClick} className={`${num ? 'text-right' : 'text-left'} px-3 py-2.5 text-[11px] font-semibold text-ink-muted uppercase tracking-wider cursor-pointer select-none`}>
       {children}
     </th>
   )
@@ -803,11 +779,7 @@ function Th({ children, onClick, num }) {
 
 function Td({ children, num, bold }) {
   return (
-    <td style={{
-      padding: '9px 12px', textAlign: num ? 'right' : 'left',
-      fontVariantNumeric: num ? 'tabular-nums' : 'normal',
-      color: '#3a2818', fontWeight: bold ? 600 : 400,
-    }}>
+    <td className={`${num ? 'text-right tabular-nums' : ''} px-3 py-2.5 text-sm ${bold ? 'font-semibold text-ink-strong' : 'text-ink-mid'}`}>
       {children}
     </td>
   )
@@ -829,54 +801,55 @@ function EngagementPanel({ rows, loading }) {
   const overallActionRate = totals.shown > 0 ? Math.round(100 * totals.acted / totals.shown)   : 0
 
   return (
-    <section style={{ marginTop: 32, padding: 20, background: '#fff', border: '1px solid #ecd9c0', borderRadius: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#3a2818', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <section className="mt-8 card p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h3 className="text-sm font-bold text-ink-strong uppercase tracking-widest">
           Engagement (last 14 days)
         </h3>
-        <span style={{ fontSize: 11, color: '#9d8b73' }}>
-          Did the cards drive follow-ups?
-        </span>
+        <span className="text-xs text-ink-muted">Did the cards drive follow-ups?</span>
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ color: '#9d8b73', fontSize: 13, padding: '8px 0' }}>
+        <div className="text-ink-muted text-sm">
           No engagement data yet — give it a week of real use.
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <Stat label="Cards Shown"   value={totals.shown}  />
             <Stat label="Click Rate"    value={`${overallClickRate}%`}  caption={`${totals.clicked} clicks`} />
             <Stat label="Action Rate"   value={`${overallActionRate}%`} caption={`${totals.acted} activities logged`} />
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <table className="w-full text-xs">
             <thead>
-              <tr style={{ borderBottom: '1px solid #ecd9c0' }}>
-                <th style={{ textAlign: 'left',  padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Rep</th>
-                <th style={{ textAlign: 'right', padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Shown</th>
-                <th style={{ textAlign: 'right', padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Clicked</th>
-                <th style={{ textAlign: 'right', padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Acted</th>
-                <th style={{ textAlign: 'right', padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Click %</th>
-                <th style={{ textAlign: 'right', padding: '8px 6px', color: '#6b5640', fontWeight: 700, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Action %</th>
+              <tr className="border-b border-surface-border">
+                <th className="text-left  py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Rep</th>
+                <th className="text-right py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Shown</th>
+                <th className="text-right py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Clicked</th>
+                <th className="text-right py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Acted</th>
+                <th className="text-right py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Click %</th>
+                <th className="text-right py-2 px-2 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Action %</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.user_id} style={{ borderBottom: '1px solid #f5ecdf' }}>
-                  <td style={{ padding: '8px 6px', color: '#3a2818' }}>{r.rep_name || '—'}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#3a2818' }}>{r.shown}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#3a2818' }}>{r.clicked}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#3a2818' }}>{r.acted}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#6b5640' }}>{r.click_rate_pct}%</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.action_rate_pct >= 15 ? '#5b8c5a' : r.action_rate_pct >= 5 ? '#a0573a' : '#9d8b73', fontWeight: 600 }}>{r.action_rate_pct}%</td>
+                <tr key={r.user_id} className="border-b border-surface-border-soft">
+                  <td className="py-2 px-2 text-ink-strong">{r.rep_name || '—'}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-ink-strong">{r.shown}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-ink-strong">{r.clicked}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-ink-strong">{r.acted}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-ink-mid">{r.click_rate_pct}%</td>
+                  <td className={`py-2 px-2 text-right tabular-nums font-semibold ${
+                    r.action_rate_pct >= 15 ? 'text-status-healthy' :
+                    r.action_rate_pct >= 5  ? 'text-status-warning' : 'text-ink-muted'
+                  }`}>{r.action_rate_pct}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <p style={{ fontSize: 11, color: '#9d8b73', marginTop: 12 }}>
+          <p className="text-[11px] text-ink-muted mt-3">
             Action rate ≥15% across reps means the cards are driving real follow-ups.
             Below 5% suggests the scoring needs tuning or reps aren't engaging.
           </p>
@@ -888,15 +861,15 @@ function EngagementPanel({ rows, loading }) {
 
 function Stat({ label, value, caption }) {
   return (
-    <div style={{ background: '#fbf6ee', border: '1px solid #ecd9c0', borderRadius: 8, padding: 14 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#6b5640', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <div className="card-soft p-3.5">
+      <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-widest">
         {label}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: '#3a2818', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+      <div className="text-2xl font-bold text-ink-strong mt-1 tabular-nums">
         {value}
       </div>
       {caption && (
-        <div style={{ fontSize: 11, color: '#9d8b73', marginTop: 2 }}>{caption}</div>
+        <div className="text-[11px] text-ink-muted mt-0.5">{caption}</div>
       )}
     </div>
   )
