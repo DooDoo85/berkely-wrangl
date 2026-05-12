@@ -13,33 +13,46 @@
    ═══════════════════════════════════════════════════════════════════════ */
 :root {
   /* Operational defaults */
-  --surface-page:     #f5f0e6;
-  --surface-card:     #ffffff;
-  --surface-border:   #e5e0d4;
-  --card-shadow:      0 1px 2px rgba(42,29,16,0.04);
-  --page-grain:       none;
-  --h1-size:          1.75rem;   /* 28px */
-  --h1-tracking:      -0.01em;
+  --surface-page:        #f5f0e6;
+  --surface-card:        #ffffff;
+  --surface-card-priority: #fbf6e8;   /* slightly deeper than card */
+  --surface-card-soft:   var(--surface-page);  /* recedes into page */
+  --surface-border:      #e5e0d4;
+  --surface-border-priority: #d4c9b0; /* slightly stronger */
+  --surface-border-soft: rgba(229,224,212,0.55);
+  --surface-topbar:      #fbf7ee;     /* warm ivory */
+  --card-shadow:         0 1px 2px rgba(42,29,16,0.04);
+  --page-grain:          none;
+  --h1-size:             1.75rem;     /* 28px */
+  --h1-tracking:         -0.01em;
 }
 
 [data-page-mode="executive"] {
-  --surface-page:     #ede5d4;
-  --surface-card:     #f7f0e0;
-  --surface-border:   #d9cab2;
-  --card-shadow:      0 1px 3px rgba(42,29,16,0.06), 0 0 0 1px rgba(217,202,178,0.4);
-  --page-grain:       url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.165  0 0 0 0 0.114  0 0 0 0 0.063  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  --h1-size:          2rem;      /* 32px */
-  --h1-tracking:      -0.015em;
+  --surface-page:        #ede5d4;
+  --surface-card:        #f7f0e0;
+  --surface-card-priority: #f1e8d0;   /* ~3% deeper */
+  --surface-card-soft:   var(--surface-page);
+  --surface-border:      #d9cab2;
+  --surface-border-priority: #c9b894; /* slightly stronger */
+  --surface-border-soft: rgba(217,202,178,0.5);
+  --card-shadow:         0 1px 3px rgba(42,29,16,0.06), 0 0 0 1px rgba(217,202,178,0.4);
+  --page-grain:          url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.165  0 0 0 0 0.114  0 0 0 0 0.063  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  --h1-size:             2rem;        /* 32px */
+  --h1-tracking:         -0.015em;
 }
 
 [data-page-mode="utility"] {
-  --surface-page:     #fafaf7;
-  --surface-card:     #ffffff;
-  --surface-border:   #e8e8e3;
-  --card-shadow:      none;
-  --page-grain:       none;
-  --h1-size:          1.5rem;    /* 24px */
-  --h1-tracking:      -0.005em;
+  --surface-page:        #fafaf7;
+  --surface-card:        #ffffff;
+  --surface-card-priority: #faf6e8;
+  --surface-card-soft:   var(--surface-page);
+  --surface-border:      #e8e8e3;
+  --surface-border-priority: #d8d3c2;
+  --surface-border-soft: rgba(232,232,227,0.6);
+  --card-shadow:         none;
+  --page-grain:          none;
+  --h1-size:             1.5rem;      /* 24px */
+  --h1-tracking:         -0.005em;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -106,6 +119,26 @@
     box-shadow: var(--card-shadow);
   }
 
+  /* Operationally important — needs attention. Subtly deeper surface,
+     slightly stronger border, 2px clay edge accent at low opacity.
+     Use for: stuck orders, alerts, shortages, risk surfaces. */
+  .card-priority {
+    background: var(--surface-card-priority);
+    border: 1px solid var(--surface-border-priority);
+    border-left: 2px solid rgba(184,93,58,0.35);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Informational, recedes. Same bg as page surface, soft border, no shadow.
+     Use for: charts, "this week" rollups, top customers, etc. */
+  .card-soft {
+    background: var(--surface-card-soft);
+    border: 1px solid var(--surface-border-soft);
+    border-radius: 12px;
+    box-shadow: none;
+  }
+
   .card-hover {
     transition: box-shadow 150ms ease, transform 150ms ease;
   }
@@ -117,7 +150,7 @@
   .sidebar-link {
     @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
            transition-colors duration-150 cursor-pointer;
-    color: rgba(247,240,224,0.7);
+    color: rgba(247,240,224,0.62);
     border-left: 2px solid transparent;
   }
   .sidebar-link:hover {
@@ -179,7 +212,7 @@
 
   .label {
     @apply block text-xs font-semibold uppercase tracking-wide mb-1.5;
-    color: #a08868;
+    color: #8c7758;
     letter-spacing: 0.06em;
   }
 
@@ -203,9 +236,10 @@
 
   /* ── Section header (sidebar, page sections) ─────────────────────────── */
   .section-header {
-    @apply text-xxs font-bold uppercase;
-    color: #a08868;
-    letter-spacing: 0.12em;
+    @apply text-xxs uppercase;
+    color: #8c7758;
+    letter-spacing: 0.16em;
+    font-weight: 600;
   }
 }
 
