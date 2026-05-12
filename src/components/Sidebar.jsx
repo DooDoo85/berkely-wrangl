@@ -63,17 +63,15 @@ const EXEC_NAV = [
     ],
   },
 
-  // ── INSIGHTS ── (collapsible)
+  // ── REPORTS ── (collapsible)
   {
-    type: 'section', label: 'Insights', collapsible: true,
+    type: 'section', label: 'Reports', collapsible: true,
     items: [
       {
         type: 'group', label: 'Reports', icon: '📊',
         children: [
-          { to: '/reports/sales-intelligence', label: 'Sales Intelligence', executiveOrOwner: true },
-          { to: '/reports/sales-activity',     label: 'Sales Activity'     },
-          { to: '/reports/rep-activity',       label: 'Rep Activity'       },
-          { to: '/reports/faux-usage',         label: 'Faux Usage'         },
+          { to: '/reports/sales-activity', label: 'Sales Activity' },
+          { to: '/reports/faux-usage',     label: 'Faux Usage'     },
         ],
       },
     ],
@@ -197,7 +195,6 @@ export default function Sidebar() {
     const initial = {}
     NAV.forEach(item => {
       if (item.type === 'section' && item.collapsible) {
-        // Auto-open if any child route is active
         const isActive = (item.items || []).some(sub => {
           if (sub.type === 'link') return location.pathname === sub.to || location.pathname.startsWith(sub.to + '/')
           if (sub.type === 'group') return sub.children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
