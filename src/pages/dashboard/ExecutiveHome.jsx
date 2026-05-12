@@ -46,8 +46,8 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
   const fillPath = `${linePath} ${w},${h} 0,${h}`;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-10">
-      <polyline points={fillPath} fill={fillColor} stroke="none" />
-      <polyline points={linePath} fill="none" stroke={color} strokeWidth="1.5" />
+      <polyline points={fillPath} fill={fillColor} stroke="none" opacity="0.85" />
+      <polyline points={linePath} fill="none" stroke={color} strokeWidth="1.25" />
     </svg>
   );
 }
@@ -61,17 +61,17 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
-          <span className="text-sm font-medium text-gray-900">{label}</span>
+          <span className="text-sm font-medium text-ink-strong">{label}</span>
         </div>
-        <span className="text-xs text-gray-400">View orders →</span>
+        <span className="text-xs text-ink-muted">View orders →</span>
       </div>
 
       <div className="flex items-baseline gap-3 mb-3">
-        <span className="text-3xl font-medium text-gray-900 tabular-nums">
+        <span className="text-3xl font-medium text-ink-strong tabular-nums">
           {loading ? "—" : fmt$Full(data.sales_wtd)}
         </span>
-        <span className="text-xs text-gray-400">WTD</span>
-        <span className="text-xs text-gray-400 ml-auto tabular-nums">
+        <span className="text-xs text-ink-muted">WTD</span>
+        <span className="text-xs text-ink-muted ml-auto tabular-nums">
           {loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}
         </span>
       </div>
@@ -82,32 +82,32 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
 
       <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100">
         <div>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide">MTD</p>
-          <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_mtd)}
           </p>
-          <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
             {loading ? "" : `${(data.units_mtd ?? 0).toLocaleString()} units`}
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide">YTD</p>
-          <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_ytd)}
           </p>
-          <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
             {loading ? "" : `${(data.units_ytd ?? 0).toLocaleString()} units`}
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Credit OK</p>
-          <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">Credit OK</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : creditOkCount}
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Printed</p>
-          <p className="text-sm font-medium text-gray-900 tabular-nums mt-0.5">
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">Printed</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : printedCount}
           </p>
         </div>
@@ -124,9 +124,9 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   return (
     <div onClick={onClick} style={accentStyle}
       className={`card px-4 py-3.5 ${clickable ? "cursor-pointer card-hover" : ""}`}>
-      <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{label}</p>
-      <p className="text-2xl font-medium text-gray-900 tabular-nums mt-1.5">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+      <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{label}</p>
+      <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">{value}</p>
+      {sub && <p className="text-xs text-ink-mid mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -134,13 +134,13 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
 // ─── Daily Sales chart ──────────────────────────────────────────────────────
 
 function DailySalesChart({ data = [] }) {
-  if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-gray-400">No data</div>;
+  if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
   // Sqrt scaling — compresses outliers, expands small days
   const sqrtSales = data.map(d => Math.sqrt(Math.max(0, d.sales)));
   const maxSqrt = Math.max(...sqrtSales, 1);
   return (
     <div className="px-1">
-      <div className="flex items-end gap-2 h-32 mb-2">
+      <div className="flex items-end gap-3 h-32 mb-2">
         {data.map((d, i) => {
           const pct = maxSqrt > 0 ? (sqrtSales[i] / maxSqrt) * 100 : 0;
           const isToday = i === data.length - 1;
@@ -149,22 +149,22 @@ function DailySalesChart({ data = [] }) {
             <div key={i} className="flex-1 group relative flex flex-col justify-end"
               style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%` }}>
               {hasData && (
-                <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                   {fmt$(d.sales)} · {d.orders} orders
                 </div>
               )}
               <div className="w-full h-full rounded-t transition-all"
                 style={{
-                  background: isToday ? '#b85d3a' : hasData ? '#d4a574' : 'transparent',
+                  background: isToday ? '#b85d3a' : hasData ? '#cfa370' : 'transparent',
                 }}
               />
             </div>
           );
         })}
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[10px] text-gray-400">
+          <div key={i} className="flex-1 text-center text-[10px] text-ink-mid font-medium">
             {i === data.length - 1 ? "Today" : d.label}
           </div>
         ))}
@@ -177,10 +177,10 @@ function DailySalesChart({ data = [] }) {
 
 function TopCustomersList({ customers = [], loading, onCustomerClick }) {
   if (loading) {
-    return <div className="text-sm text-gray-400 text-center py-6">Loading…</div>;
+    return <div className="text-sm text-ink-muted text-center py-6">Loading…</div>;
   }
   if (!customers.length) {
-    return <div className="text-sm text-gray-400 text-center py-6">No customer activity this week</div>;
+    return <div className="text-sm text-ink-muted text-center py-6">No customer activity this week</div>;
   }
   const maxSales = Math.max(...customers.map(c => c.sales), 1);
   return (
@@ -191,18 +191,18 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
           <div key={c.name} onClick={() => onCustomerClick?.(c.name)}
             className="cursor-pointer group">
             <div className="flex justify-between items-baseline mb-1.5">
-              <span className="text-sm text-gray-900 group-hover:text-gray-700 truncate pr-2">
+              <span className="text-sm text-ink-strong group-hover:text-ink-strong truncate pr-2">
                 {c.name}
               </span>
-              <span className="text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+              <span className="text-sm font-medium text-ink-strong tabular-nums whitespace-nowrap">
                 {fmt$Full(c.sales)}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+              <div className="flex-1 h-1 bg-[#e8e0cc] rounded-full overflow-hidden">
                 <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#b85d3a' }} />
               </div>
-              <span className="text-[10px] text-gray-400 tabular-nums whitespace-nowrap w-16 text-right">
+              <span className="text-[10px] text-ink-muted tabular-nums whitespace-nowrap w-16 text-right">
                 {c.orders} order{c.orders !== 1 ? 's' : ''}
               </span>
             </div>
@@ -519,7 +519,7 @@ export default function ExecutiveHome() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="font-display">Business Overview</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-ink-mid mt-1">
               {loading ? "Loading…" : (
                 <>
                   {data.todayEntered} order{data.todayEntered !== 1 ? 's' : ''} entered today
@@ -530,7 +530,7 @@ export default function ExecutiveHome() {
             </p>
           </div>
           <div className="text-right pt-1">
-            <div className="text-xs text-gray-400 mb-1.5">
+            <div className="text-xs text-ink-muted mb-1.5">
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
             <button onClick={load} disabled={loading}
@@ -603,10 +603,10 @@ export default function ExecutiveHome() {
         {/* ── Action Zone: Stuck Orders + Top Customers ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Stuck Orders */}
-          <div className={`card p-5 ${stuckTotal > 0 ? "!border-status-critical/40" : ""}`}>
+          <div className="card-priority p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-gray-900">Stuck Orders</h3>
+                <h3 className="text-sm font-medium text-ink-strong">Stuck Orders</h3>
                 {stuckTotal > 0 && (
                   <span className="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">
                     {stuckTotal} flagged
@@ -614,10 +614,10 @@ export default function ExecutiveHome() {
                 )}
               </div>
               <button onClick={() => navigate("/orders?filter=stuck")}
-                className="text-xs text-gray-400 hover:text-gray-600">View all →</button>
+                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
             </div>
             {stuckTotal === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">All clear ✓</p>
+              <p className="text-sm text-ink-muted text-center py-6">All clear ✓</p>
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
@@ -626,8 +626,8 @@ export default function ExecutiveHome() {
                     <div key={o.key} onClick={() => navigate(`/orders?search=${o.order_no}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 rounded-lg px-2 transition-colors">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900">#{o.order_no}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
+                        <p className="text-xs text-ink-mid mt-0.5 truncate">
                           {o.customer ?? "—"} · {o.status_label}
                           {isHold && o.hold_reason && (
                             <span className="text-red-600 ml-1">({o.hold_reason})</span>
@@ -648,11 +648,11 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Top Customers This Week */}
-          <div className="card p-5">
+          <div className="card-soft p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-900">Top Customers · This Week</h3>
+              <h3 className="text-sm font-medium text-ink-strong">Top Customers · This Week</h3>
               <button onClick={() => navigate("/customers")}
-                className="text-xs text-gray-400 hover:text-gray-600">View all →</button>
+                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
             </div>
             <TopCustomersList
               customers={data.topCustomers}
@@ -665,10 +665,10 @@ export default function ExecutiveHome() {
         {/* ── Context Zone: Team Activity + Daily Sales ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Team Activity */}
-          <div className="card p-5">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Team · Orders Invoiced This Week</h3>
+          <div className="card-soft p-5">
+            <h3 className="text-sm font-medium text-ink-strong mb-4">Team · Orders Invoiced This Week</h3>
             {data.repOrders?.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No orders invoiced this week yet</p>
+              <p className="text-sm text-ink-muted text-center py-6">No orders invoiced this week yet</p>
             ) : (
               <div className="space-y-3">
                 {data.repOrders.map((rep) => {
@@ -677,12 +677,12 @@ export default function ExecutiveHome() {
                   return (
                     <div key={rep.name}>
                       <div className="flex justify-between items-baseline mb-1.5">
-                        <span className="text-sm text-gray-900 truncate pr-2">{rep.name}</span>
-                        <span className="text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">
+                        <span className="text-sm text-ink-strong truncate pr-2">{rep.name}</span>
+                        <span className="text-sm font-medium text-ink-strong tabular-nums whitespace-nowrap">
                           {rep.count} order{rep.count !== 1 ? 's' : ''}
                         </span>
                       </div>
-                      <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                      <div className="h-1 bg-[#e8e0cc] rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#5b8c5a' }} />
                       </div>
                     </div>
@@ -693,10 +693,10 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Daily Sales chart */}
-          <div className="card p-5">
+          <div className="card-soft p-5">
             <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-900">Daily Sales · Last 5 Business Days</h3>
-              <span className="text-xs text-gray-400">orders entered, ex. quotes</span>
+              <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
+              <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
             </div>
             <DailySalesChart data={data.dailySales} />
           </div>
