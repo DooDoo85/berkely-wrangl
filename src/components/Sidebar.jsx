@@ -73,7 +73,7 @@ const EXEC_NAV = [
           { to: '/reports/sales-intelligence', label: 'Sales Intelligence', executiveOrOwner: true },
           { to: '/reports/sales-activity',     label: 'Sales Activity'     },
           { to: '/reports/rep-activity',       label: 'Rep Activity'       },
-          { to: '/reports/inventory-velocity', label: 'Inventory Velocity' },
+          { to: '/reports/faux-usage',         label: 'Faux Usage'         },
         ],
       },
     ],
