@@ -28,14 +28,18 @@
 }
 
 [data-page-mode="executive"] {
-  --surface-page:        #ede5d4;
-  --surface-card:        #f7f0e0;
-  --surface-card-priority: #f1e8d0;   /* ~3% deeper */
+  --surface-page:        #e8dec9;
+  --surface-card:        #f3ead7;
+  --surface-card-priority: #ede2c8;   /* ~3% deeper */
   --surface-card-soft:   var(--surface-page);
-  --surface-border:      #d9cab2;
-  --surface-border-priority: #c9b894; /* slightly stronger */
-  --surface-border-soft: rgba(217,202,178,0.5);
-  --card-shadow:         0 1px 3px rgba(42,29,16,0.06), 0 0 0 1px rgba(217,202,178,0.4);
+  --surface-border:      rgba(195,176,142,0.35);   /* hairline, almost invisible */
+  --surface-border-priority: rgba(184,135,76,0.45);
+  --surface-border-soft: rgba(195,176,142,0.22);
+  /* Warmer shadow with two-stop layering — close ambient + soft drop.
+     Reads as material lift, not crisp drop-shadow. */
+  --card-shadow:
+    0 1px 2px rgba(74,42,18,0.05),
+    0 4px 16px rgba(74,42,18,0.04);
 
   /* Layered atmospheric texture — three passes at very low opacity.
      1. Soft radial light at top-left (warmth source)
@@ -43,12 +47,12 @@
      3. Faint corner vignette (page edges feel grounded)
      None should be visible individually — they accumulate into atmosphere. */
   --page-grain:
-    radial-gradient(ellipse 70% 60% at 20% 10%, rgba(255,245,220,0.35) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 20% 10%, rgba(255,245,220,0.32) 0%, transparent 60%),
     radial-gradient(ellipse 90% 70% at 100% 100%, rgba(120,80,40,0.05) 0%, transparent 55%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='1' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0 0.08  0 0 0 0.018 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 
   --h1-size:             2rem;        /* 32px */
-  --h1-tracking:         -0.015em;
+  --h1-tracking:         -0.02em;     /* tighter */
 }
 
 [data-page-mode="utility"] {
@@ -119,11 +123,11 @@
     font-family: 'Merriweather', Georgia, serif;
     font-weight: 700;
     color: #2a1d10;
-    letter-spacing: var(--h1-tracking, -0.01em);
+    letter-spacing: var(--h1-tracking, -0.015em);
   }
   h1 {
     font-size: var(--h1-size, 1.75rem);
-    line-height: 1.2;
+    line-height: 1.15;
   }
   h2 {
     font-size: 1.25rem;
