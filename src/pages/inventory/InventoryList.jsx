@@ -4,54 +4,35 @@ import { supabase } from '../../lib/supabase'
 import AddToReorderModal from '../../components/AddToReorderModal'
 
 // =====================================================================
-// InventoryList — unified view for all part types
+// InventoryList — operational page (page-mode = operational)
 //
 // Behaviors per partType:
-//   • component   → category subtabs (Motors, Clutches, Brackets…)
-//                   sourced from parts.category column
+//   • component   → category subtabs sourced from parts.category
 //   • fabric      → grouped by family with visual section dividers
-//                   family extracted from name pattern
-//   • blind       → flat list; size filter handled via search box
-//   • extrusion   → flat list (existing behavior)
+//   • blind       → flat list; size filter via search box
+//   • extrusion   → flat list
 //   • (no prop)   → all parts; type tabs visible
 //
-// Shared across all views:
+// Shared:
 //   • Alerts pill in header → filters to stockouts + low-stock
 //   • Hover-only reorder buttons
-//   • OUT/LOW badges
-//   • Color-coded Committed/Available
+//   • OUT/LOW badges using semantic status pills
 // =====================================================================
 
 const TYPE_CONFIG = {
-  fabric:    { label: 'Fabrics',    icon: '🧻', color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' },
-  component: { label: 'Components', icon: '⚙️', color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
-  extrusion: { label: 'Extrusions', icon: '📏', color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200' },
-  blind:     { label: 'Faux Blinds',icon: '🪟', color: 'text-emerald-700',bg: 'bg-emerald-50',border: 'border-emerald-200' },
+  fabric:    { label: 'Fabrics',    icon: '🧻', tone: 'gold'  },
+  component: { label: 'Components', icon: '⚙️', tone: 'clay'  },
+  extrusion: { label: 'Extrusions', icon: '📏', tone: 'clay'  },
+  blind:     { label: 'Faux Blinds',icon: '🪟', tone: 'gold'  },
 }
 
-// Category order matches ShadeTrack — most-used first
 const COMPONENT_CATEGORY_ORDER = [
-  'Motors',
-  'Clutches',
-  'Brackets',
-  'Bracket Covers',
-  'End Caps',
-  'Hem Bar',
-  'Spline & Tape',
-  'Springs',
-  'Chain & Hardware',
-  'Power & Cables',
-  'Remotes & Controls',
-  'Adapters & Plugs',
-  'Cassette Hardware',
-  'Uncategorized',
+  'Motors', 'Clutches', 'Brackets', 'Bracket Covers', 'End Caps',
+  'Hem Bar', 'Spline & Tape', 'Springs', 'Chain & Hardware',
+  'Power & Cables', 'Remotes & Controls', 'Adapters & Plugs',
+  'Cassette Hardware', 'Uncategorized',
 ]
 
-// Extract fabric family from name patterns like:
-//   "Bordeaux BO - Beige"           → "Bordeaux"
-//   "La Rochelle LF - Beige"        → "La Rochelle"
-//   "Le Mans 3% - Black"            → "Le Mans"
-//   "Lorient 1% - White/Gray"       → "Lorient"
 function extractFabricFamily(name) {
   if (!name) return 'Other'
   const m = name.match(/^(.+?)\s+(BO|LF|TS|\d+%)\s+-\s+/i)
@@ -62,10 +43,10 @@ function extractFabricFamily(name) {
 }
 
 function StockBadge({ qty, reorder }) {
-  if (qty === null || qty === undefined) return <span className="text-stone-300 text-xs">—</span>
-  if (qty <= 0) return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">OUT</span>
-  if (reorder && qty <= reorder) return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">LOW</span>
-  return <span className="text-sm font-semibold text-stone-700">{Math.ceil(Number(qty)).toLocaleString()}</span>
+  if (qty === null || qty === undefined) return <span className="text-ink-muted text-xs">—</span>
+  if (qty <= 0) return <span className="pill-critical">OUT</span>
+  if (reorder && qty <= reorder) return <span className="pill-warning">LOW</span>
+  return <span className="text-sm font-semibold text-ink-strong tabular-nums">{Math.ceil(Number(qty)).toLocaleString()}</span>
 }
 
 export default function InventoryList({ partType }) {
@@ -75,7 +56,7 @@ export default function InventoryList({ partType }) {
   const [type, setType]                 = useState(partType || 'all')
   const [search, setSearch]             = useState('')
   const [counts, setCounts]             = useState({})
-  const [category, setCategory]         = useState('all')      // component subtab
+  const [category, setCategory]         = useState('all')
   const [alertsOnly, setAlertsOnly]     = useState(false)
   const [reorderPart, setReorderPart]   = useState(null)
 
@@ -83,7 +64,7 @@ export default function InventoryList({ partType }) {
 
   useEffect(() => { if (partType) setType(partType) }, [partType])
   useEffect(() => {
-    setCategory('all')           // reset subtab when switching types
+    setCategory('all')
     fetchParts()
   }, [type])
 
@@ -108,7 +89,6 @@ export default function InventoryList({ partType }) {
     setLoading(false)
   }
 
-  // ─── Derived: category counts (component subtabs) ────────────────────────
   const categoryCounts = useMemo(() => {
     if (type !== 'component') return {}
     const counts = { all: parts.length }
@@ -119,16 +99,13 @@ export default function InventoryList({ partType }) {
     return counts
   }, [parts, type])
 
-  // ─── Filtering pipeline ──────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let rows = parts
 
-    // Category subtab (components only)
     if (type === 'component' && category !== 'all') {
       rows = rows.filter(p => (p.category || 'Uncategorized') === category)
     }
 
-    // Alerts filter
     if (alertsOnly) {
       rows = rows.filter(p =>
         p.qty_on_hand <= 0 ||
@@ -136,7 +113,6 @@ export default function InventoryList({ partType }) {
       )
     }
 
-    // Search
     if (search) {
       const s = search.toLowerCase()
       rows = rows.filter(p =>
@@ -150,12 +126,10 @@ export default function InventoryList({ partType }) {
     return rows
   }, [parts, type, category, alertsOnly, search])
 
-  // ─── Fabric grouping (insert family dividers) ────────────────────────────
   const renderRows = useMemo(() => {
     if (type !== 'fabric') {
       return filtered.map(p => ({ kind: 'row', part: p }))
     }
-    // Sort by family then name, inject divider rows
     const sorted = [...filtered].sort((a, b) => {
       const fa = extractFabricFamily(a.name)
       const fb = extractFabricFamily(b.name)
@@ -175,7 +149,6 @@ export default function InventoryList({ partType }) {
     return out
   }, [filtered, type])
 
-  // ─── Alert counts (for header pill) ──────────────────────────────────────
   const alertCount = useMemo(() => {
     let base = parts
     if (type === 'component' && category !== 'all') {
@@ -192,10 +165,8 @@ export default function InventoryList({ partType }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-display font-bold text-stone-800">
-            {locked ? (TYPE_CONFIG[partType]?.label || 'Inventory') : 'Inventory'}
-          </h2>
-          <p className="text-stone-400 text-sm mt-0.5">
+          <h1>{locked ? (TYPE_CONFIG[partType]?.label || 'Inventory') : 'Inventory'}</h1>
+          <p className="text-sm text-ink-muted mt-1">
             {locked ? (counts[partType] || 0) : (counts.all || 0)} parts tracked
           </p>
         </div>
@@ -203,10 +174,10 @@ export default function InventoryList({ partType }) {
           {alertCount > 0 && (
             <button
               onClick={() => setAlertsOnly(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                 alertsOnly
-                  ? 'bg-red-600 text-white border-red-700 hover:bg-red-700'
-                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  ? 'bg-status-critical text-ink-inverse border-status-critical'
+                  : 'bg-status-critical-soft text-status-critical border-status-critical/30 hover:bg-status-critical/10'
               }`}
             >
               ⚠ {alertCount} Alert{alertCount === 1 ? '' : 's'}
@@ -215,7 +186,7 @@ export default function InventoryList({ partType }) {
           )}
           <button
             onClick={() => navigate('/purchasing/queue')}
-            className="btn-ghost text-sm text-amber-700 border-amber-200 hover:bg-amber-50"
+            className="btn-ghost text-sm"
           >
             📦 Reorder Queue →
           </button>
@@ -230,8 +201,10 @@ export default function InventoryList({ partType }) {
         <div className="flex gap-2 mb-4 flex-wrap">
           <button
             onClick={() => setType('all')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
-              type === 'all' ? 'bg-brand-dark text-white border-brand-dark' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+            className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+              type === 'all'
+                ? 'bg-ink-strong text-ink-inverse border-ink-strong'
+                : 'bg-surface-card text-ink-mid border-surface-border hover:border-ink-muted'
             }`}
           >
             All <span className="ml-1 opacity-60">{counts.all || 0}</span>
@@ -240,10 +213,10 @@ export default function InventoryList({ partType }) {
             <button
               key={key}
               onClick={() => setType(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-colors ${
                 type === key
-                  ? `${cfg.bg} ${cfg.color} ${cfg.border}`
-                  : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+                  ? `bg-accent-${cfg.tone}-soft text-accent-${cfg.tone === 'clay' ? 'clay' : 'gold'} border-accent-${cfg.tone}/40`
+                  : 'bg-surface-card text-ink-mid border-surface-border hover:border-ink-muted'
               }`}
             >
               <span>{cfg.icon}</span> {cfg.label}
@@ -253,9 +226,9 @@ export default function InventoryList({ partType }) {
         </div>
       )}
 
-      {/* Category subtabs — only when viewing components */}
+      {/* Category subtabs — components only */}
       {type === 'component' && (
-        <div className="flex gap-1.5 mb-4 flex-wrap pb-3 border-b border-stone-100">
+        <div className="flex gap-1.5 mb-4 flex-wrap pb-3 border-b border-surface-border">
           <CategoryTab
             label="All"
             count={categoryCounts.all || 0}
@@ -292,57 +265,57 @@ export default function InventoryList({ partType }) {
 
       {/* Active filter chips */}
       {(alertsOnly || (type === 'component' && category !== 'all')) && (
-        <div className="flex items-center gap-2 mb-3 text-xs text-stone-500">
+        <div className="flex items-center gap-2 mb-3 text-xs text-ink-mid">
           <span>Showing:</span>
           {alertsOnly && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-700 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-status-critical-soft text-status-critical rounded-full">
               Alerts only
-              <button onClick={() => setAlertsOnly(false)} className="ml-1 hover:text-red-900">×</button>
+              <button onClick={() => setAlertsOnly(false)} className="ml-1 hover:opacity-70">×</button>
             </span>
           )}
           {type === 'component' && category !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-clay-soft text-accent-clay rounded-full">
               {category}
-              <button onClick={() => setCategory('all')} className="ml-1 hover:text-blue-900">×</button>
+              <button onClick={() => setCategory('all')} className="ml-1 hover:opacity-70">×</button>
             </span>
           )}
-          <span className="text-stone-400">· {filtered.length} part{filtered.length === 1 ? '' : 's'}</span>
+          <span className="text-ink-muted">· {filtered.length} part{filtered.length === 1 ? '' : 's'}</span>
         </div>
       )}
 
       {/* Table */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-stone-400">Loading inventory...</div>
+          <div className="p-12 text-center text-ink-muted">Loading inventory...</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="text-4xl mb-3">▦</div>
-            <div className="text-stone-600 font-semibold mb-1">No parts found</div>
-            <div className="text-stone-400 text-sm">Try a different search or filter</div>
+            <div className="text-4xl mb-3 opacity-50">▦</div>
+            <div className="text-ink-strong font-semibold mb-1">No parts found</div>
+            <div className="text-ink-muted text-sm">Try a different search or filter</div>
           </div>
         ) : (
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-stone-100 bg-stone-50">
-                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Part</th>
-                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor ID</th>
-                <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Vendor</th>
-                {!locked && <th className="text-left px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Type</th>}
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">On Hand</th>
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Committed</th>
-                <th className="text-right px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-wide">Available</th>
+              <tr className="border-b border-surface-border bg-surface-page/40">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Part</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Vendor ID</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Vendor</th>
+                {!locked && <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Type</th>}
+                <th className="text-right px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">On Hand</th>
+                <th className="text-right px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Committed</th>
+                <th className="text-right px-4 py-3 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Available</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {renderRows.map((item, i) => {
+              {renderRows.map((item) => {
                 if (item.kind === 'divider') {
                   return (
-                    <tr key={`div-${item.family}`} className="bg-stone-50 border-y border-stone-200">
+                    <tr key={`div-${item.family}`} className="bg-surface-page/30 border-y border-surface-border">
                       <td colSpan={locked ? 7 : 8} className="px-4 py-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-stone-700 uppercase tracking-wider">{item.family}</span>
-                          <span className="text-[10px] text-stone-400">· {item.count} color{item.count === 1 ? '' : 's'}</span>
+                          <span className="text-[11px] font-semibold text-ink-strong uppercase tracking-wider">{item.family}</span>
+                          <span className="text-[10px] text-ink-muted">· {item.count} color{item.count === 1 ? '' : 's'}</span>
                         </div>
                       </td>
                     </tr>
@@ -356,59 +329,59 @@ export default function InventoryList({ partType }) {
                 return (
                   <tr
                     key={p.id}
-                    className={`group border-b border-stone-50 transition-colors hover:bg-stone-50 ${
+                    className={`group border-b border-surface-border-soft transition-colors hover:bg-surface-page/40 ${
                       p.qty_on_hand <= 0 ? 'opacity-70' : ''
                     }`}
                   >
                     <td
-                      className="px-4 py-3 cursor-pointer hover:text-brand-dark"
+                      className="px-4 py-3 cursor-pointer hover:text-accent-clay"
                       onClick={() => navigate(`/inventory/${p.id}`)}
                     >
-                      <div className="font-medium text-stone-800">{p.name}</div>
+                      <div className="font-medium text-ink-strong">{p.name}</div>
                       {p.vendor_part_name && p.vendor_part_name !== p.name && (
-                        <div className="text-stone-400 mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
+                        <div className="text-ink-muted mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
                       )}
                     </td>
                     <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor_id
-                        ? <span className="font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">{p.vendor_id}</span>
-                        : <span className="text-stone-300">—</span>}
+                        ? <span className="font-mono text-ink-mid bg-surface-page/60 px-1.5 py-0.5 rounded">{p.vendor_id}</span>
+                        : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="px-4 py-3 cursor-pointer text-stone-500" onClick={() => navigate(`/inventory/${p.id}`)}>
+                    <td className="px-4 py-3 cursor-pointer text-ink-mid" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor || '—'}
                     </td>
                     {!locked && (
                       <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
-                        <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+                        <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded-full text-[10px] bg-accent-${cfg.tone}-soft text-accent-${cfg.tone === 'clay' ? 'clay' : 'gold'} whitespace-nowrap`}>
                           {cfg.icon} {cfg.label}
                         </span>
                       </td>
                     )}
-                    <td className="px-4 py-3 text-right cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
+                    <td className="px-4 py-3 text-right cursor-pointer tabular-nums" onClick={() => navigate(`/inventory/${p.id}`)}>
                       <StockBadge qty={p.qty_on_hand} reorder={p.reorder_level} />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right tabular-nums">
                       {committed > 0
-                        ? <span className="font-semibold text-amber-600">{Math.ceil(committed).toLocaleString()}</span>
-                        : <span className="text-stone-300">—</span>}
+                        ? <span className="font-semibold text-status-warning">{Math.ceil(committed).toLocaleString()}</span>
+                        : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right tabular-nums">
                       {committed > 0
-                        ? <span className={`font-semibold ${available <= 0 ? 'text-red-600' : available <= 10 ? 'text-amber-600' : 'text-green-700'}`}>
+                        ? <span className={`font-semibold ${available <= 0 ? 'text-status-critical' : available <= 10 ? 'text-status-warning' : 'text-status-healthy'}`}>
                             {Math.ceil(available).toLocaleString()}
                           </span>
-                        : <span className="text-stone-300">—</span>}
+                        : <span className="text-ink-muted">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={e => { e.stopPropagation(); setReorderPart(p) }}
-                          className="opacity-0 group-hover:opacity-100 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-opacity whitespace-nowrap"
+                          className="opacity-0 group-hover:opacity-100 font-semibold text-accent-clay bg-accent-clay-soft border border-accent-clay/30 px-2 py-1 rounded-lg hover:bg-accent-clay hover:text-ink-inverse transition-all whitespace-nowrap"
                         >
                           + Reorder
                         </button>
                         <span
-                          className="text-stone-300 cursor-pointer"
+                          className="text-ink-muted cursor-pointer"
                           onClick={() => navigate(`/inventory/${p.id}`)}
                         >→</span>
                       </div>
@@ -421,7 +394,6 @@ export default function InventoryList({ partType }) {
         )}
       </div>
 
-      {/* Reorder Modal */}
       {reorderPart && (
         <AddToReorderModal
           part={reorderPart}
@@ -433,18 +405,17 @@ export default function InventoryList({ partType }) {
   )
 }
 
-// ─── Subcomponents ─────────────────────────────────────────────────────────
 function CategoryTab({ label, count, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all whitespace-nowrap ${
+      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors whitespace-nowrap ${
         active
-          ? 'bg-blue-600 text-white border-blue-700'
-          : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300 hover:bg-stone-50'
+          ? 'bg-accent-clay text-ink-inverse border-accent-clay'
+          : 'bg-surface-card text-ink-mid border-surface-border hover:border-ink-muted hover:bg-surface-page/40'
       }`}
     >
-      {label} <span className={`ml-1 ${active ? 'opacity-80' : 'opacity-50'}`}>({count})</span>
+      {label} <span className={`ml-1 ${active ? 'opacity-80' : 'opacity-55'}`}>({count})</span>
     </button>
   )
 }
