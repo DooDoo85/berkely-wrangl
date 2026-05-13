@@ -4,17 +4,17 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_STYLES = {
-  draft:         'bg-stone-50 text-stone-500 border-stone-200',
-  quote:         'bg-purple-50 text-purple-700 border-purple-200',
-  credit_hold:   'bg-red-50 text-red-700 border-red-200',
-  credit_ok:     'bg-emerald-50 text-emerald-700 border-emerald-200',
-  po_sent:       'bg-cyan-50 text-cyan-700 border-cyan-200',
-  submitted:     'bg-blue-50 text-blue-700 border-blue-200',
-  printed:       'bg-amber-50 text-amber-700 border-amber-200',
-  in_production: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  complete:      'bg-emerald-50 text-emerald-700 border-emerald-200',
-  invoiced:      'bg-teal-50 text-teal-700 border-teal-200',
-  cancelled:     'bg-red-50 text-red-400 border-red-200',
+  draft:         'bg-[rgba(141,123,104,0.10)] text-ink-muted border-[var(--surface-border)]',
+  quote:         'bg-accent-gold-soft text-accent-clay border-[rgba(184,93,58,0.20)]',
+  credit_hold:   'bg-status-critical-soft text-status-critical border-[rgba(181,74,58,0.25)]',
+  credit_ok:     'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
+  po_sent:       'bg-status-info-soft text-status-info border-[rgba(74,107,140,0.25)]',
+  submitted:     'bg-status-info-soft text-status-info border-[rgba(74,107,140,0.25)]',
+  printed:       'bg-status-warning-soft text-status-warning border-[rgba(194,145,58,0.25)]',
+  in_production: 'bg-accent-gold-soft text-accent-clay border-[rgba(184,93,58,0.20)]',
+  complete:      'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
+  invoiced:      'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
+  cancelled:     'bg-[rgba(141,123,104,0.10)] text-ink-muted border-[var(--surface-border)]',
 }
 
 const STATUS_LABELS = {
@@ -115,8 +115,8 @@ export default function OrderList() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-display font-bold text-stone-800">Orders</h2>
-          <p className="text-stone-400 text-sm mt-0.5">
+          <h1 className="tracking-tight">Orders</h1>
+          <p className="text-ink-muted text-sm mt-0.5">
             {isSalesRep ? `Your orders · ${counts.all || 0} total` : `${counts.all || 0} total orders`}
           </p>
         </div>
@@ -133,9 +133,13 @@ export default function OrderList() {
             onClick={() => setStatus(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               status === s
-                ? 'bg-brand-dark text-white border-brand-dark'
-                : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+                ? 'text-white border-transparent'
+                : 'text-ink-mid hover:border-[rgba(92,67,42,0.20)]'
             }`}
+            style={status === s
+              ? { background: '#2a1d10' }
+              : { background: 'var(--surface-card)', borderColor: 'var(--surface-border)' }
+            }
           >
             {s === 'all' ? 'All' : STATUS_LABELS[s]}
             <span className="ml-1.5 opacity-60">{counts[s] || 0}</span>
@@ -157,24 +161,24 @@ export default function OrderList() {
       {/* Table */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-stone-400">Loading orders...</div>
+          <div className="p-12 text-center text-ink-muted">Loading orders...</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="text-4xl mb-3">≡</div>
-            <div className="text-stone-600 font-semibold mb-1">No orders found</div>
-            <div className="text-stone-400 text-sm">Try a different filter or create a new order</div>
+            <div className="text-4xl mb-3 text-ink-muted">≡</div>
+            <div className="text-ink-strong font-semibold mb-1">No orders found</div>
+            <div className="text-ink-muted text-sm">Try a different filter or create a new order</div>
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-stone-100 bg-stone-50">
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Order #</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Customer</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Sidemark</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Rep</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Date</th>
-                <th className="text-right px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Amount</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Status</th>
+              <tr className="border-b" style={{ borderColor: 'var(--surface-border)', background: 'rgba(141,123,104,0.06)' }}>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Order #</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Customer</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Sidemark</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Rep</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Date</th>
+                <th className="text-right px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Amount</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -183,34 +187,35 @@ export default function OrderList() {
                 <tr
                   key={o.id}
                   onClick={() => navigate(`/orders/${o.id}`)}
-                  className={`border-b border-stone-50 hover:bg-stone-50 cursor-pointer transition-colors ${
+                  className={`border-b hover:bg-black/[0.02] cursor-pointer transition-colors ${
                     i === filtered.length - 1 ? 'border-b-0' : ''
                   }`}
+                  style={{ borderColor: 'var(--surface-border)' }}
                 >
                   <td className="px-5 py-3.5">
-                    <span className="font-mono text-sm font-semibold text-brand-light">
+                    <span className="font-mono text-sm font-semibold text-accent-clay">
                       #{o.order_number}
                     </span>
                     {o.read_only && (
-                      <span className="ml-2 text-[10px] text-stone-300 border border-stone-200 px-1.5 py-0.5 rounded">ePIC</span>
+                      <span className="ml-2 text-[10px] text-ink-muted border px-1.5 py-0.5 rounded" style={{ borderColor: 'var(--surface-border)' }}>ePIC</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm text-stone-700 font-medium">{o.customer_name || '—'}</span>
+                    <span className="text-sm text-ink-strong font-medium">{o.customer_name || '—'}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm text-stone-500">{o.sidemark || '—'}</span>
+                    <span className="text-sm text-ink-mid">{o.sidemark || '—'}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-xs text-stone-400">{o.sales_rep?.split(' ')[0] || '—'}</span>
+                    <span className="text-xs text-ink-muted">{o.sales_rep?.split(' ')[0] || '—'}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-xs text-stone-400">
+                    <span className="text-xs text-ink-muted">
                       {o.order_date ? new Date(o.order_date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—'}
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <span className="text-sm font-semibold text-stone-700">
+                    <span className="text-sm font-semibold text-ink-strong tabular-nums">
                       {(o.subtotal || o.order_amount) ? '$' + Number(o.subtotal || o.order_amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
                     </span>
                   </td>
@@ -220,7 +225,7 @@ export default function OrderList() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <span className="text-stone-300 text-sm">→</span>
+                    <span className="text-ink-muted text-sm">→</span>
                   </td>
                 </tr>
               ))}
@@ -229,7 +234,7 @@ export default function OrderList() {
         )}
       </div>
       {filtered.length === 200 && (
-        <p className="text-center text-xs text-stone-400 mt-3">Showing most recent 200 orders. Use search to find specific orders.</p>
+        <p className="text-center text-xs text-ink-muted mt-3">Showing most recent 200 orders. Use search to find specific orders.</p>
       )}
     </div>
   )
