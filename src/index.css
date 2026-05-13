@@ -33,11 +33,11 @@
      mix-blend-mode noise on a separate pseudo-element (see .page-surface). */
   --surface-page:        #f1e2c9;     /* warm cinnamon cream — saddle-brown undertone */
   --surface-card:        #faf6f0;     /* clean cream — precise operational surface */
-  --surface-card-priority: #f1e2c9;   /* matches page; clay top edge does the differentiation */
-  --surface-card-soft:   #faf6f0;     /* unified with card — Stuck Orders alone earns differentiation */
-  --surface-border:      rgba(92,67,42,0.10);   /* nearly imperceptible — color contrast does the work */
-  --surface-border-priority: rgba(184,93,58,0.30);
-  --surface-border-soft: rgba(92,67,42,0.08);
+  --surface-card-priority: #faf6f0;   /* unified — same as card; red badge text signals priority */
+  --surface-card-soft:   #faf6f0;     /* unified — same as card */
+  --surface-border:      rgba(92,67,42,0.10);   /* warm tan, barely visible */
+  --surface-border-priority: rgba(92,67,42,0.10);  /* unified with standard border */
+  --surface-border-soft: rgba(92,67,42,0.10);      /* unified with standard border */
   --card-shadow:         none;        /* color contrast separates cards; no shadow needed */
 
   /* Radial gradient — top-center light source, fading to deeper edges.
@@ -165,12 +165,12 @@
     position: relative;
   }
 
-  /* Operationally important — Stuck Orders, alerts. Slightly deeper surface
-     creates the separation; 2px clay top edge calls attention. */
+  /* Operationally important — alias retained for compatibility, but now
+     visually identical to .card. Differentiation comes from content cues
+     (red badge, priority labels), not from background or border treatment. */
   .card-priority {
     background-color: var(--surface-card-priority);
     border: 1px solid var(--surface-border-priority);
-    border-top: 2px solid rgba(184,93,58,0.6);
     border-radius: 12px;
     box-shadow: var(--card-shadow);
     position: relative;
