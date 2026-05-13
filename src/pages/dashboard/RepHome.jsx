@@ -25,40 +25,40 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon }) {
   const pct = g > 0 ? Math.min((v / g) * 100, 100) : 0
   const hit = g > 0 && v >= g
   const onTrack = g > 0 && v >= g * 0.5
-  // Color logic: green when hit goal, amber when 50%+, gray otherwise
-  const barColor = hit ? 'bg-emerald-500' : onTrack ? 'bg-amber-500' : 'bg-gray-300'
-  const valueColor = hit ? 'text-emerald-700' : 'text-gray-900'
+  // Color logic: healthy when goal hit, warning when 50%+, muted otherwise
+  const barColor = hit ? 'bg-status-healthy' : onTrack ? 'bg-status-warning' : 'bg-[var(--surface-border)]'
+  const valueColor = hit ? 'text-status-healthy' : 'text-ink-strong'
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 transition-shadow duration-200 hover:shadow-sm">
+    <div className="card p-5 transition-shadow duration-200">
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
           <span className={iconColor}>{icon}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{label}</div>
+          <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">{label}</div>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>
               {loading ? "—" : v}
             </span>
             {g > 0 && !loading && (
-              <span className="text-sm font-medium text-gray-400 tabular-nums">/ {g}</span>
+              <span className="text-sm font-medium text-ink-muted tabular-nums">/ {g}</span>
             )}
           </div>
           {g > 0 ? (
             <div className="mt-2.5">
-              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-[var(--surface-border)] rounded-full overflow-hidden">
                 <div
                   className={`h-full ${barColor} transition-all duration-500`}
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <div className="text-[10px] text-gray-400 mt-1">
+              <div className="text-[10px] text-ink-muted mt-1">
                 {hit ? '✓ Goal hit' : `${Math.round(pct)}% to goal`}
               </div>
             </div>
           ) : (
-            <div className="text-xs text-gray-400 mt-2">This week</div>
+            <div className="text-xs text-ink-muted mt-2">This week</div>
           )}
         </div>
       </div>
@@ -73,7 +73,10 @@ function QuickAction({ icon, label, primary, onClick }) {
     return (
       <button
         onClick={onClick}
-        className="flex items-center justify-center gap-2.5 bg-[#0a2e22] text-white rounded-xl px-5 py-4 transition-all duration-200 hover:bg-[#143f30] font-medium text-sm shadow-sm hover:shadow"
+        className="flex items-center justify-center gap-2.5 rounded-xl px-5 py-4 transition-colors duration-200 font-medium text-sm"
+        style={{ background: '#2a1d10', color: '#f7f0e0' }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#1a0f08')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#2a1d10')}
       >
         {icon}
         <span>{label}</span>
@@ -83,7 +86,7 @@ function QuickAction({ icon, label, primary, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center justify-center gap-2.5 bg-white border border-gray-200 rounded-xl px-5 py-4 transition-all duration-200 hover:shadow-sm hover:border-gray-300 text-gray-700 font-medium text-sm"
+      className="card flex items-center justify-center gap-2.5 px-5 py-4 transition-colors duration-200 text-ink-mid font-medium text-sm hover:text-ink-strong"
     >
       {icon}
       <span>{label}</span>
@@ -97,22 +100,19 @@ function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotSty
   return (
     <button
       onClick={onClick}
-      className="relative bg-white border border-gray-200 rounded-xl p-5 text-left transition-all duration-200 hover:shadow-sm hover:-translate-y-px overflow-hidden w-full"
+      className="card p-5 text-left transition-all duration-200 hover:-translate-y-px w-full"
     >
-      {/* Top accent border */}
-      <div className={`absolute top-0 left-0 right-0 h-0.5 ${accentColor || ''}`} style={accentStyle} />
-
       <div className="flex items-center gap-2 mb-3">
         <div className={`w-2 h-2 rounded-full ${dotColor || ''}`} style={dotStyle} />
-        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-sm font-medium text-ink-mid">{label}</span>
       </div>
 
       <div className="flex items-end justify-between">
         <div>
-          <div className="text-3xl font-bold text-gray-900 tabular-nums leading-none">
+          <div className="text-3xl font-bold text-ink-strong tabular-nums leading-none">
             {loading ? "—" : count}
           </div>
-          <div className="text-xs font-medium mt-2" style={{ color: '#5a3a24' }}>View all →</div>
+          <div className="text-xs font-medium mt-2 text-accent-clay">View all →</div>
         </div>
         <div className="opacity-60">{icon}</div>
       </div>
@@ -358,18 +358,18 @@ export default function RepHome() {
   const fullDate   = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#faf6ed' }}>
+    <div className="min-h-screen">
       <div className="p-8 max-w-screen-xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-3xl tracking-tight">
             {greeting}, {firstName}
           </h1>
-          <p className="text-sm text-gray-500 mt-1.5">{todayShort}</p>
+          <p className="text-sm text-ink-muted mt-1.5">{todayShort}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="text-gray-400">{Icon.cal}</span>
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <span className="text-ink-muted">{Icon.cal}</span>
           <span>{fullDate}</span>
         </div>
       </div>
@@ -381,28 +381,28 @@ export default function RepHome() {
           value={data.kpis.scheduledMeetings}
           goal={data.goals.scheduled_meetings}
           loading={loading}
-          iconBg="bg-blue-50"     iconColor="text-blue-600"    icon={Icon.calendar}
+          iconBg="bg-status-info-soft"     iconColor="text-status-info"    icon={Icon.calendar}
         />
         <KpiTile
           label="New Accounts"
           value={data.kpis.newAccounts}
           goal={data.goals.new_accounts}
           loading={loading}
-          iconBg="bg-emerald-50"  iconColor="text-emerald-600" icon={Icon.users}
+          iconBg="bg-status-healthy-soft"  iconColor="text-status-healthy" icon={Icon.users}
         />
         <KpiTile
           label="Sample Books"
           value={data.kpis.sampleBooks}
           goal={data.goals.sample_books}
           loading={loading}
-          iconBg="bg-purple-50"   iconColor="text-purple-600"  icon={Icon.package}
+          iconBg="bg-accent-gold-soft"     iconColor="text-accent-clay"    icon={Icon.package}
         />
         <KpiTile
           label="Cold Calls"
           value={data.kpis.coldCalls}
           goal={0}
           loading={loading}
-          iconBg="bg-amber-50"    iconColor="text-amber-600"   icon={Icon.message}
+          iconBg="bg-status-warning-soft"  iconColor="text-status-warning" icon={Icon.message}
         />
       </div>
 
@@ -418,7 +418,7 @@ export default function RepHome() {
 
       {/* Quick Actions */}
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick actions</h2>
+        <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
         <div className="grid grid-cols-4 gap-3">
           <QuickAction primary icon={Icon.plus}      label="New Quote"    onClick={() => navigate("/quotes/new")} />
           <QuickAction         icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
@@ -429,55 +429,55 @@ export default function RepHome() {
 
       {/* Follow-ups */}
       <div className="mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-gray-900">Follow-ups</h2>
-            <button onClick={() => navigate("/activities")} className="text-xs font-medium text-emerald-700 hover:text-emerald-800 transition-colors">
+            <h2 className="text-sm font-semibold text-ink-strong">Follow-ups</h2>
+            <button onClick={() => navigate("/activities")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
               View all →
             </button>
           </div>
 
-          {loading && <div className="px-5 py-8 text-sm text-gray-400 text-center">Loading…</div>}
+          {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
 
           {!loading && data.followUps.length === 0 && (
             <div className="px-5 pb-6 pt-2 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                 {Icon.check}
               </div>
               <div>
-                <div className="text-base font-semibold text-gray-900">You're all caught up!</div>
-                <div className="text-sm text-gray-500 mt-0.5">No follow-ups due. Nice work.</div>
+                <div className="text-base font-semibold text-ink-strong">You're all caught up!</div>
+                <div className="text-sm text-ink-muted mt-0.5">No follow-ups due. Nice work.</div>
               </div>
             </div>
           )}
 
           {!loading && data.followUps.length > 0 && (
-            <div className="divide-y divide-gray-100 border-t border-gray-100">
+            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
               {data.followUps.map(f => {
                 const overdue = f.follow_up_date < today;
                 const phone = f.customers?.phone;
                 return (
-                  <div key={f.id} className="px-5 py-3 hover:bg-gray-50 transition-colors duration-150 flex items-center gap-4">
-                    <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${overdue ? "bg-red-500" : "bg-emerald-500"}`} />
+                  <div key={f.id} className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
+                    <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${overdue ? "bg-status-critical" : "bg-status-healthy"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">{f.customers?.account_name || "—"}</p>
-                        {overdue && <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full uppercase tracking-wide">Overdue</span>}
+                        <p className="text-sm font-medium text-ink-strong truncate">{f.customers?.account_name || "—"}</p>
+                        {overdue && <span className="pill-critical">Overdue</span>}
                       </div>
-                      <p className="text-xs text-gray-500 truncate mt-0.5">{f.subject || f.body?.slice(0, 80) || "Follow up"}</p>
-                      <p className={`text-xs mt-0.5 ${overdue ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                      <p className="text-xs text-ink-muted truncate mt-0.5">{f.subject || f.body?.slice(0, 80) || "Follow up"}</p>
+                      <p className={`text-xs mt-0.5 ${overdue ? "text-status-critical font-medium" : "text-ink-muted"}`}>
                         Due {new Date(f.follow_up_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {phone && (
                         <a href={`tel:${phone.replace(/\D/g, "")}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
+                          className="btn-ghost text-xs px-3 py-1.5">
                           {Icon.phone} Call
                         </a>
                       )}
                       <button onClick={() => completeFollowUp(f.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#0a2e22] rounded-md hover:bg-[#143f30] transition-colors">
+                        className="btn-primary text-xs px-3 py-1.5">
                         {Icon.checkSmall} Done
                       </button>
                     </div>
@@ -491,58 +491,45 @@ export default function RepHome() {
 
       {/* My Pipeline */}
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">My pipeline</h2>
+        <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
         <div className="grid grid-cols-5 gap-4">
           <PipelineCard
             label="Quotes"
             count={data.pipeline.quotes}
-            accentColor="bg-stone-400"
-            dotColor="bg-stone-400"
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5f0e8', color: '#8a7560' }}>{Icon.fileText}</div>}
+            dotStyle={{ backgroundColor: '#8d7b68' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-gold-soft text-ink-muted">{Icon.fileText}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=quote")}
           />
           <PipelineCard
             label="Printed"
             count={data.pipeline.printed}
-            accentColor=""
-            dotColor=""
-            accentStyle={{ backgroundColor: '#a0573a' }}
-            dotStyle={{ backgroundColor: '#a0573a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5e2d4', color: '#a0573a' }}>{Icon.send}</div>}
+            dotStyle={{ backgroundColor: '#b85d3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=printed")}
           />
           <PipelineCard
             label="In Production"
             count={data.pipeline.inProduction}
-            accentColor=""
-            dotColor=""
-            accentStyle={{ backgroundColor: '#b8854d' }}
-            dotStyle={{ backgroundColor: '#b8854d' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#f5e8c8', color: '#b8854d' }}>{Icon.settings}</div>}
+            dotStyle={{ backgroundColor: '#c2913a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=in_production")}
           />
           <PipelineCard
             label="On Hold"
             count={data.pipeline.onHold}
-            accentColor=""
-            dotColor=""
-            accentStyle={{ backgroundColor: '#ee5e3a' }}
-            dotStyle={{ backgroundColor: '#ee5e3a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#fde4dc', color: '#ee5e3a' }}>{Icon.package}</div>}
+            dotStyle={{ backgroundColor: '#b54a3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders/on-hold")}
           />
           <PipelineCard
             label="Invoiced WTD"
             count={data.pipeline.invoicedWtd}
-            accentColor=""
-            dotColor=""
-            accentStyle={{ backgroundColor: '#5b8c5a' }}
             dotStyle={{ backgroundColor: '#5b8c5a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: '#e0ecdf', color: '#5b8c5a' }}>{Icon.package}</div>}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=invoiced")}
           />
@@ -551,44 +538,44 @@ export default function RepHome() {
 
       {/* Upcoming activities */}
       <div className="mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-gray-900">Upcoming activities</h2>
-            <button onClick={() => navigate("/calendar")} className="text-xs font-medium text-emerald-700 hover:text-emerald-800 transition-colors">
+            <h2 className="text-sm font-semibold text-ink-strong">Upcoming activities</h2>
+            <button onClick={() => navigate("/calendar")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
               View calendar →
             </button>
           </div>
 
-          {loading && <div className="px-5 py-8 text-sm text-gray-400 text-center">Loading…</div>}
+          {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
 
           {!loading && data.upcomingTasks.length === 0 && (
             <div className="px-5 pb-6 pt-2 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                 {Icon.cal}
               </div>
               <div>
-                <div className="text-base font-semibold text-gray-900">No upcoming activities</div>
-                <div className="text-sm text-gray-500 mt-0.5">You're all set for now.</div>
+                <div className="text-base font-semibold text-ink-strong">No upcoming activities</div>
+                <div className="text-sm text-ink-muted mt-0.5">You're all set for now.</div>
               </div>
             </div>
           )}
 
           {!loading && data.upcomingTasks.length > 0 && (
-            <div className="divide-y divide-gray-100 border-t border-gray-100">
+            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
               {data.upcomingTasks.map(t => (
                 <div key={t.id} onClick={() => navigate("/calendar")}
-                  className="px-5 py-3 hover:bg-gray-50 transition-colors duration-150 cursor-pointer flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                  className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 cursor-pointer flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="w-10 h-10 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                     {Icon.cal}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-sm font-medium text-ink-strong truncate">{t.title}</p>
+                    <p className="text-xs text-ink-muted mt-0.5">
                       {t.customers?.account_name && <span>{t.customers.account_name} · </span>}
                       <span>{t.category}</span>
                     </p>
                   </div>
-                  <div className="text-xs text-gray-500 font-medium">
+                  <div className="text-xs text-ink-muted font-medium">
                     {new Date(t.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </div>
                 </div>
