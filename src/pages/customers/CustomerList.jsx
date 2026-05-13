@@ -33,34 +33,47 @@ export default function CustomerList() {
       .eq('active', true)
       .order('account_name')
 
-    // Sales reps only see their own customers
-    // Match customers.sales_rep against rep_email_map using the logged-in email
     if (isSalesRep) {
-      // Look up rep name from email map
+      // Look up the rep's display name from the email map
       const { data: repRow } = await supabase
         .from('rep_email_map')
         .select('rep_name')
         .eq('email', profile.email)
         .single()
 
+      // Match customers that are EITHER:
+      //   a) ePIC-synced and assigned to this rep via sales_rep text field
+      //   b) Manually created by this rep (created_by = their auth UUID)
+      //   c) Explicitly assigned to this rep via assigned_rep_id
+      //
+      // This ensures reps see customers they created in Wrangl even when
+      // those customers don't yet have a sales_rep value from ePIC.
+      const filters = [`created_by.eq.${profile.id}`]
+
       if (repRow?.rep_name) {
-        query = query.eq('sales_rep', repRow.rep_name)
-      } else {
-        // Fallback — no customers if rep not found in map
-        setCustomers([])
-        setLoading(false)
-        return
+        filters.push(`sales_rep.eq.${repRow.rep_name}`)
       }
+
+      // assigned_rep_id is a UUID foreign key — include if it exists
+      filters.push(`assigned_rep_id.eq.${profile.id}`)
+
+      query = query.or(filters.join(','))
     }
 
-    const { data } = await query
-    setCustomers(data || [])
+    const { data, error } = await query
+
+    if (error) {
+      console.error('CustomerList fetch error:', error)
+      setCustomers([])
+    } else {
+      setCustomers(data || [])
+    }
     setLoading(false)
   }
 
   const filtered = customers.filter(c => {
     const matchSearch = !search ||
-      c.account_name.toLowerCase().includes(search.toLowerCase()) ||
+      c.account_name?.toLowerCase().includes(search.toLowerCase()) ||
       c.account_code?.toLowerCase().includes(search.toLowerCase())
     const matchStatus = status === 'all' || c.status === status
     return matchSearch && matchStatus
