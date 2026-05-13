@@ -250,11 +250,11 @@ export default function ProductionHub() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const statusColors = {
-    printed:       'bg-blue-50 text-blue-700 border-blue-200',
-    credit_ok:     'bg-emerald-50 text-emerald-700 border-emerald-200',
-    in_production: 'bg-amber-50 text-amber-700 border-amber-200',
-    on_hold:       'bg-red-50 text-red-600 border-red-200',
-    invoiced:      'bg-green-50 text-green-700 border-green-200',
+    printed:       'bg-status-info-soft text-status-info border-[rgba(74,107,140,0.25)]',
+    credit_ok:     'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
+    in_production: 'bg-status-warning-soft text-status-warning border-[rgba(194,145,58,0.25)]',
+    on_hold:       'bg-status-critical-soft text-status-critical border-[rgba(181,74,58,0.25)]',
+    invoiced:      'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
   }
 
   return (
@@ -262,12 +262,12 @@ export default function ProductionHub() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-stone-800">Start Production</h1>
-          <p className="text-sm text-stone-500 mt-0.5">Look up an order, cut fabric, and start production</p>
+          <h1 className="text-2xl font-bold text-ink-strong">Start Production</h1>
+          <p className="text-sm text-ink-muted mt-0.5">Look up an order, cut fabric, and start production</p>
         </div>
         <button
           onClick={() => navigate('/orders/on-hold')}
-          className="text-sm text-stone-500 hover:text-stone-800 border border-stone-200 px-3 py-1.5 rounded-lg transition-colors"
+          className="text-sm text-ink-muted hover:text-ink-strong border border-[var(--surface-border)] px-3 py-1.5 rounded-lg transition-colors"
         >
           Orders on Hold →
         </button>
@@ -275,7 +275,7 @@ export default function ProductionHub() {
 
       {/* ── Step 1: Order lookup ──────────────────────────────────────────── */}
       <div className="card p-5 mb-5">
-        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">1 · Order Number</p>
+        <p className="text-[10px] font-bold text-ink-muted uppercase tracking-widest mb-3">1 · Order Number</p>
         <div className="flex gap-3">
           <input
             type="text"
@@ -289,7 +289,7 @@ export default function ProductionHub() {
           <button
             onClick={searchOrder}
             disabled={searching || !orderInput.trim()}
-            className="px-5 py-2 bg-brand-dark text-white font-semibold rounded-xl hover:bg-brand-dark/90 disabled:opacity-40 transition-colors"
+            className="px-5 py-2 bg-[#2a1d10] text-white font-semibold rounded-xl hover:bg-[#2a1d10]/90 disabled:opacity-40 transition-colors"
           >
             {searching ? 'Looking up...' : 'Look Up'}
           </button>
@@ -298,29 +298,29 @@ export default function ProductionHub() {
 
       {/* Error */}
       {error && (
-        <div className="card p-4 mb-4 bg-red-50 border border-red-200">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="card p-4 mb-4 bg-status-critical-soft border border-[rgba(181,74,58,0.25)]">
+          <p className="text-sm text-status-critical">{error}</p>
         </div>
       )}
 
       {/* Success */}
       {success && (
-        <div className="card p-4 mb-4 bg-green-50 border border-green-200">
-          <p className="text-sm font-semibold text-green-700">{success}</p>
+        <div className="card p-4 mb-4 bg-status-healthy-soft border border-[rgba(91,140,90,0.25)]">
+          <p className="text-sm font-semibold text-status-healthy">{success}</p>
         </div>
       )}
 
       {/* Not found — offer to create manually */}
       {notFound && (
-        <div className="card p-5 mb-5 border border-amber-200 bg-amber-50">
+        <div className="card p-5 mb-5 border border-[rgba(194,145,58,0.25)] bg-status-warning-soft">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-amber-800">Order #{orderInput.trim()} not found in Wrangl</p>
-              <p className="text-xs text-amber-600 mt-0.5">It may not have synced from ePIC yet. You can start production manually.</p>
+              <p className="text-sm font-semibold text-status-warning">Order #{orderInput.trim()} not found in Wrangl</p>
+              <p className="text-xs text-status-warning mt-0.5">It may not have synced from ePIC yet. You can start production manually.</p>
             </div>
             <button
               onClick={useManualOrder}
-              className="px-4 py-2 bg-amber-600 text-white font-semibold text-sm rounded-xl hover:bg-amber-700 transition-colors whitespace-nowrap"
+              className="px-4 py-2 bg-status-warning text-white font-semibold text-sm rounded-xl hover:bg-status-warning transition-colors whitespace-nowrap"
             >
               Use #{orderInput.trim()}
             </button>
@@ -333,56 +333,56 @@ export default function ProductionHub() {
         <>
           {/* Order details card */}
           <div className="card overflow-hidden mb-5">
-            <div className="px-5 py-4 border-b border-stone-100">
+            <div className="px-5 py-4 border-b border-[var(--surface-border)]">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-3">
-                    <h2 className="text-lg font-bold text-stone-800 font-mono">#{order.order_number}</h2>
+                    <h2 className="text-lg font-bold text-ink-strong font-mono">#{order.order_number}</h2>
                     {order._manual ? (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-500 border border-stone-200">MANUAL</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[rgba(141,123,104,0.10)] text-ink-muted border border-[var(--surface-border)]">MANUAL</span>
                     ) : (
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border ${statusColors[order.status] || 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border ${statusColors[order.status] || 'bg-[rgba(141,123,104,0.10)] text-ink-mid border-[var(--surface-border)]'}`}>
                         {order.status?.replace(/_/g, ' ')}
                       </span>
                     )}
                   </div>
-                  {order.customer_name && <p className="text-sm text-stone-500 mt-1">{order.customer_name}</p>}
-                  {order.sidemark && <p className="text-xs text-stone-400 mt-0.5">{order.sidemark}</p>}
+                  {order.customer_name && <p className="text-sm text-ink-muted mt-1">{order.customer_name}</p>}
+                  {order.sidemark && <p className="text-xs text-ink-muted mt-0.5">{order.sidemark}</p>}
                 </div>
                 {order.sales_rep && (
                   <div className="text-right">
-                    <p className="text-xs text-stone-400">Sales Rep</p>
-                    <p className="text-sm font-semibold text-stone-700">{order.sales_rep}</p>
+                    <p className="text-xs text-ink-muted">Sales Rep</p>
+                    <p className="text-sm font-semibold text-ink-mid">{order.sales_rep}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {!order._manual && (
-              <div className="px-5 py-4 grid grid-cols-3 gap-4 text-sm border-b border-stone-100">
+              <div className="px-5 py-4 grid grid-cols-3 gap-4 text-sm border-b border-[var(--surface-border)]">
                 <div>
-                  <p className="text-xs text-stone-400 mb-0.5">Order Date</p>
-                  <p className="text-stone-700">{order.order_date ? new Date(order.order_date).toLocaleDateString() : '—'}</p>
+                  <p className="text-xs text-ink-muted mb-0.5">Order Date</p>
+                  <p className="text-ink-mid">{order.order_date ? new Date(order.order_date).toLocaleDateString() : '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-stone-400 mb-0.5">Total Units</p>
-                  <p className="text-stone-700 font-semibold">{order.total_units || '—'}</p>
+                  <p className="text-xs text-ink-muted mb-0.5">Total Units</p>
+                  <p className="text-ink-mid font-semibold">{order.total_units || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-stone-400 mb-0.5">PO Number</p>
-                  <p className="text-stone-700 font-mono">{order.po_number || '—'}</p>
+                  <p className="text-xs text-ink-muted mb-0.5">PO Number</p>
+                  <p className="text-ink-mid font-mono">{order.po_number || '—'}</p>
                 </div>
               </div>
             )}
 
             {/* Hold info if already on hold */}
             {order.status === 'on_hold' && (
-              <div className="px-5 py-4 bg-red-50 border-b border-red-100">
-                <p className="text-xs font-bold text-red-600 uppercase tracking-wide mb-2">Currently On Hold</p>
-                <p className="text-sm text-red-700"><strong>Reason:</strong> {order.hold_reason}</p>
-                {order.hold_note && <p className="text-sm text-red-600 mt-1">{order.hold_note}</p>}
+              <div className="px-5 py-4 bg-status-critical-soft border-b border-[rgba(181,74,58,0.20)]">
+                <p className="text-xs font-bold text-status-critical uppercase tracking-wide mb-2">Currently On Hold</p>
+                <p className="text-sm text-status-critical"><strong>Reason:</strong> {order.hold_reason}</p>
+                {order.hold_note && <p className="text-sm text-status-critical mt-1">{order.hold_note}</p>}
                 {order.part_expected_date && (
-                  <p className="text-xs text-red-500 mt-1">Parts expected: {new Date(order.part_expected_date).toLocaleDateString()}</p>
+                  <p className="text-xs text-status-critical mt-1">Parts expected: {new Date(order.part_expected_date).toLocaleDateString()}</p>
                 )}
               </div>
             )}
@@ -392,8 +392,8 @@ export default function ProductionHub() {
           {order.status !== 'on_hold' && (
             <div className="card p-5 mb-5">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">2 · Fabric Cuts</p>
-                <p className="text-[10px] text-stone-400">Optional — skip if no fabric needed</p>
+                <p className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">2 · Fabric Cuts</p>
+                <p className="text-[10px] text-ink-muted">Optional — skip if no fabric needed</p>
               </div>
 
               <div className="space-y-3" ref={dropdownRef}>
@@ -409,14 +409,14 @@ export default function ProductionHub() {
                       {/* Fabric selector */}
                       <div className="flex-1 relative">
                         {selectedFabric ? (
-                          <div className="flex items-center justify-between bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5">
+                          <div className="flex items-center justify-between bg-[rgba(141,123,104,0.06)] border border-[var(--surface-border)] rounded-xl px-3 py-2.5">
                             <div>
-                              <span className="text-sm font-medium text-stone-800">{selectedFabric.name}</span>
-                              <span className="text-xs text-stone-400 ml-2">
+                              <span className="text-sm font-medium text-ink-strong">{selectedFabric.name}</span>
+                              <span className="text-xs text-ink-muted ml-2">
                                 {Math.floor(selectedFabric.qty_on_hand || 0).toLocaleString()}" on hand
                               </span>
                             </div>
-                            <button onClick={() => clearFabric(idx)} className="text-stone-400 hover:text-stone-600 text-xs ml-2">✕</button>
+                            <button onClick={() => clearFabric(idx)} className="text-ink-muted hover:text-ink-mid text-xs ml-2">✕</button>
                           </div>
                         ) : (
                           <>
@@ -429,18 +429,18 @@ export default function ProductionHub() {
                               className="input w-full"
                             />
                             {showFabricDropdown === idx && (
-                              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-[var(--surface-card)] border border-[var(--surface-border)] rounded-xl shadow-lg max-h-48 overflow-y-auto">
                                 {filteredFabrics.length === 0 ? (
-                                  <div className="px-3 py-2 text-xs text-stone-400">No fabrics found</div>
+                                  <div className="px-3 py-2 text-xs text-ink-muted">No fabrics found</div>
                                 ) : (
                                   filteredFabrics.map(f => (
                                     <button
                                       key={f.id}
                                       onClick={() => selectFabric(idx, f)}
-                                      className="w-full text-left px-3 py-2 hover:bg-stone-50 flex items-center justify-between text-sm transition-colors"
+                                      className="w-full text-left px-3 py-2 hover:bg-black/[0.02] flex items-center justify-between text-sm transition-colors"
                                     >
-                                      <span className="text-stone-800">{f.name}</span>
-                                      <span className={`text-xs font-mono ${(f.qty_on_hand || 0) <= 0 ? 'text-red-500' : 'text-stone-400'}`}>
+                                      <span className="text-ink-strong">{f.name}</span>
+                                      <span className={`text-xs font-mono ${(f.qty_on_hand || 0) <= 0 ? 'text-status-critical' : 'text-ink-muted'}`}>
                                         {Math.floor(f.qty_on_hand || 0).toLocaleString()}"
                                       </span>
                                     </button>
@@ -463,7 +463,7 @@ export default function ProductionHub() {
                             className="input w-full pr-6 text-right font-mono"
                             min="0"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">"</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-muted">"</span>
                         </div>
                       </div>
 
@@ -472,12 +472,12 @@ export default function ProductionHub() {
                         {selectedFabric && cut.cutLength ? (
                           <span className={`text-xs font-semibold ${
                             (selectedFabric.qty_on_hand || 0) - parseFloat(cut.cutLength || 0) < 0
-                              ? 'text-red-600' : 'text-green-700'
+                              ? 'text-status-critical' : 'text-status-healthy'
                           }`}>
                             → {Math.floor((selectedFabric.qty_on_hand || 0) - parseFloat(cut.cutLength || 0)).toLocaleString()}"
                           </span>
                         ) : (
-                          <span className="text-xs text-stone-300">—</span>
+                          <span className="text-xs text-ink-muted">—</span>
                         )}
                       </div>
 
@@ -485,7 +485,7 @@ export default function ProductionHub() {
                       {cuts.length > 1 && (
                         <button
                           onClick={() => removeCutLine(idx)}
-                          className="pt-2.5 text-stone-300 hover:text-red-500 transition-colors text-sm"
+                          className="pt-2.5 text-ink-muted hover:text-status-critical transition-colors text-sm"
                         >✕</button>
                       )}
                     </div>
@@ -495,7 +495,7 @@ export default function ProductionHub() {
 
               <button
                 onClick={addCutLine}
-                className="mt-3 text-xs font-semibold text-brand-dark hover:text-brand-dark/80 transition-colors"
+                className="mt-3 text-xs font-semibold text-[#2a1d10] hover:text-[#2a1d10]/80 transition-colors"
               >
                 + Add another cut
               </button>
@@ -504,7 +504,7 @@ export default function ProductionHub() {
 
           {/* ── Step 3: Actions ───────────────────────────────────────────── */}
           <div className="card p-5">
-            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-4">
+            <p className="text-[10px] font-bold text-ink-muted uppercase tracking-widest mb-4">
               {order.status === 'on_hold' ? 'Actions' : order.status === 'in_production' ? '3 · Log Cuts' : '3 · Start'}
             </p>
 
@@ -528,7 +528,7 @@ export default function ProductionHub() {
                     setCuts([])
                   }}
                   disabled={saving}
-                  className="flex-1 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors"
+                  className="flex-1 py-3 bg-status-healthy text-white font-semibold rounded-xl hover:bg-status-healthy disabled:opacity-40 transition-colors"
                 >
                   ✓ Release Hold — Back to Production
                 </button>
@@ -537,7 +537,7 @@ export default function ProductionHub() {
                   <button
                     onClick={handleStartProduction}
                     disabled={saving}
-                    className="flex-1 py-3 bg-brand-dark text-white font-semibold rounded-xl hover:bg-brand-dark/90 disabled:opacity-40 transition-colors text-sm"
+                    className="flex-1 py-3 bg-[#2a1d10] text-white font-semibold rounded-xl hover:bg-[#2a1d10]/90 disabled:opacity-40 transition-colors text-sm"
                   >
                     {saving
                       ? 'Processing...'
@@ -548,7 +548,7 @@ export default function ProductionHub() {
                   <button
                     onClick={() => setShowHoldModal(true)}
                     disabled={saving || order._manual}
-                    className="flex-1 py-3 border-2 border-red-300 text-red-600 font-semibold rounded-xl hover:bg-red-50 disabled:opacity-40 transition-colors text-sm"
+                    className="flex-1 py-3 border-2 border-[rgba(181,74,58,0.30)] text-status-critical font-semibold rounded-xl hover:bg-status-critical-soft disabled:opacity-40 transition-colors text-sm"
                   >
                     ⏸ Place on Hold
                   </button>
@@ -558,12 +558,12 @@ export default function ProductionHub() {
 
             {/* Cut summary */}
             {cuts.filter(c => c.fabricId && c.cutLength).length > 0 && (
-              <div className="mt-4 pt-3 border-t border-stone-100">
-                <p className="text-xs text-stone-400 mb-2">Cuts that will be deducted:</p>
+              <div className="mt-4 pt-3 border-t border-[var(--surface-border)]">
+                <p className="text-xs text-ink-muted mb-2">Cuts that will be deducted:</p>
                 {cuts.filter(c => c.fabricId && c.cutLength).map((cut, idx) => {
                   const fabric = fabrics.find(f => f.id === cut.fabricId)
                   return (
-                    <div key={idx} className="flex items-center justify-between text-xs text-stone-600 py-0.5">
+                    <div key={idx} className="flex items-center justify-between text-xs text-ink-mid py-0.5">
                       <span>{fabric?.name}</span>
                       <span className="font-mono font-semibold">-{parseFloat(cut.cutLength).toLocaleString()}"</span>
                     </div>
