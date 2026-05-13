@@ -309,6 +309,7 @@ export default function ExecutiveHome() {
         const days = holdDate ? daysSince(holdDate) : 0;
         return {
           key: `held-${o.id}`,
+          order_id: o.id,
           order_no: o.order_number,
           customer: o.customer_name,
           status_label: o.status,
@@ -613,7 +614,7 @@ export default function ExecutiveHome() {
                 {data.stuckOrders.map(o => {
                   const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
                   return (
-                    <div key={o.key} onClick={() => navigate(`/orders?search=${o.order_no}`)}
+                    <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
