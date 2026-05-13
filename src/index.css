@@ -31,9 +31,9 @@
   /* Page surface paints as a flat fallback; the radial gradient lives in
      --page-grain and applies via background-image. This lets us keep the
      mix-blend-mode noise on a separate pseudo-element (see .page-surface). */
-  --surface-page:        #f4eee2;     /* fallback solid for non-supporting contexts */
+  --surface-page:        #f3edde;     /* warm cream — perceived page color (was #f4eee2) */
   --surface-card:        #faf6f0;     /* clean cream — precise operational surface */
-  --surface-card-priority: #f3edde;   /* sits between page and card — subtle differentiation */
+  --surface-card-priority: #ecddb8;   /* deeper warm cream — clear differentiation from warm page */
   --surface-card-soft:   #faf6f0;     /* unified with card — Stuck Orders alone earns differentiation */
   --surface-border:      rgba(92,67,42,0.10);   /* nearly imperceptible — color contrast does the work */
   --surface-border-priority: rgba(184,93,58,0.30);
@@ -41,9 +41,10 @@
   --card-shadow:         none;        /* color contrast separates cards; no shadow needed */
 
   /* Radial gradient — top-center light source, fading to deeper edges.
-     Replaces flat cream and supersedes the prior multi-radial highlight layers. */
+     Anchored on #f3edde (warm cream) — same family as Orders on Hold card.
+     The mix-blend texture overlay sits above this. */
   --page-grain:
-    radial-gradient(circle at top center, #f8f3ea 0%, #f4eee2 45%, #efe7d8 100%);
+    radial-gradient(circle at top center, #f8f3e4 0%, #f3edde 45%, #ebe0c5 100%);
 
   --h1-size:             2rem;        /* 32px */
   --h1-tracking:         -0.02em;
