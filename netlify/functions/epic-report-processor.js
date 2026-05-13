@@ -1887,8 +1887,14 @@ async function processCommittedStock(csvText) {
 //   RS FABRIC — fabric tracked independently in Wrangl (inconsistent ePIC units)
 //   RS COMP   — extrusions tracked independently in Wrangl (bundles vs pcs)
 //
-// Match strategy: StockCode → parts.stock_number (exact match).
-// Unmatched stock codes land in match_failures for manual review.
+// Match strategy (three-pass):
+//   1. epic_stock_code exact match  — fastest, most reliable
+//   2. vendor_part_number match     — catches parts where epic code differs from VPN
+//   3. description name match       — fallback for anything not yet coded
+// Unmatched rows land in match_failures for manual review.
+//
+// FW (faux blinds) are matched by name since vendor_part_number isn't
+// systematically populated for blinds. Components use epic_stock_code first.
 //
 // After a successful snapshot, parts.qty_on_hand, qty_committed, and
 // unit_cost are overwritten with ePIC's authoritative values for the
@@ -1897,33 +1903,50 @@ async function processCommittedStock(csvText) {
 const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP'])
 const SNAPSHOT_WRITE_CLASSES = new Set(['FW', 'RS PART'])
 
+// Strip accents, normalize whitespace, uppercase — used for name-based fallback
+function normalizeSnapName(s) {
+  if (!s) return ''
+  return s.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
+}
+
 async function processInventorySnapshot(csvText) {
   const rows = parseCSV(csvText)
   const today = new Date().toISOString().slice(0, 10)
   console.log(`  INVENTORY_SNAPSHOT: ${rows.length} rows for ${today}`)
 
-  // Load all active parts with stock_number for matching
+  // Load all active parts — need epic_stock_code, vendor_part_number, and name
   const allPartsRes = await sbQuery(
     'parts',
-    'select=id,name,stock_number,part_type,qty_on_hand,qty_committed&active=eq.true&limit=2000'
+    'select=id,name,part_type,epic_stock_code,vendor_part_number,qty_on_hand,qty_committed&active=eq.true&limit=2000'
   )
   const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
 
-  // Build lookup: stock_number.toUpperCase() → part
-  const stockToPartId = new Map()
+  // Build three lookup maps for the three-pass match strategy
+  const byEpicCode = new Map()   // epic_stock_code.upper → part_id
+  const byVpn      = new Map()   // vendor_part_number.upper → part_id
+  const byName     = new Map()   // normalizeSnapName(name) → part_id
+
   for (const p of allParts) {
-    if (p.stock_number) {
-      stockToPartId.set((p.stock_number || '').trim().toUpperCase(), p.id)
-    }
+    const ec = (p.epic_stock_code   || '').trim().toUpperCase()
+    const vp = (p.vendor_part_number|| '').trim().toUpperCase()
+    const nm = normalizeSnapName(p.name)
+    if (ec) byEpicCode.set(ec, p.id)
+    if (vp) byVpn.set(vp, p.id)
+    if (nm) byName.set(nm, p.id)
   }
-  console.log(`  Loaded ${allParts.length} active parts for matching`)
+  console.log(`  Loaded ${allParts.length} active parts (${byEpicCode.size} with epic_stock_code, ${byVpn.size} with vpn)`)
 
   const stats = {
     total: 0, skipped_class: 0,
-    matched: 0, unmatched: 0,
+    matched_code: 0, matched_vpn: 0, matched_name: 0, unmatched: 0,
   }
-  const snapshotRows  = []   // rows to upsert into epic_inventory_snapshot
-  const partUpdates   = {}   // part_id → { qty_on_hand, qty_committed, unit_cost }
+  const snapshotRows  = []
+  const partUpdates   = {}
   const failures      = []
 
   for (const row of rows) {
@@ -1963,11 +1986,29 @@ async function processInventorySnapshot(csvText) {
       continue
     }
 
-    // Only write FW and RS PART to parts table
-    const partId = stockToPartId.get(stockCode.toUpperCase()) || null
+    // Three-pass match for FW and RS PART
+    let partId    = null
+    let matchPass = null
+    const codeUp  = stockCode.toUpperCase()
+    const descUp  = normalizeSnapName(desc)
+
+    if (byEpicCode.has(codeUp)) {
+      partId = byEpicCode.get(codeUp)
+      matchPass = 'epic_code'
+      stats.matched_code++
+    } else if (byVpn.has(codeUp)) {
+      partId = byVpn.get(codeUp)
+      matchPass = 'vpn'
+      stats.matched_vpn++
+    } else if (byName.has(descUp)) {
+      partId = byName.get(descUp)
+      matchPass = 'name'
+      stats.matched_name++
+    } else {
+      stats.unmatched++
+    }
 
     if (partId) {
-      stats.matched++
       partUpdates[partId] = {
         qty_on_hand:        Math.round(qtyOnHand  * 10000) / 10000,
         qty_committed:      Math.round(qtyCommit  * 10000) / 10000,
@@ -1975,21 +2016,17 @@ async function processInventorySnapshot(csvText) {
         last_snapshot_sync: new Date().toISOString(),
         updated_at:         new Date().toISOString(),
       }
-    } else {
-      stats.unmatched++
-      if (SNAPSHOT_WRITE_CLASSES.has(stockClass)) {
-        // Only log match failures for classes we're supposed to write
-        failures.push({
-          source:       'inventory_snapshot',
-          work_order:   null,
-          stock_code:   stockCode,
-          description:  desc,
-          required_qty: qtyOnHand,
-          uom:          null,
-          stock_class:  stockClass,
-          reason:       `StockCode '${stockCode}' not found in parts.stock_number`,
-        })
-      }
+    } else if (SNAPSHOT_WRITE_CLASSES.has(stockClass)) {
+      failures.push({
+        source:       'inventory_snapshot',
+        work_order:   null,
+        stock_code:   stockCode,
+        description:  desc,
+        required_qty: qtyOnHand,
+        uom:          null,
+        stock_class:  stockClass,
+        reason:       `No match found via epic_stock_code, vendor_part_number, or description name`,
+      })
     }
 
     snapshotRows.push({
@@ -2054,10 +2091,10 @@ async function processInventorySnapshot(csvText) {
     records_skipped:        stats.skipped_class,
     records_auto_matched:   stats.matched,
     records_unmatched:      stats.unmatched,
-    notes: `Wrote ${partsUpdated} parts (FW+RS PART). Skipped ${stats.skipped_class} (RS FABRIC+RS COMP). ${failures.length} unmatched.`,
+    notes: `Wrote ${partsUpdated} parts via code/vpn/name match. Skipped ${stats.skipped_class} (RS FABRIC+RS COMP). ${failures.length} unmatched.`,
   }])
 
-  console.log(`  INVENTORY_SNAPSHOT done — matched: ${stats.matched}, unmatched: ${stats.unmatched}, skipped: ${stats.skipped_class}`)
+  console.log(`  INVENTORY_SNAPSHOT done — code: ${stats.matched_code}, vpn: ${stats.matched_vpn}, name: ${stats.matched_name}, unmatched: ${stats.unmatched}, skipped: ${stats.skipped_class}`)
   return stats.matched
 }
 
@@ -2081,17 +2118,23 @@ async function processOpenPOSnapshot(csvText) {
   const today = new Date().toISOString().slice(0, 10)
   console.log(`  OPEN_PO_SNAPSHOT: ${rows.length} rows for ${today}`)
 
-  // Load active parts with stock_number for matching
+  // Load active parts — match by epic_stock_code, then vpn, then name
   const allPartsRes = await sbQuery(
     'parts',
-    'select=id,name,stock_number&active=eq.true&limit=2000'
+    'select=id,name,epic_stock_code,vendor_part_number&active=eq.true&limit=2000'
   )
   const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
   const stockToPartId = new Map()
   for (const p of allParts) {
-    if (p.stock_number) {
-      stockToPartId.set((p.stock_number || '').trim().toUpperCase(), p.id)
-    }
+    const ec = (p.epic_stock_code    || '').trim().toUpperCase()
+    const vp = (p.vendor_part_number || '').trim().toUpperCase()
+    const nm = normalizeSnapName(p.name)
+    // Priority: epic_stock_code > vendor_part_number > name
+    // All three map to the same part_id — last write wins per key but
+    // since we only care about the lookup result, order doesn't matter
+    if (ec) stockToPartId.set(ec, p.id)
+    if (vp && !stockToPartId.has(vp)) stockToPartId.set(vp, p.id)
+    if (nm && !stockToPartId.has(nm)) stockToPartId.set(nm, p.id)
   }
 
   // Wipe previous snapshot (fresh load every run)
