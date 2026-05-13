@@ -1,17 +1,18 @@
 // =====================================================================
-// morning-digest-email.js
+// morning-digest-email.js (v2)
 // =====================================================================
-// Netlify scheduled function — runs at 12:15 AM (10 min after the snapshot).
+// Netlify scheduled function — runs at 6:10 AM Central.
 // Builds the daily diagnostic email and sends via Resend.
 //
-// Email contents:
-//   • ePIC sync status (did the four daily reports fire last night?)
-//   • Shipped yesterday (units + parts)
-//   • On-hand changes NOT explained by shipments / PO receipts / cuts
-//   • Stock status changes (new warnings, recoveries)
-//
-// Idempotent: writes to daily_digest_log; rerunning for the same day
-// re-sends (this is intentional during testing).
+// v2 fixes:
+//   - Float display: every number rounded to 2 decimals before printing
+//   - Anomaly rows show real part names (joined from parts table)
+//   - Threshold: requires BOTH unexplained AND actual/shipped to exceed 3
+//   - Smarter classification:
+//       • actual=0 AND shipped>0  → "Shipped from untracked stock"
+//       • shipped > actual drop   → "Shipped more than depleted ⚠"
+//       • shipped < actual drop   → "Depleted beyond logged shipments ⚠"
+//       • positive delta, no PO   → "PO receipt likely"
 // =====================================================================
 
 const SUPABASE_URL    = process.env.VITE_SUPABASE_URL
@@ -19,7 +20,7 @@ const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY
 const RESEND_API_KEY  = process.env.RESEND_API_KEY
 const WRANGL_FROM     = process.env.WRANGL_FROM_EMAIL || 'wrangl@berkelydistribution.com'
 const RECIPIENT       = 'david@berkelydistribution.com'
-const ANOMALY_TOLERANCE = 3   // ignore deltas smaller than this (float noise + tiny adjustments)
+const ANOMALY_TOLERANCE = 3   // both unexplained and movement must clear this
 
 export const config = {
   schedule: '10 11 * * *'   // 11:10 AM UTC = 6:10 AM Central during DST
@@ -33,42 +34,42 @@ export default async (request) => {
   const yestStr   = yesterday.toISOString().slice(0, 10)
 
   console.log('')
-  console.log('☕ Wrangl — Morning Digest Email')
+  console.log('☕ Wrangl — Morning Digest Email (v2)')
   console.log('────────────────────────────────────────')
   console.log(`  Comparing ${yestStr} → ${todayStr}`)
 
   try {
-    // 1) Load both snapshots
-    const [todaySnap, yestSnap] = await Promise.all([
+    // 1) Load both snapshots + parts directory + events
+    const [todaySnap, yestSnap, partsDir, events] = await Promise.all([
       fetchSnapshot(todayStr),
       fetchSnapshot(yestStr),
+      fetchPartsDirectory(),
+      fetchEventsSince(yestStr),
     ])
     console.log(`  Today's snapshot:    ${todaySnap.length} parts`)
     console.log(`  Yesterday's snapshot: ${yestSnap.length} parts`)
+    console.log(`  Parts directory:      ${Object.keys(partsDir).length} parts`)
+    console.log(`  Events:               ${events.length}`)
 
     if (todaySnap.length === 0) {
       throw new Error(`No snapshot for ${todayStr} — did nightly-inventory-snapshot run?`)
     }
 
-    // 2) Load shipment + receipt events since yesterday's snapshot
-    const events = await fetchEventsSince(yestStr)
-    console.log(`  Loaded ${events.length} inventory events`)
-
-    // 3) Check ePIC sync status (did the 4 emails come in last night?)
+    // 2) Check ePIC sync status
     const epicStatus = await checkEpicSyncs(yestStr, todayStr)
 
-    // 4) Build digest sections
+    // 3) Build sections
     const yestByPart = indexBy(yestSnap, 'part_id')
     const shipments  = events.filter(e => e.transaction_type === 'consume')
     const receipts   = events.filter(e => ['receive', 'po_receipt', 'container_receipt'].includes(e.transaction_type))
     const cuts       = events.filter(e => e.transaction_type === 'cut')
     const adjusts    = events.filter(e => ['adjust', 'count'].includes(e.transaction_type))
 
-    const shippedSummary = summarizeShipments(shipments, todaySnap, yestByPart)
-    const anomalies      = findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts)
+    const shippedSummary = summarizeShipments(shipments, todaySnap, yestByPart, partsDir)
+    const anomalies      = findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts, partsDir)
     const statusChanges  = findStatusChanges(todaySnap, yestByPart)
 
-    // 5) Build the email body
+    // 4) Build email
     const body = buildEmailBody({
       todayStr, yestStr,
       epicStatus,
@@ -79,13 +80,12 @@ export default async (request) => {
     })
 
     const subject = buildSubject(todayStr, shippedSummary, anomalies)
-
     console.log('  Subject:', subject)
 
-    // 6) Send via Resend
+    // 5) Send
     await sendEmail({ subject, body })
 
-    // 7) Log to digest log
+    // 6) Log
     await fetch(
       `${SUPABASE_URL}/rest/v1/daily_digest_log?on_conflict=digest_date`,
       {
@@ -95,7 +95,7 @@ export default async (request) => {
           digest_date:    todayStr,
           recipient:      RECIPIENT,
           parts_shipped:  shippedSummary.partsCount,
-          units_shipped:  shippedSummary.unitsTotal,
+          units_shipped:  Math.round(shippedSummary.unitsTotal),
           warnings_new:   statusChanges.newWarnings.length,
           warnings_clear: statusChanges.recovered.length,
           anomalies:      anomalies.length,
@@ -109,7 +109,6 @@ export default async (request) => {
       { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {
     console.error('  ❌ Digest failed:', err.message)
-    // Try to send a failure-notice email so silence doesn't go unnoticed
     try {
       await sendEmail({
         subject: `Wrangl Daily — ${todayStr} · DIGEST FAILED`,
@@ -119,6 +118,22 @@ export default async (request) => {
     return new Response(JSON.stringify({ ok: false, error: err.message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
+}
+
+// ─── Helpers — display formatting ─────────────────────────────────────────
+
+function r2(n) {
+  // Round to 2 decimals, suppress trailing zeros, and avoid float artifacts
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100
+}
+function rd(n) {
+  // Display: round to 2 decimals, strip trailing zeros (so 50.00 → "50", 25.03 → "25.03")
+  const rounded = r2(n)
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
+}
+function sign(n) {
+  if (n > 0) return '+'
+  return ''  // negative numbers carry their sign naturally
 }
 
 // ─── Data fetchers ────────────────────────────────────────────────────────
@@ -133,6 +148,17 @@ async function fetchSnapshot(date) {
   return await res.json()
 }
 
+async function fetchPartsDirectory() {
+  // Pull a name lookup so we can show real part names in the email
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/parts?active=eq.true&select=id,name,part_type,vendor`,
+    { headers: authHeaders() }
+  )
+  if (!res.ok) throw new Error(`Parts directory fetch failed: ${res.status}`)
+  const rows = await res.json()
+  return indexBy(rows, 'id')
+}
+
 async function fetchEventsSince(sinceDate) {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/inventory_transactions?created_at=gte.${sinceDate}T00:00:00` +
@@ -144,7 +170,6 @@ async function fetchEventsSince(sinceDate) {
 }
 
 async function checkEpicSyncs(yestStr, todayStr) {
-  // Look at epic_import_log for evidence each report came in overnight
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/epic_import_log?imported_at=gte.${yestStr}T20:00:00` +
     `&imported_at=lte.${todayStr}T12:00:00` +
@@ -166,12 +191,13 @@ async function checkEpicSyncs(yestStr, todayStr) {
 
 // ─── Analysis ─────────────────────────────────────────────────────────────
 
-function summarizeShipments(shipments, todaySnap, yestByPart) {
+function summarizeShipments(shipments, todaySnap, yestByPart, partsDir) {
   const byPart = new Map()
   for (const s of shipments) {
     const qty = Math.abs(Number(s.quantity) || 0)
     if (qty === 0) continue
-    const cur = byPart.get(s.part_id) || { name: s.parts?.name || '?', qty: 0 }
+    const name = s.parts?.name || partsDir[s.part_id]?.name || '?'
+    const cur = byPart.get(s.part_id) || { name, qty: 0 }
     cur.qty += qty
     byPart.set(s.part_id, cur)
   }
@@ -180,17 +206,17 @@ function summarizeShipments(shipments, todaySnap, yestByPart) {
   for (const [partId, info] of byPart) {
     const before = yestByPart[partId]?.qty_on_hand ?? null
     const after  = todayByPart[partId]?.qty_on_hand ?? null
-    rows.push({ name: info.name, shipped: info.qty, before, after })
+    rows.push({ name: info.name, shipped: r2(info.qty), before: r2(before), after: r2(after) })
   }
   rows.sort((a, b) => b.shipped - a.shipped)
   return {
     rows,
     partsCount:  rows.length,
-    unitsTotal:  rows.reduce((s, r) => s + r.shipped, 0),
+    unitsTotal:  r2(rows.reduce((s, r) => s + r.shipped, 0)),
   }
 }
 
-function findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts) {
+function findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts, partsDir) {
   // Sum explained deltas per part
   const explained = new Map()
   const add = (partId, delta) => {
@@ -204,24 +230,50 @@ function findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts
   const anomalies = []
   for (const t of todaySnap) {
     const y = yestByPart[t.part_id]
-    if (!y) continue   // new part introduced today — not an anomaly
+    if (!y) continue
     const actualDelta   = Number(t.qty_on_hand) - Number(y.qty_on_hand)
     const expectedDelta = explained.get(t.part_id) || 0
     const unexplained   = actualDelta - expectedDelta
-    if (Math.abs(unexplained) < ANOMALY_TOLERANCE) continue
 
-    let note = ''
-    if (unexplained > 0 && expectedDelta === 0) note = 'PO receipt likely'
-    else if (unexplained < 0 && expectedDelta === 0) note = 'No shipment logged ⚠'
-    else                                             note = 'Partial mismatch ⚠'
+    // Threshold: unexplained must clear tolerance AND something must actually
+    // have moved (either real on-hand change OR meaningful shipped/expected).
+    // This drops noise rows like "0 → 0 with 1 unit shipped".
+    const meaningfulMovement = Math.abs(actualDelta) >= ANOMALY_TOLERANCE
+                            || Math.abs(expectedDelta) >= ANOMALY_TOLERANCE
+    if (Math.abs(unexplained) < ANOMALY_TOLERANCE) continue
+    if (!meaningfulMovement) continue
+
+    // Classify
+    let note
+    if (actualDelta === 0 && expectedDelta < 0) {
+      // Shipped from a part whose on-hand is 0 and stayed 0 — Wrangl isn't tracking
+      note = 'Shipped from untracked stock'
+    } else if (unexplained < 0 && expectedDelta < 0) {
+      // We shipped, but the on-hand drop is larger than what we logged
+      note = 'Depleted beyond logged shipments ⚠'
+    } else if (unexplained > 0 && expectedDelta < 0) {
+      // We shipped, but on-hand barely dropped (or rose) — net receipt mixed in
+      note = 'Shipped less than expected ⚠'
+    } else if (unexplained > 0 && expectedDelta === 0) {
+      note = 'PO receipt likely'
+    } else if (unexplained < 0 && expectedDelta === 0) {
+      note = 'No shipment logged ⚠'
+    } else {
+      note = 'Partial mismatch ⚠'
+    }
+
+    const partInfo = partsDir[t.part_id] || {}
+    const displayName = partInfo.name || y.part_type || 'unknown part'
 
     anomalies.push({
       part_id: t.part_id,
-      name:    t.vendor ? `${y.part_type || ''} (${t.vendor})` : (y.part_type || ''),
-      before:  Number(y.qty_on_hand),
-      after:   Number(t.qty_on_hand),
-      delta:   actualDelta,
-      unexplained,
+      name:    displayName,
+      vendor:  partInfo.vendor || null,
+      before:  r2(Number(y.qty_on_hand)),
+      after:   r2(Number(t.qty_on_hand)),
+      delta:   r2(actualDelta),
+      shipped: r2(Math.abs(expectedDelta)),
+      unexplained: r2(unexplained),
       note,
     })
   }
@@ -230,8 +282,8 @@ function findAnomalies(todaySnap, yestByPart, shipments, receipts, cuts, adjusts
 }
 
 function findStatusChanges(todaySnap, yestByPart) {
-  const newWarnings = []   // healthy → warning/critical
-  const recovered   = []   // warning/critical → healthy
+  const newWarnings = []
+  const recovered   = []
   for (const t of todaySnap) {
     const y = yestByPart[t.part_id]
     if (!y) continue
@@ -252,7 +304,7 @@ function buildSubject(todayStr, shippedSummary, anomalies) {
   const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const parts = [`Wrangl Daily — ${dateLabel}`]
   if (shippedSummary.unitsTotal > 0) {
-    parts.push(`${shippedSummary.unitsTotal} units shipped`)
+    parts.push(`${rd(shippedSummary.unitsTotal)} units shipped`)
   } else {
     parts.push('quiet overnight')
   }
@@ -296,14 +348,14 @@ function buildEmailBody({ todayStr, yestStr, epicStatus, snapshotCount, shippedS
   if (shippedSummary.rows.length === 0) {
     lines.push('  Nothing shipped (or shipped reports not yet ingested)')
   } else {
-    lines.push(`  ${shippedSummary.unitsTotal} units across ${shippedSummary.partsCount} parts`)
+    lines.push(`  ${rd(shippedSummary.unitsTotal)} units across ${shippedSummary.partsCount} parts`)
     lines.push('')
     const top = shippedSummary.rows.slice(0, 12)
     for (const r of top) {
       const beforeAfter = (r.before != null && r.after != null)
-        ? `${r.before} → ${r.after}`
+        ? `${rd(r.before)} → ${rd(r.after)}`
         : '—'
-      lines.push(`  ${r.name.slice(0, 42).padEnd(44)} ${beforeAfter.padEnd(14)} -${r.shipped}`)
+      lines.push(`  ${(r.name || '?').slice(0, 42).padEnd(44)} ${beforeAfter.padEnd(16)} -${rd(r.shipped)}`)
     }
     if (shippedSummary.rows.length > 12) {
       lines.push(`  ... (${shippedSummary.rows.length - 12} more)`)
@@ -321,9 +373,9 @@ function buildEmailBody({ todayStr, yestStr, epicStatus, snapshotCount, shippedS
     lines.push(`  ${anomalies.length} parts flagged for review`)
     lines.push('')
     for (const a of anomalies.slice(0, 15)) {
-      const arrow  = a.delta > 0 ? '+' : ''
-      const change = `${a.before} → ${a.after} (${arrow}${a.delta})`
-      lines.push(`  ${(a.name || '?').slice(0, 40).padEnd(42)} ${change.padEnd(22)} ${a.note}`)
+      const change = `${rd(a.before)} → ${rd(a.after)} (${sign(a.delta)}${rd(a.delta)})`
+      const namePart = a.vendor ? `${a.name} (${a.vendor})` : a.name
+      lines.push(`  ${namePart.slice(0, 42).padEnd(44)} ${change.padEnd(24)} ${a.note}`)
     }
     if (anomalies.length > 15) {
       lines.push(`  ... (${anomalies.length - 15} more)`)
@@ -353,7 +405,7 @@ function buildEmailBody({ todayStr, yestStr, epicStatus, snapshotCount, shippedS
   return lines.join('\n')
 }
 
-// ─── Email + helpers ──────────────────────────────────────────────────────
+// ─── Email + utility helpers ──────────────────────────────────────────────
 
 async function sendEmail({ subject, body }) {
   const res = await fetch('https://api.resend.com/emails', {
