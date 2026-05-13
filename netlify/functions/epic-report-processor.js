@@ -18,6 +18,8 @@
 //   PARTS SHIPPED (daily)           → inventory_transactions (consume), qty_on_hand decrement
 //   FAUX SHIPPED (daily)            → inventory_transactions (consume), qty_on_hand decrement
 //   FABRIC COMPLETED (daily)        → inventory_transactions (consume), qty_on_hand decrement on fabrics (NEW)
+//   DAILY INVENTORY SNAPSHOT (daily) → parts.qty_on_hand + qty_committed (FW + RS PART), epic_inventory_snapshot (NEW)
+//   OPEN PO SNAPSHOT (daily)         → epic_open_pos, parts.qty_on_order (NEW)
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
@@ -1875,6 +1877,346 @@ async function processCommittedStock(csvText) {
   return processCommittedByClass(csvText, 'RS PART', 'component', 'committed_stock')
 }
 
+
+// ── Inventory snapshot processor ─────────────────────────────────────────────
+// Ingests the daily DAILY_INVENTORY_SNAPSHOT report from ePIC.
+// This is the authoritative source for qty_on_hand and qty_committed
+// for FW (faux blinds) and RS PART (components).
+//
+// INTENTIONALLY SKIPPED stock classes:
+//   RS FABRIC — fabric tracked independently in Wrangl (inconsistent ePIC units)
+//   RS COMP   — extrusions tracked independently in Wrangl (bundles vs pcs)
+//
+// Match strategy: StockCode → parts.stock_number (exact match).
+// Unmatched stock codes land in match_failures for manual review.
+//
+// After a successful snapshot, parts.qty_on_hand, qty_committed, and
+// unit_cost are overwritten with ePIC's authoritative values for the
+// matched part types. This eliminates event-replay drift.
+
+const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP'])
+const SNAPSHOT_WRITE_CLASSES = new Set(['FW', 'RS PART'])
+
+async function processInventorySnapshot(csvText) {
+  const rows = parseCSV(csvText)
+  const today = new Date().toISOString().slice(0, 10)
+  console.log(`  INVENTORY_SNAPSHOT: ${rows.length} rows for ${today}`)
+
+  // Load all active parts with stock_number for matching
+  const allPartsRes = await sbQuery(
+    'parts',
+    'select=id,name,stock_number,part_type,qty_on_hand,qty_committed&active=eq.true&limit=2000'
+  )
+  const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
+
+  // Build lookup: stock_number.toUpperCase() → part
+  const stockToPartId = new Map()
+  for (const p of allParts) {
+    if (p.stock_number) {
+      stockToPartId.set((p.stock_number || '').trim().toUpperCase(), p.id)
+    }
+  }
+  console.log(`  Loaded ${allParts.length} active parts for matching`)
+
+  const stats = {
+    total: 0, skipped_class: 0,
+    matched: 0, unmatched: 0,
+  }
+  const snapshotRows  = []   // rows to upsert into epic_inventory_snapshot
+  const partUpdates   = {}   // part_id → { qty_on_hand, qty_committed, unit_cost }
+  const failures      = []
+
+  for (const row of rows) {
+    const stockCode  = (row.StockCode  || '').trim()
+    const stockClass = (row.StockClass || '').trim()
+    const desc       = (row.Description || '').trim()
+    const qtyOnHand  = parseFloat(row.QtyOnHand   || 0) || 0
+    const qtyCommit  = parseFloat(row.QtyCommitted || 0) || 0
+    const qtyOnOrder = parseFloat(row.QtyOnOrder   || 0) || 0
+    const qtyAvail   = parseFloat(row.QtyAvailable || 0) || 0
+    const qtyBo      = parseFloat(row.QtyBackorder || 0) || 0
+    const unitCost   = parseFloat(row.UnitCost     || 0) || null
+    const lastAct    = (row.LastActivityDate || '').trim().slice(0, 10) || null
+    const warehouse  = (row.Warehouse || '').trim() || null
+
+    stats.total++
+
+    // Skip classes Wrangl maintains independently
+    if (SNAPSHOT_SKIP_CLASSES.has(stockClass)) {
+      stats.skipped_class++
+      snapshotRows.push({
+        stock_code:         stockCode,
+        description:        desc,
+        stock_class:        stockClass,
+        qty_on_hand:        qtyOnHand,
+        qty_committed:      qtyCommit,
+        qty_on_order:       qtyOnOrder,
+        qty_available:      qtyAvail,
+        qty_backorder:      qtyBo,
+        warehouse,
+        unit_cost:          unitCost,
+        last_activity_date: lastAct,
+        snapshot_date:      today,
+        part_id:            null,
+        match_status:       'skipped',
+      })
+      continue
+    }
+
+    // Only write FW and RS PART to parts table
+    const partId = stockToPartId.get(stockCode.toUpperCase()) || null
+
+    if (partId) {
+      stats.matched++
+      partUpdates[partId] = {
+        qty_on_hand:        Math.round(qtyOnHand  * 10000) / 10000,
+        qty_committed:      Math.round(qtyCommit  * 10000) / 10000,
+        unit_cost:          unitCost,
+        last_snapshot_sync: new Date().toISOString(),
+        updated_at:         new Date().toISOString(),
+      }
+    } else {
+      stats.unmatched++
+      if (SNAPSHOT_WRITE_CLASSES.has(stockClass)) {
+        // Only log match failures for classes we're supposed to write
+        failures.push({
+          source:       'inventory_snapshot',
+          work_order:   null,
+          stock_code:   stockCode,
+          description:  desc,
+          required_qty: qtyOnHand,
+          uom:          null,
+          stock_class:  stockClass,
+          reason:       `StockCode '${stockCode}' not found in parts.stock_number`,
+        })
+      }
+    }
+
+    snapshotRows.push({
+      stock_code:         stockCode,
+      description:        desc,
+      stock_class:        stockClass,
+      qty_on_hand:        qtyOnHand,
+      qty_committed:      qtyCommit,
+      qty_on_order:       qtyOnOrder,
+      qty_available:      qtyAvail,
+      qty_backorder:      qtyBo,
+      warehouse,
+      unit_cost:          unitCost,
+      last_activity_date: lastAct,
+      snapshot_date:      today,
+      part_id:            partId,
+      match_status:       partId ? 'matched' : 'unmatched',
+    })
+  }
+
+  // Upsert snapshot rows (idempotent by stock_code + snapshot_date)
+  const BATCH = 200
+  for (let i = 0; i < snapshotRows.length; i += BATCH) {
+    await fetch(`${SUPABASE_URL}/rest/v1/epic_inventory_snapshot`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(snapshotRows.slice(i, i + BATCH)),
+    })
+  }
+  console.log(`  Snapshot rows stored: ${snapshotRows.length}`)
+
+  // Write authoritative balances to parts (FW + RS PART only)
+  let partsUpdated = 0
+  for (const [partId, updates] of Object.entries(partUpdates)) {
+    await fetch(`${SUPABASE_URL}/rest/v1/parts?id=eq.${partId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(updates),
+    })
+    partsUpdated++
+  }
+  console.log(`  Parts updated: ${partsUpdated}`)
+
+  if (failures.length > 0) {
+    await sbInsert('match_failures', failures)
+  }
+
+  await sbInsert('epic_import_log', [{
+    import_type:            'inventory_snapshot',
+    records_total:          stats.total,
+    records_new:            stats.matched + stats.unmatched,
+    records_skipped:        stats.skipped_class,
+    records_auto_matched:   stats.matched,
+    records_unmatched:      stats.unmatched,
+    notes: `Wrote ${partsUpdated} parts (FW+RS PART). Skipped ${stats.skipped_class} (RS FABRIC+RS COMP). ${failures.length} unmatched.`,
+  }])
+
+  console.log(`  INVENTORY_SNAPSHOT done — matched: ${stats.matched}, unmatched: ${stats.unmatched}, skipped: ${stats.skipped_class}`)
+  return stats.matched
+}
+
+
+// ── Open PO snapshot processor ───────────────────────────────────────────────
+// Ingests the daily OPEN_PO_SNAPSHOT report from ePIC.
+// Provides authoritative "qty on order" per part — fills the gap left by
+// the inventory snapshot's QtyOnOrder column (which ePIC doesn't populate).
+//
+// Filter: only POs entered on or after 2026-04-01 (older POs are stale/noise).
+// Skip: MISC stock codes and blank stock codes.
+//
+// After ingestion, aggregates qty_backorder per matched part and writes
+// parts.qty_on_order so the reorder queue and dashboards reflect
+// what's actually coming from Rollease and Yamausa.
+
+const OPEN_PO_DATE_CUTOFF = '2026-04-01'
+
+async function processOpenPOSnapshot(csvText) {
+  const rows = parseCSV(csvText)
+  const today = new Date().toISOString().slice(0, 10)
+  console.log(`  OPEN_PO_SNAPSHOT: ${rows.length} rows for ${today}`)
+
+  // Load active parts with stock_number for matching
+  const allPartsRes = await sbQuery(
+    'parts',
+    'select=id,name,stock_number&active=eq.true&limit=2000'
+  )
+  const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
+  const stockToPartId = new Map()
+  for (const p of allParts) {
+    if (p.stock_number) {
+      stockToPartId.set((p.stock_number || '').trim().toUpperCase(), p.id)
+    }
+  }
+
+  // Wipe previous snapshot (fresh load every run)
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_open_pos?snapshot_date=neq.9999-01-01`, {
+    method: 'DELETE',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  })
+
+  const stats = { total: 0, before_cutoff: 0, skipped_misc: 0, matched: 0, unmatched: 0 }
+  const poRows      = []
+  const partOnOrder = {}  // part_id → total qty_backorder across all open PO lines
+
+  for (const row of rows) {
+    const poNumber    = (row.PONumber     || '').trim()
+    const enteredDate = (row.EnteredDate  || '').trim().slice(0, 10)
+    const stockCode   = (row.StockCode    || '').trim()
+    const vendorNum   = (row.VendorNumber || '').trim()
+    const vendorName  = (row.VendorName   || '').trim()
+    const poStatus    = (row.POStatus     || '').trim()
+    const lineNum     = parseInt(row.LineNumber || 0) || 0
+    const itemDesc    = (row.ItemDescription || '').trim()
+    const qtyOrdered  = parseFloat(row.QtyOrdered  || 0) || 0
+    const qtyReceived = parseFloat(row.QtyReceived || 0) || 0
+    const qtyBackord  = parseFloat(row.QtyBackorder || 0) || 0
+
+    stats.total++
+
+    // Date filter — discard pre-April 2026 POs
+    if (enteredDate < OPEN_PO_DATE_CUTOFF) {
+      stats.before_cutoff++
+      continue
+    }
+
+    // Skip MISC and blank stock codes
+    if (!stockCode || stockCode.toUpperCase() === 'MISC') {
+      stats.skipped_misc++
+      continue
+    }
+
+    const partId = stockToPartId.get(stockCode.toUpperCase()) || null
+    if (partId) {
+      stats.matched++
+      if (!partOnOrder[partId]) partOnOrder[partId] = 0
+      partOnOrder[partId] += qtyBackord
+    } else {
+      stats.unmatched++
+    }
+
+    poRows.push({
+      po_number:        poNumber,
+      vendor_number:    vendorNum,
+      vendor_name:      vendorName,
+      po_status:        poStatus,
+      entered_date:     enteredDate || null,
+      line_number:      lineNum,
+      stock_code:       stockCode,
+      item_description: itemDesc,
+      qty_ordered:      qtyOrdered,
+      qty_received:     qtyReceived,
+      qty_backorder:    qtyBackord,
+      part_id:          partId,
+      match_status:     partId ? 'matched' : 'unmatched',
+      snapshot_date:    today,
+    })
+  }
+
+  // Insert fresh PO rows
+  const BATCH = 200
+  for (let i = 0; i < poRows.length; i += BATCH) {
+    await sbInsert('epic_open_pos', poRows.slice(i, i + BATCH))
+  }
+  console.log(`  Open PO rows stored: ${poRows.length}`)
+
+  // Update parts.qty_on_order from aggregated backorder quantities
+  // First reset all to 0 for parts we track (FW + RS PART)
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/parts?part_type=in.(blind,component)&active=eq.true`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ qty_on_order: 0, updated_at: new Date().toISOString() }),
+    }
+  )
+
+  // Then write non-zero on-order quantities
+  let onOrderUpdated = 0
+  for (const [partId, qty] of Object.entries(partOnOrder)) {
+    if (qty <= 0) continue
+    await fetch(`${SUPABASE_URL}/rest/v1/parts?id=eq.${partId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        qty_on_order: Math.round(qty * 10000) / 10000,
+        updated_at:   new Date().toISOString(),
+      }),
+    })
+    onOrderUpdated++
+  }
+  console.log(`  parts.qty_on_order updated: ${onOrderUpdated} parts`)
+
+  await sbInsert('epic_import_log', [{
+    import_type:            'open_po_snapshot',
+    records_total:          stats.total,
+    records_new:            poRows.length,
+    records_skipped:        stats.before_cutoff + stats.skipped_misc,
+    records_auto_matched:   stats.matched,
+    records_unmatched:      stats.unmatched,
+    notes: `Cutoff ${OPEN_PO_DATE_CUTOFF}: kept ${poRows.length}, discarded ${stats.before_cutoff} pre-cutoff + ${stats.skipped_misc} MISC. Updated ${onOrderUpdated} parts.qty_on_order.`,
+  }])
+
+  console.log(`  OPEN_PO_SNAPSHOT done — kept: ${poRows.length}, discarded: ${stats.before_cutoff} (pre-cutoff) + ${stats.skipped_misc} (MISC), unmatched: ${stats.unmatched}`)
+  return poRows.length
+}
+
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 exports.handler = async function(event, context) {
   console.log('\n🤠 Berkely Wrangl — ePIC Report Processor')
@@ -2061,6 +2403,24 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processFabricCompleted(csvText)
           await markProcessed(messageId, 'fabric_completed', count)
+          results.processed++
+
+        } else if (subject.includes('DAILY INVENTORY SNAPSHOT') || subject.includes('DAILY_INVENTORY_SNAPSHOT')) {
+          // Authoritative daily inventory snapshot — overwrites qty_on_hand + qty_committed
+          // for FW and RS PART. Skips RS FABRIC and RS COMP (Wrangl maintains independently).
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processInventorySnapshot(csvText)
+          await markProcessed(messageId, 'inventory_snapshot', count)
+          results.processed++
+
+        } else if (subject.includes('OPEN PO SNAPSHOT') || subject.includes('OPEN_PO_SNAPSHOT')) {
+          // Daily open PO snapshot — populates epic_open_pos and parts.qty_on_order.
+          // Only POs entered on or after 2026-04-01 are ingested.
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processOpenPOSnapshot(csvText)
+          await markProcessed(messageId, 'open_po_snapshot', count)
           results.processed++
 
         } else {
