@@ -4,10 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 const STATUS_COLORS = {
-  active:   'bg-emerald-50 text-emerald-700 border-emerald-200',
-  prospect: 'bg-blue-50 text-blue-700 border-blue-200',
-  hold:     'bg-amber-50 text-amber-700 border-amber-200',
-  closed:   'bg-stone-50 text-stone-500 border-stone-200',
+  active:   'bg-status-healthy-soft text-status-healthy border-[rgba(91,140,90,0.25)]',
+  prospect: 'bg-status-info-soft text-status-info border-[rgba(74,107,140,0.25)]',
+  hold:     'bg-status-warning-soft text-status-warning border-[rgba(194,145,58,0.25)]',
+  closed:   'bg-[rgba(141,123,104,0.10)] text-ink-muted border-[var(--surface-border)]',
 }
 
 export default function CustomerList() {
@@ -92,8 +92,8 @@ export default function CustomerList() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-display font-bold text-stone-800">Customers</h2>
-          <p className="text-stone-400 text-sm mt-0.5">
+          <h1 className="tracking-tight">Customers</h1>
+          <p className="text-ink-muted text-sm mt-0.5">
             {isSalesRep ? `Your accounts · ${counts.all} total` : `${counts.all} total accounts`}
           </p>
         </div>
@@ -121,9 +121,13 @@ export default function CustomerList() {
               onClick={() => setStatus(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                 status === s
-                  ? 'bg-brand-dark text-white border-brand-dark'
-                  : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+                  ? 'text-white border-transparent'
+                  : 'text-ink-mid hover:border-[rgba(92,67,42,0.20)]'
               }`}
+              style={status === s
+                ? { background: '#2a1d10' }
+                : { background: 'var(--surface-card)', borderColor: 'var(--surface-border)' }
+              }
             >
               {s.charAt(0).toUpperCase() + s.slice(1)}
               <span className="ml-1.5 opacity-60">{counts[s] ?? ''}</span>
@@ -135,23 +139,23 @@ export default function CustomerList() {
       {/* Table */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-stone-400">Loading customers...</div>
+          <div className="p-12 text-center text-ink-muted">Loading customers...</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="text-4xl mb-3">◎</div>
-            <div className="text-stone-600 font-semibold mb-1">No customers found</div>
-            <div className="text-stone-400 text-sm">
+            <div className="text-4xl mb-3 text-ink-muted">◎</div>
+            <div className="text-ink-strong font-semibold mb-1">No customers found</div>
+            <div className="text-ink-muted text-sm">
               {search ? 'Try a different search term' : 'Add your first customer to get started'}
             </div>
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-stone-100 bg-stone-50">
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Account</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Primary Contact</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Territory</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-stone-400 uppercase tracking-wide">Status</th>
+              <tr className="border-b" style={{ borderColor: 'var(--surface-border)', background: 'rgba(141,123,104,0.06)' }}>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Account</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Primary Contact</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Territory</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-ink-muted uppercase tracking-wide">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -162,28 +166,29 @@ export default function CustomerList() {
                   <tr
                     key={c.id}
                     onClick={() => navigate(`/customers/${c.id}`)}
-                    className={`border-b border-stone-50 hover:bg-stone-50 cursor-pointer transition-colors ${
+                    className={`border-b hover:bg-black/[0.02] cursor-pointer transition-colors ${
                       i === filtered.length - 1 ? 'border-b-0' : ''
                     }`}
+                    style={{ borderColor: 'var(--surface-border)' }}
                   >
                     <td className="px-5 py-4">
-                      <div className="font-semibold text-stone-800 text-sm">{c.account_name}</div>
+                      <div className="font-semibold text-ink-strong text-sm">{c.account_name}</div>
                       {c.account_code && (
-                        <div className="text-xs text-stone-400 font-mono mt-0.5">{c.account_code}</div>
+                        <div className="text-xs text-ink-muted font-mono mt-0.5">{c.account_code}</div>
                       )}
                     </td>
                     <td className="px-5 py-4">
                       {primary ? (
                         <>
-                          <div className="text-sm text-stone-700">{primary.name}</div>
-                          <div className="text-xs text-stone-400 mt-0.5">{primary.email}</div>
+                          <div className="text-sm text-ink-mid">{primary.name}</div>
+                          <div className="text-xs text-ink-muted mt-0.5">{primary.email}</div>
                         </>
                       ) : (
-                        <span className="text-stone-300 text-sm">—</span>
+                        <span className="text-ink-muted text-sm">—</span>
                       )}
                     </td>
                     <td className="px-5 py-4">
-                      <span className="text-sm text-stone-500">{c.territory || '—'}</span>
+                      <span className="text-sm text-ink-mid">{c.territory || '—'}</span>
                     </td>
                     <td className="px-5 py-4">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_COLORS[c.status]}`}>
@@ -191,7 +196,7 @@ export default function CustomerList() {
                       </span>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <span className="text-stone-300 text-sm">→</span>
+                      <span className="text-ink-muted text-sm">→</span>
                     </td>
                   </tr>
                 )
