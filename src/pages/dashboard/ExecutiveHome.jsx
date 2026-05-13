@@ -297,22 +297,11 @@ export default function ExecutiveHome() {
       const creditOK = (wipData ?? []).filter(r => r.order_status === "CREDIT OK");
       const printed  = (wipData ?? []).filter(r => r.order_status === "PRINTED");
 
-      // ── Stuck orders ──────────────────────────────────────────────────
-      const wipStuck = (wipData ?? [])
-        .filter(w => ["CREDIT OK", "PO SENT", "PRINTED"].includes(w.order_status) && (w.days_in_status ?? 0) > 5)
-        .map(w => ({
-          key: `wip-${w.wo}`,
-          order_no: w.order_no,
-          customer: w.customer,
-          status_label: w.order_status?.toLowerCase(),
-          days: w.days_in_status ?? 0,
-          hold_reason: null,
-        }));
-
+      // ── Orders on Hold (Rene-placed general holds only) ─────────────────
       const { data: heldOrders } = await supabase.from("orders")
         .select("id, order_number, customer_name, hold_reason, hold_note, wrangl_status_set_at, updated_at")
         .eq("status", "on_hold");
-      const heldStuck = (heldOrders ?? []).map(o => {
+      const stuckOrders = (heldOrders ?? []).map(o => {
         const holdDate = o.wrangl_status_set_at || o.updated_at;
         const days = holdDate ? daysSince(holdDate) : 0;
         return {
@@ -323,9 +312,7 @@ export default function ExecutiveHome() {
           days,
           hold_reason: o.hold_reason,
         };
-      }).filter(o => o.days > 5);
-
-      const stuckOrders = [...wipStuck, ...heldStuck].sort((a, b) => b.days - a.days).slice(0, 5);
+      }).sort((a, b) => b.days - a.days).slice(0, 5);
 
       // ── Credit OK / HOLD ──────────────────────────────────────────────
       const { data: creditOkRowsData } = await supabase
@@ -600,43 +587,43 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Action Zone: Stuck Orders + Top Customers ──────────────────── */}
+        {/* ── Action Zone: Orders on Hold + Top Customers ─────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* Stuck Orders */}
+          {/* Orders on Hold */}
           <div className="card-priority p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-ink-strong">Stuck Orders</h3>
+                <h3 className="text-sm font-medium text-ink-strong">Orders on Hold</h3>
                 {stuckTotal > 0 && (
-                  <span className="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">
-                    {stuckTotal} flagged
+                  <span className="pill-warning">
+                    {stuckTotal} on hold
                   </span>
                 )}
               </div>
-              <button onClick={() => navigate("/orders?filter=stuck")}
+              <button onClick={() => navigate("/orders/on-hold")}
                 className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
             </div>
             {stuckTotal === 0 ? (
-              <p className="text-sm text-ink-muted text-center py-6">All clear ✓</p>
+              <p className="text-sm text-ink-muted text-center py-6">No orders on hold ✓</p>
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
-                  const isHold = o.status_label === 'on hold';
                   return (
                     <div key={o.key} onClick={() => navigate(`/orders?search=${o.order_no}`)}
-                      className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                      className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
                         <p className="text-xs text-ink-mid mt-0.5 truncate">
-                          {o.customer ?? "—"} · {o.status_label}
-                          {isHold && o.hold_reason && (
-                            <span className="text-red-600 ml-1">({o.hold_reason})</span>
+                          {o.customer ?? "—"}
+                          {o.hold_reason && (
+                            <span className="text-ink-muted"> · {o.hold_reason}</span>
                           )}
                         </p>
                       </div>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                        isHold ? "bg-red-50 text-red-700" :
-                        o.days >= 8 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
+                        o.days >= 8 ? "bg-status-critical-soft text-status-critical" :
+                        o.days >= 3 ? "bg-status-warning-soft text-status-warning" :
+                                      "bg-surface-page text-ink-mid"
                       }`}>
                         {o.days}d
                       </span>
