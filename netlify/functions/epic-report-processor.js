@@ -14,8 +14,10 @@
 //   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (RS PART only)
 //   COMMITTED EXTRUSIONS            → epic_committed_stock, qty_committed on extrusion parts (RS COMP)
 //   FAUX COMMITTED                  → epic_committed_stock, qty_committed on blind parts (FW)
+//   COMMITTED FABRIC                → epic_committed_fabric, qty_committed on fabric parts (NEW)
 //   PARTS SHIPPED (daily)           → inventory_transactions (consume), qty_on_hand decrement
 //   FAUX SHIPPED (daily)            → inventory_transactions (consume), qty_on_hand decrement
+//   FABRIC COMPLETED (daily)        → inventory_transactions (consume), qty_on_hand decrement on fabrics (NEW)
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
@@ -23,6 +25,29 @@ const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN
 const EPIC_SENDER         = process.env.EPIC_SENDER || 'noreply@picbusiness.com'
 const SUPABASE_URL        = process.env.VITE_SUPABASE_URL
 const SUPABASE_KEY        = process.env.SUPABASE_SERVICE_KEY
+
+// ── Fabric unit conversion ────────────────────────────────────────────────────
+// PIC reports fabric in square yards (SY). Wrangl stores fabric in linear inches.
+// All fabric assumed to be 118" wide. If a non-standard width is ever introduced,
+// this becomes a per-fabric field on the parts table.
+const FABRIC_ROLL_WIDTH_INCHES = 118
+const SY_TO_INCHES = (sy) => (parseFloat(sy) || 0) * 1296 / FABRIC_ROLL_WIDTH_INCHES
+const INCHES_TO_SY = (inches) => (parseFloat(inches) || 0) * FABRIC_ROLL_WIDTH_INCHES / 1296
+
+// ── Fabric name normalization ─────────────────────────────────────────────────
+// PIC emits descriptions like "LA ROCHELLE LF - TAUPE - FABRIC" or
+// "ORLEANS 1% - BLACK/BRONZE - SCREEN" with all-caps, no accents, and a trailing
+// type tag. Wrangl stores names like "La Rochelle LF - Taupe" or "Orléans 1% - Black/Bronze".
+// Normalize aggressively (strip accents, strip trailing tags, uppercase) before matching.
+function normalizeFabricName(s) {
+  if (!s) return ''
+  return s
+    .normalize('NFD')                       // decompose accents (é → e + combining mark)
+    .replace(/[\u0300-\u036f]/g, '')        // strip combining marks
+    .replace(/\s*-\s*(FABRIC|SCREEN)\s*$/i, '')  // strip trailing " - FABRIC" / " - SCREEN"
+    .trim()
+    .toUpperCase()
+}
 
 // ── Gmail helpers ─────────────────────────────────────────────────────────────
 async function getAccessToken() {
@@ -1333,6 +1358,337 @@ async function processPartsShipped(csvText, source) {
 }
 
 
+// ── Fabric processors ────────────────────────────────────────────────────────
+// Two reports, mirroring the component pattern but with one important difference:
+//   - COMMITTED_FABRIC  → bumps qty_committed only (touches epic_committed_fabric)
+//   - FABRIC_COMPLETED  → writes consume audit + decrements qty_on_hand
+//                         + relieves matching epic_committed_fabric rows (qty_committed)
+//
+// qty_on_hand is touched ONLY by the consumption handler. qty_committed is touched
+// ONLY by the commit/relief cycle. No double-decrement risk.
+//
+// Matching: ALWAYS by FabricDescription (never SKU), with smart normalization that
+// strips accents and trailing type tags (" - FABRIC" / " - SCREEN") before comparing.
+// Units: PIC reports SY; Wrangl stores linear inches. Conversion via SY_TO_INCHES().
+
+async function processCommittedFabric(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  COMMITTED_FABRIC: ${rows.length} rows`)
+
+  // Load all active fabric parts once
+  const fabricParts = await sbQuery(
+    'parts',
+    'select=id,name,pic_aliases&part_type=eq.fabric&active=eq.true&limit=1000'
+  )
+  const fabrics = Array.isArray(fabricParts) ? fabricParts : []
+  console.log(`  Loaded ${fabrics.length} active fabric parts for matching`)
+
+  // Build normalized lookup: NORMALIZED_NAME → part_id
+  // Includes both the primary name and any pic_aliases the part has.
+  const nameToFabricId = new Map()
+  for (const f of fabrics) {
+    const primary = normalizeFabricName(f.name)
+    if (primary) nameToFabricId.set(primary, f.id)
+    if (Array.isArray(f.pic_aliases)) {
+      for (const alias of f.pic_aliases) {
+        const ak = normalizeFabricName(alias)
+        if (ak) nameToFabricId.set(ak, f.id)
+      }
+    }
+  }
+
+  // FRESH SNAPSHOT — clear unrelieved fabric commitments and reset qty_committed
+  // on all fabrics. The current report becomes the new truth.
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_fabric?relieved=eq.false`, {
+    method:  'DELETE',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  })
+  await sbUpdate('parts', `part_type=eq.fabric&active=eq.true`, {
+    qty_committed: 0,
+    updated_at:    new Date().toISOString(),
+  })
+
+  const stats    = { new: 0, auto_matched: 0, unmatched: 0 }
+  const toCommit = {}  // part_id → total inches to commit
+  const failures = []
+
+  for (const row of rows) {
+    const wo          = (row.WorkOrder || '').trim()
+    const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
+    const customer    = (row.Customer || '').trim()
+    const description = (row.FabricDescription || '').trim()
+    const stockCode   = (row.FabricSKU || '').trim()    // captured for traceability only
+    const stockClass  = (row.StockClass || '').trim()
+    const qtySY       = parseFloat(row.TotalRequiredQty) || 0
+    const uom         = (row.UOM || '').trim()
+
+    if (!wo || !description || qtySY <= 0) continue
+
+    stats.new++
+
+    const qtyInches = SY_TO_INCHES(qtySY)
+
+    // Match by description (NEVER by SKU)
+    const normalized = normalizeFabricName(description)
+    const partId = nameToFabricId.get(normalized) || null
+
+    let matchStatus = 'unmatched'
+    let matchScore  = 0
+    if (partId) {
+      matchStatus = 'auto_matched'
+      matchScore  = 1.0
+      stats.auto_matched++
+      if (!toCommit[partId]) toCommit[partId] = 0
+      toCommit[partId] += qtyInches
+    } else {
+      stats.unmatched++
+      failures.push({
+        source:        'committed_fabric',
+        work_order:    wo,
+        shipped_date:  datePrinted,
+        stock_code:    stockCode,
+        description:   description,
+        required_qty:  qtySY,
+        uom:           uom,
+        stock_class:   stockClass,
+        reason:        'No matching fabric in Wrangl parts table (name lookup failed after normalization)',
+      })
+    }
+
+    // Insert the commitment row regardless — we want to track unmatched too
+    await sbInsert('epic_committed_fabric', [{
+      work_order:           wo,
+      date_printed:         datePrinted,
+      fabric_sku:           stockCode,
+      fabric_description:   description,
+      required_qty_sy:      qtySY,
+      required_qty_inches:  qtyInches,
+      uom,
+      stock_class:          stockClass,
+      part_id:              partId,
+      match_status:         matchStatus,
+      match_score:          matchScore,
+    }])
+  }
+
+  // Apply qty_committed bumps to matched fabrics (in inches)
+  for (const [partId, inches] of Object.entries(toCommit)) {
+    await sbUpdate('parts', `id=eq.${partId}`, {
+      qty_committed: Math.round(inches * 100) / 100,
+      updated_at:    new Date().toISOString(),
+    })
+  }
+
+  if (failures.length > 0) {
+    await sbInsert('match_failures', failures)
+  }
+
+  await sbInsert('epic_import_log', [{
+    import_type:            'committed_fabric',
+    records_total:          rows.length,
+    records_new:            stats.new,
+    records_auto_matched:   stats.auto_matched,
+    records_unmatched:      stats.unmatched,
+    notes:                  `Committed ${Object.keys(toCommit).length} fabrics`,
+  }])
+
+  console.log(`  COMMITTED_FABRIC done — new: ${stats.new}, matched: ${stats.auto_matched}, unmatched: ${stats.unmatched}`)
+  return stats.new
+}
+
+
+async function processFabricCompleted(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  FABRIC_COMPLETED: ${rows.length} rows`)
+
+  // Step 1: load all active fabric parts once
+  const fabricParts = await sbQuery(
+    'parts',
+    'select=id,name,pic_aliases,qty_on_hand,qty_committed&part_type=eq.fabric&active=eq.true&limit=1000'
+  )
+  const fabrics = Array.isArray(fabricParts) ? fabricParts : []
+  const nameToFabricId = new Map()
+  for (const f of fabrics) {
+    const primary = normalizeFabricName(f.name)
+    if (primary) nameToFabricId.set(primary, f.id)
+    if (Array.isArray(f.pic_aliases)) {
+      for (const alias of f.pic_aliases) {
+        const ak = normalizeFabricName(alias)
+        if (ak) nameToFabricId.set(ak, f.id)
+      }
+    }
+  }
+
+  // Step 2: idempotency — find existing consume rows already processed for fabric_completed
+  const existingTxnsRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/inventory_transactions?select=notes&transaction_type=eq.consume&reason=ilike.${encodeURIComponent('%fabric_completed%')}`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  )
+  const existingTxns = await existingTxnsRes.json()
+  const processedKeys = new Set()
+  for (const t of existingTxns) {
+    // Notes format: "Order #114777 · DID-G2 · LA ROCHELLE BO - BEIGE · qty 9.0888 SY"
+    const m = (t.notes || '').match(/Order #(\S+) · [^·]+ · (.+?) · qty/)
+    if (m) processedKeys.add(`${m[1].trim()}|${normalizeFabricName(m[2])}`)
+  }
+  console.log(`  FABRIC_COMPLETED: ${processedKeys.size} previously-processed rows will be skipped`)
+
+  const transactions = []
+  const partDeltas   = new Map()   // part_id → total inches consumed
+  const woTouched    = new Set()   // work orders we'll relieve commitments for
+  const failures     = []
+  let skipped = 0
+
+  for (const row of rows) {
+    const wo          = (row.WorkOrder || '').trim()
+    const shippedDate = (row.ShippedDate || '').trim()
+    const customer    = (row.Customer || '').trim()
+    const description = (row.FabricDescription || '').trim()
+    const stockCode   = (row.FabricSKU || '').trim()  // captured for traceability only
+    const stockClass  = (row.StockClass || '').trim()
+    const qtySY       = parseFloat(row.TotalRequiredQty) || 0
+    const uom         = (row.UOM || '').trim()
+
+    if (!wo || !description || qtySY <= 0) continue
+
+    const normalized = normalizeFabricName(description)
+    const idempotencyKey = `${wo}|${normalized}`
+    if (processedKeys.has(idempotencyKey)) {
+      skipped++
+      continue
+    }
+
+    const partId = nameToFabricId.get(normalized)
+    if (!partId) {
+      failures.push({
+        source:        'fabric_completed',
+        work_order:    wo,
+        shipped_date:  shippedDate || null,
+        stock_code:    stockCode,
+        description:   description,
+        required_qty:  qtySY,
+        uom:           uom,
+        stock_class:   stockClass,
+        reason:        'No matching fabric in Wrangl parts table (name lookup failed after normalization)',
+      })
+      continue
+    }
+
+    const qtyInches = SY_TO_INCHES(qtySY)
+
+    transactions.push({
+      transaction_type: 'consume',
+      part_id:          partId,
+      quantity:         -qtyInches,
+      reason:           'fabric_completed daily sync',
+      notes:            `Order #${wo} · ${customer} · ${description} · qty ${qtySY} ${uom}`,
+      created_at:       shippedDate ? `${shippedDate}T12:00:00Z` : new Date().toISOString(),
+    })
+
+    partDeltas.set(partId, (partDeltas.get(partId) || 0) + qtyInches)
+    woTouched.add(wo)
+  }
+
+  console.log(`  FABRIC_COMPLETED: ${transactions.length} new transactions, ${skipped} skipped, ${failures.length} unmatched`)
+
+  // Step 3: write consume audit rows
+  if (transactions.length > 0) {
+    const BATCH_SIZE = 500
+    for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+      const batch = transactions.slice(i, i + BATCH_SIZE)
+      await fetch(`${SUPABASE_URL}/rest/v1/inventory_transactions`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify(batch),
+      })
+    }
+  }
+
+  // Step 4: decrement qty_on_hand for each affected fabric (clamped at 0)
+  for (const [partId, inchesDelta] of partDeltas.entries()) {
+    const part = fabrics.find(f => f.id === partId)
+    if (!part) continue
+    const currentOnHand = Number(part.qty_on_hand) || 0
+    const newOnHand = Math.max(0, currentOnHand - inchesDelta)
+    await fetch(`${SUPABASE_URL}/rest/v1/parts?id=eq.${partId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        qty_on_hand: Math.round(newOnHand * 100) / 100,
+        updated_at:  new Date().toISOString(),
+      }),
+    })
+  }
+
+  // Step 5: relieve fabric commitments for the work orders we touched
+  // Reduces qty_committed by the committed amount (NOT the completed amount) so
+  // the commitment is fully released, even if completion overshoot/undershoot the BOM.
+  let relievedRows = 0
+  for (const wo of woTouched) {
+    const committed = await sbQuery(
+      'epic_committed_fabric',
+      `work_order=eq.${wo}&relieved=eq.false&part_id=not.is.null&select=id,part_id,required_qty_inches`
+    )
+    if (!Array.isArray(committed) || !committed.length) continue
+
+    // Sum per part
+    const partRelief = {}
+    for (const line of committed) {
+      const id = line.part_id
+      const inches = parseFloat(line.required_qty_inches) || 0
+      if (!partRelief[id]) partRelief[id] = 0
+      partRelief[id] += inches
+    }
+
+    // Subtract from qty_committed (clamped at 0)
+    for (const [partId, inches] of Object.entries(partRelief)) {
+      const parts = await sbQuery('parts', `id=eq.${partId}&select=qty_committed`)
+      if (!Array.isArray(parts) || !parts[0]) continue
+      const current = parseFloat(parts[0].qty_committed) || 0
+      const newCommitted = Math.max(0, current - inches)
+      await sbUpdate('parts', `id=eq.${partId}`, {
+        qty_committed: Math.round(newCommitted * 100) / 100,
+        updated_at:    new Date().toISOString(),
+      })
+    }
+
+    await sbUpdate('epic_committed_fabric', `work_order=eq.${wo}&relieved=eq.false`, {
+      relieved:      true,
+      relieved_date: new Date().toISOString().slice(0, 10),
+    })
+    relievedRows += committed.length
+  }
+
+  if (failures.length > 0) {
+    await sbInsert('match_failures', failures)
+  }
+
+  await sbInsert('epic_import_log', [{
+    import_type:            'fabric_completed',
+    records_total:          rows.length,
+    records_new:            transactions.length,
+    records_skipped:        skipped,
+    records_auto_matched:   transactions.length,
+    records_unmatched:      failures.length,
+    records_relieved:       relievedRows,
+    notes:                  `Released ${relievedRows} commitment lines across ${woTouched.size} work orders`,
+  }])
+
+  console.log(`  FABRIC_COMPLETED done: ${transactions.length} consume txns, ${partDeltas.size} fabrics decremented, ${relievedRows} commitment lines released`)
+  return transactions.length
+}
+
+
 // ── Committed stock processor (shared) ───────────────────────────────────────
 // Used by all three committed reports — scoped by stockClass and partType so
 // each report only touches its own slice of parts and committed stock rows.
@@ -1689,6 +2045,22 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCommittedStock(csvText)
           await markProcessed(messageId, 'committed_stock', count)
+          results.processed++
+
+        } else if (subject.includes('COMMITTED FABRIC') || subject.includes('COMMITTED_FABRIC')) {
+          // Fabric commitments — fabric reserved when BOM is printed
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCommittedFabric(csvText)
+          await markProcessed(messageId, 'committed_fabric', count)
+          results.processed++
+
+        } else if (subject.includes('FABRIC COMPLETED') || subject.includes('FABRIC_COMPLETED')) {
+          // Fabric consumption — fabric actually used when order ships
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processFabricCompleted(csvText)
+          await markProcessed(messageId, 'fabric_completed', count)
           results.processed++
 
         } else {
