@@ -297,10 +297,13 @@ export default function ExecutiveHome() {
       const creditOK = (wipData ?? []).filter(r => r.order_status === "CREDIT OK");
       const printed  = (wipData ?? []).filter(r => r.order_status === "PRINTED");
 
-      // ── Orders on Hold (Rene-placed general holds only) ─────────────────
+      // ── Orders on Hold ──────────────────────────────────────────────────
+      // Filters by hold_reason (not status) to capture both flavors:
+      //   • status='on_hold' + reason set → full hold (e.g., Pete)
+      //   • status=printed/in_production + reason set → operational hold (e.g., Rene waiting on parts)
       const { data: heldOrders } = await supabase.from("orders")
-        .select("id, order_number, customer_name, hold_reason, hold_note, wrangl_status_set_at, updated_at")
-        .eq("status", "on_hold");
+        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at")
+        .not("hold_reason", "is", null);
       const stuckOrders = (heldOrders ?? []).map(o => {
         const holdDate = o.wrangl_status_set_at || o.updated_at;
         const days = holdDate ? daysSince(holdDate) : 0;
@@ -308,7 +311,7 @@ export default function ExecutiveHome() {
           key: `held-${o.id}`,
           order_no: o.order_number,
           customer: o.customer_name,
-          status_label: 'on hold',
+          status_label: o.status,
           days,
           hold_reason: o.hold_reason,
         };
@@ -608,11 +611,19 @@ export default function ExecutiveHome() {
             ) : (
               <div className="space-y-1">
                 {data.stuckOrders.map(o => {
+                  const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
                   return (
                     <div key={o.key} onClick={() => navigate(`/orders?search=${o.order_no}`)}
                       className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
+                          {statusDisplay && (
+                            <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                              {statusDisplay}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-ink-mid mt-0.5 truncate">
                           {o.customer ?? "—"}
                           {o.hold_reason && (
