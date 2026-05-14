@@ -236,6 +236,7 @@ export default function ExecutiveHome() {
     printedTotal: { count: 0, units: 0 },
     fauxPrintedTotal: { count: 0, units: 0 },
     inProductionCount: 0,
+    inProductionUnits: 0,
     topCustomers: [],
     dailySales: [],
     todayEntered: 0, todayShipped: 0, todaySales: 0,
@@ -248,13 +249,15 @@ export default function ExecutiveHome() {
       const weekStartDate = weekStart.slice(0, 10);
       const today = new Date().toISOString().slice(0, 10);
 
-      // ── In Production count ──────────────────────────────────────────
+      // ── In Production count + units ───────────────────────────────────
       // PIC's flow is Printed → Invoiced (no in-between). Rene's "Start Production"
       // button in Wrangl creates this middle stage by setting wrangl_status only.
       // So wrangl_status is the sole source of truth here.
-      const { count: inProductionCount } = await supabase.from("orders")
-        .select("*", { count: "exact", head: true })
+      const { data: inProductionRows } = await supabase.from("orders")
+        .select("total_units")
         .eq("wrangl_status", "in_production");
+      const inProductionCount = (inProductionRows ?? []).length;
+      const inProductionUnits = (inProductionRows ?? []).reduce((s, r) => s + (r.total_units || 0), 0);
 
       // ── Avg days printed → invoiced (last 90 days) ───────────────────
       const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
@@ -559,6 +562,7 @@ export default function ExecutiveHome() {
         creditOk, creditOkRoller, creditOkFaux,
         printedTotal, fauxPrintedTotal,
         inProductionCount: inProductionCount ?? 0,
+        inProductionUnits: inProductionUnits ?? 0,
         topCustomers, dailySales,
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
@@ -660,7 +664,7 @@ export default function ExecutiveHome() {
           <PipelineTile
             label="In Production"
             value={loading ? "—" : data.inProductionCount}
-            sub={data.inProductionCount > 0 ? "cutting now" : null}
+            sub={data.inProductionUnits > 0 ? `${data.inProductionUnits.toLocaleString()} units` : (data.inProductionCount > 0 ? "cutting now" : null)}
             onClick={() => setInProductionModal(true)}
           />
           <PipelineTile
