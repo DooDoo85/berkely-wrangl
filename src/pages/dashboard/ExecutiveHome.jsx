@@ -157,7 +157,8 @@ function DailySalesChart({ data = [] }) {
             { key: 'other',  amt: d.other,  color: SEG.other },
           ].filter(s => s.amt > 0) : [];
           return (
-            <div key={i} className="flex-1 group relative flex flex-col items-stretch justify-end">
+            <div key={i} className="flex-1 group relative flex flex-col items-stretch justify-end"
+              style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%`, minHeight: hasData ? '4px' : '0' }}>
               {hasData && (
                 <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                   <div>{fmt$(d.sales)} · {d.orders} orders</div>
@@ -166,8 +167,8 @@ function DailySalesChart({ data = [] }) {
                   {d.other  > 0 && <div>Other: {fmt$(d.other)}</div>}
                 </div>
               )}
-              <div className="flex flex-col-reverse w-full rounded-t overflow-hidden transition-all"
-                style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%`, opacity: isToday ? 1 : 0.9 }}>
+              <div className="flex flex-col-reverse w-full h-full rounded-t overflow-hidden transition-all"
+                style={{ opacity: isToday ? 1 : 0.9 }}>
                 {segs.map(s => {
                   const segPct = (s.amt / d.sales) * 100;
                   return (
@@ -230,7 +231,7 @@ function ProductionFlowChart({ data = [] }) {
           const isToday = i === data.length - 1;
           const hasAny = d.started > 0 || d.invoiced > 0;
           return (
-            <div key={i} className="flex-1 group relative flex flex-col justify-end">
+            <div key={i} className="flex-1 group relative flex flex-col justify-end h-full">
               {hasAny && (
                 <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                   <div>Started: {d.started} orders · {d.started_units.toLocaleString()} units</div>
@@ -958,7 +959,7 @@ export default function ExecutiveHome() {
         {/* ── Flow Zone: Daily Sales + Production Flow ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Daily Sales — stacked by product line */}
-          <div className="card-soft p-5">
+          <div className="card-priority p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
@@ -967,7 +968,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Production Flow — started vs invoiced per day */}
-          <div className="card-soft p-5">
+          <div className="card-priority p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Production Flow · Last 5 Business Days</h3>
               <span className="text-xs text-ink-muted">started vs invoiced</span>
