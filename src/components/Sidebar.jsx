@@ -15,13 +15,6 @@ const EXEC_NAV = [
   { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
   { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
   {
-    type: 'group', label: 'Quotes', icon: '💬',
-    children: [
-      { to: '/quotes',     label: 'All Quotes' },
-      { to: '/quotes/new', label: 'New Quote'  },
-    ],
-  },
-  {
     type: 'group', label: 'Orders', icon: '📋',
     children: [
       { to: '/orders',         label: 'All Orders'     },
@@ -81,13 +74,6 @@ const SALES_NAV = [
   { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
   { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
   { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
-  {
-    type: 'group', label: 'Quotes', icon: '💬',
-    children: [
-      { to: '/quotes',     label: 'All Quotes' },
-      { to: '/quotes/new', label: 'New Quote'  },
-    ],
-  },
   {
     type: 'group', label: 'Orders', icon: '📋',
     children: [{ to: '/orders', label: 'All Orders' }],
