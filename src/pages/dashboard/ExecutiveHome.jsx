@@ -324,41 +324,7 @@ export default function ExecutiveHome() {
         };
       }).sort((a, b) => b.days - a.days).slice(0, 5);
 
-      // ── Overdue / Stuck Orders (printed status, past SLA) ───────────────
-      // Uses roller_wip.days_in_status (calendar days) as the source of truth,
-      // matching the existing PRINTED modal's badge logic. Per-customer SLA
-      // overrides allow contractual exceptions (e.g., Blindster 48-hour rule).
-      // Default threshold = 5 calendar days (matches modal's red badge).
-      const { data: slaRows } = await supabase
-        .from("customers")
-        .select("account_name, sla_print_to_ship_days")
-        .not("sla_print_to_ship_days", "is", null);
-      const slaMap = {};
-      (slaRows ?? []).forEach(r => {
-        if (r.account_name) slaMap[r.account_name.toUpperCase()] = Number(r.sla_print_to_ship_days);
-      });
-      const DEFAULT_PRINT_SLA = 5;
-      const overdueOrders = printed
-        .map(r => {
-          const customerKey = (r.customer || '').toUpperCase();
-          const slaDays = slaMap[customerKey] ?? DEFAULT_PRINT_SLA;
-          const daysOver = (r.days_in_status ?? 0) - slaDays;
-          return {
-            key: `overdue-${r.id || r.order_no}`,
-            order_id: r.id,
-            order_no: r.order_no,
-            customer: r.customer,
-            sidemark: r.sidemark,
-            days_in_status: r.days_in_status,
-            sla_days: slaDays,
-            days_over: daysOver,
-            total_units: r.total_units,
-            total_sales: r.total_sales,
-          };
-        })
-        .filter(r => r.days_over > 0)
-        .sort((a, b) => b.days_over - a.days_over)
-        .slice(0, 5);
+      // ── Overdue / Stuck Orders calculated after trulyIdleOrders loads below ──
 
       // ── Credit OK / HOLD ──────────────────────────────────────────────
       const { data: creditOkRowsData } = await supabase
@@ -374,20 +340,75 @@ export default function ExecutiveHome() {
       const creditOkFaux   = { count: creditAll.filter(r => r.product_line === 'faux').length };
       setCreditOkRows(creditOkRowsData ?? []);
 
-      // ── Faux printed count ────────────────────────────────────────────
-      const { data: fauxPrintedOrders } = await supabase
+      // ── Truly Printed (idle, ready for Rene to start) ─────────────────
+      // Source of truth for both PRINTED tiles + Stuck Orders. Uses Wrangl's
+      // status column (not epic_status) so we filter out:
+      //   • orders Rene has flipped to in_production (status='in_production')
+      //   • orders Wrangl knows are shipped but PIC hasn't caught up (status='invoiced')
+      //   • orders with any hold_reason (handled by Orders on Hold widget)
+      const { data: trulyIdleOrders } = await supabase
         .from("orders")
-        .select("order_number, total_units")
+        .select("id, order_number, customer_name, sidemark, total_units, order_amount, product_line, epic_status_date")
         .eq("status", "printed")
-        .eq("product_line", "faux");
-      const fauxPrintedTotal = {
-        count: (fauxPrintedOrders ?? []).length,
-        units: (fauxPrintedOrders ?? []).reduce((s, r) => s + (r.total_units || 0), 0),
-      };
+        .is("wrangl_status", null)
+        .is("hold_reason", null)
+        .order("epic_status_date", { ascending: false });
+      const idleRoller = (trulyIdleOrders ?? []).filter(r => r.product_line === 'roller');
+      const idleFaux   = (trulyIdleOrders ?? []).filter(r => r.product_line === 'faux');
+
       const printedTotal = {
-        count: printed.length,
-        units: printed.reduce((s, r) => s + (r.total_units || 0), 0),
+        count: idleRoller.length,
+        units: idleRoller.reduce((s, r) => s + (r.total_units || 0), 0),
       };
+      const fauxPrintedTotal = {
+        count: idleFaux.length,
+        units: idleFaux.reduce((s, r) => s + (r.total_units || 0), 0),
+      };
+
+      // ── Overdue / Stuck Orders (truly idle roller, past SLA) ──────────
+      // Now derived from idleRoller (orders table) instead of roller_wip.
+      // Only flags orders that are TRULY waiting on Rene — excludes:
+      //   • in_production (Rene's already cutting)
+      //   • on_hold (blocked by parts, tracked separately)
+      //   • status='invoiced' (Wrangl knows shipped but PIC stale)
+      // Per-customer SLA overrides: Blindster=2d, others default to 5d.
+      const { data: slaRows } = await supabase
+        .from("customers")
+        .select("account_name, sla_print_to_ship_days")
+        .not("sla_print_to_ship_days", "is", null);
+      const slaMap = {};
+      (slaRows ?? []).forEach(r => {
+        if (r.account_name) slaMap[r.account_name.toUpperCase()] = Number(r.sla_print_to_ship_days);
+      });
+      const DEFAULT_PRINT_SLA = 5;
+      const calcCalendarDays = (dateStr) => {
+        if (!dateStr) return 0;
+        const start = new Date(dateStr);
+        const end = new Date();
+        return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+      };
+      const overdueOrders = idleRoller
+        .map(r => {
+          const customerKey = (r.customer_name || '').toUpperCase();
+          const slaDays = slaMap[customerKey] ?? DEFAULT_PRINT_SLA;
+          const daysInStatus = calcCalendarDays(r.epic_status_date);
+          const daysOver = daysInStatus - slaDays;
+          return {
+            key: `overdue-${r.id || r.order_number}`,
+            order_id: r.id,
+            order_no: r.order_number,
+            customer: r.customer_name,
+            sidemark: r.sidemark,
+            days_in_status: daysInStatus,
+            sla_days: slaDays,
+            days_over: daysOver,
+            total_units: r.total_units,
+            total_sales: r.order_amount,
+          };
+        })
+        .filter(r => r.days_over > 0)
+        .sort((a, b) => b.days_over - a.days_over)
+        .slice(0, 5);
 
       // ── Product line sales ────────────────────────────────────────────
       const { data: productLines } = await supabase.from("product_line_sales").select("*");
@@ -517,11 +538,24 @@ export default function ExecutiveHome() {
         .gte("epic_status_date", today);
       const todaySales = (salesByDay[today]?.sales) || 0;
 
+      // Map idleRoller into roller_wip modal column shape (order_no, customer, etc.)
+      // so the existing PRINTED modal renders the same 7 truly-idle rows the tile shows.
+      const printedForModal = idleRoller.map(r => ({
+        id: r.id,
+        order_no: r.order_number,
+        customer: r.customer_name,
+        sidemark: r.sidemark,
+        days_in_status: calcCalendarDays(r.epic_status_date),
+        total_units: r.total_units,
+        total_sales: r.order_amount,
+        order_status: 'PRINTED',
+      }));
+
       setData({
         stuckOrders, avgDays, repOrders, faux, roller,
         overdueOrders,
         fauxSpark, rollerSpark,
-        wip: { creditOK, printed },
+        wip: { creditOK, printed: printedForModal },
         creditOk, creditOkRoller, creditOkFaux,
         printedTotal, fauxPrintedTotal,
         inProductionCount: inProductionCount ?? 0,
