@@ -5,7 +5,7 @@ import { useAuth } from '../../components/AuthProvider'
 import ActivityForm from './ActivityForm'
 
 const TYPE_STYLES = {
-  call:              { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '☎️', label: 'Other Call' },
+  call:              { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '☎️', label: 'Customer Call' },
   cold_call:         { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞', label: 'Cold Call' },
   email:             { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️', label: 'Email' },
   note:              { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝', label: 'Note' },
