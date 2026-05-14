@@ -39,7 +39,6 @@ import OrderForm from './pages/orders/OrderForm'
 
 // Reports
 import ProductionDashboard from './pages/reports/ProductionDashboard'
-import FauxUsage from './pages/reports/FauxUsage'
 import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 import SalesActivityReport from './pages/reports/SalesActivityReport'
@@ -138,13 +137,13 @@ function AppRoutes() {
         <Route path="/reports/production"       element={<ProductionDashboard />} />
         <Route path="/reports/sales-activity"   element={<SalesActivityReport />} />
         <Route path="/reports/inventory-health" element={<InventoryHealth />} />
-        <Route path="/reports/faux-usage"       element={<FauxUsage />} />
         <Route path="/reports/order-status"     element={<OrderStatusDashboard />} />
 
         {/* Legacy redirects — preserve bookmarks */}
         <Route path="/reports/sales-intelligence" element={<Navigate to="/reports/sales-activity" replace />} />
         <Route path="/reports/rep-activity"       element={<Navigate to="/reports/sales-activity" replace />} />
-        <Route path="/reports/inventory-velocity" element={<Navigate to="/reports/faux-usage"     replace />} />
+        <Route path="/reports/faux-usage"          element={<Navigate to="/inventory/faux-blinds" replace />} />
+        <Route path="/reports/inventory-velocity" element={<Navigate to="/inventory/faux-blinds" replace />} />
 
         {/* Quotes */}
         <Route path="/quotes" element={<QuotesList />} />
