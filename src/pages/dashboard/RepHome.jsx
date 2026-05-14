@@ -221,7 +221,7 @@ export default function RepHome() {
       sample_books:       3,
       cold_calls:         0,
     },
-    pipeline: { quotes: 0, printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 },
+    pipeline: { printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 },
     followUps: [],
     upcomingTasks: [],
   });
@@ -247,7 +247,6 @@ export default function RepHome() {
         scheduledMeetingsRes,
         coldCallsRes,
         sampleBooksRes,
-        quotesRes,
         printedRes,
         inProdRes,
         onHoldRes,
@@ -270,12 +269,6 @@ export default function RepHome() {
 
         supabase.from("activities").select("id", { count: "exact", head: true })
           .eq("user_id", profile.id).eq("activity_type", "sample_book").gte("activity_date", weekStartDate),
-
-        // QUOTES — orders in quote status
-        repName
-          ? supabase.from("orders").select("id", { count: "exact", head: true })
-              .eq("sales_rep", repName).eq("status", "quote")
-          : Promise.resolve({ count: 0 }),
 
         // PRINTED — orders in printed status (excluding wrangl-overridden in_production)
         repName
@@ -329,7 +322,6 @@ export default function RepHome() {
         },
         goals: goalsMap,
         pipeline: {
-          quotes:       quotesRes.count ?? 0,
           printed:      printedRes.count ?? 0,
           inProduction: inProdRes.count ?? 0,
           onHold:       onHoldRes.count ?? 0,
@@ -419,9 +411,8 @@ export default function RepHome() {
       {/* Quick Actions */}
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
-        <div className="grid grid-cols-4 gap-3">
-          <QuickAction primary icon={Icon.plus}      label="New Quote"    onClick={() => navigate("/quotes/new")} />
-          <QuickAction         icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
+        <div className="grid grid-cols-3 gap-3">
+          <QuickAction primary icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
           <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/activities")} />
           <QuickAction         icon={Icon.userPlus}  label="New Customer" onClick={() => navigate("/customers/new")} />
         </div>
@@ -492,15 +483,7 @@ export default function RepHome() {
       {/* My Pipeline */}
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
-        <div className="grid grid-cols-5 gap-4">
-          <PipelineCard
-            label="Quotes"
-            count={data.pipeline.quotes}
-            dotStyle={{ backgroundColor: '#8d7b68' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-gold-soft text-ink-muted">{Icon.fileText}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders?status=quote")}
-          />
+        <div className="grid grid-cols-4 gap-4">
           <PipelineCard
             label="Printed"
             count={data.pipeline.printed}
