@@ -1919,10 +1919,12 @@ async function processInventorySnapshot(csvText) {
   const today = new Date().toISOString().slice(0, 10)
   console.log(`  INVENTORY_SNAPSHOT: ${rows.length} rows for ${today}`)
 
-  // Load all active parts — need epic_stock_code, vendor_part_number, and name
+  // Load all parts (active + inactive) — discontinued components still need authoritative
+  // qty syncs from PIC so they don't pollute the unmatched-rows audit. Inactive parts are
+  // already filtered out of every UI screen via active=true, so writing to them is invisible.
   const allPartsRes = await sbQuery(
     'parts',
-    'select=id,name,part_type,epic_stock_code,vendor_part_number,qty_on_hand,qty_committed&active=eq.true&limit=2000'
+    'select=id,name,part_type,epic_stock_code,vendor_part_number,qty_on_hand,qty_committed,active&limit=2000'
   )
   const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
 
@@ -2133,10 +2135,10 @@ async function processOpenPOSnapshot(csvText) {
   const today = new Date().toISOString().slice(0, 10)
   console.log(`  OPEN_PO_SNAPSHOT: ${rows.length} rows for ${today}`)
 
-  // Load active parts — match by epic_stock_code, then vpn, then name
+  // Load all parts (active + inactive) — open POs for discontinued components still matter for visibility
   const allPartsRes = await sbQuery(
     'parts',
-    'select=id,name,epic_stock_code,vendor_part_number&active=eq.true&limit=2000'
+    'select=id,name,epic_stock_code,vendor_part_number,active&limit=2000'
   )
   const allParts = Array.isArray(allPartsRes) ? allPartsRes : []
   const stockToPartId = new Map()
