@@ -212,75 +212,99 @@ function DailySalesChart({ data = [] }) {
   );
 }
 
-// ─── Production Flow chart — Started vs Invoiced per day ──────────────────────
+// ─── Production Flow — Started vs Invoiced per day (grid readout) ──────────────────
 
 function ProductionFlowChart({ data = [] }) {
   if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
-  // Scale to whichever metric is larger across days; sqrt for outlier compression
-  const allValues = data.flatMap(d => [d.started, d.invoiced]);
-  const sqrtMax = Math.max(...allValues.map(v => Math.sqrt(Math.max(0, v))), 1);
-  const COLOR_STARTED = '#c2913a';   // gold — work-in
-  const COLOR_INVOICED = '#5b8c5a';  // green — work-out
+
+  // Week totals
+  const totalStartedOrders   = data.reduce((s, d) => s + (d.started || 0), 0);
+  const totalStartedUnits    = data.reduce((s, d) => s + (d.started_units || 0), 0);
+  const totalInvoicedOrders  = data.reduce((s, d) => s + (d.invoiced || 0), 0);
+  const totalInvoicedUnits   = data.reduce((s, d) => s + (d.invoiced_units || 0), 0);
+
+  // Net WIP delta: positive = invoicing faster than starting (queue draining)
+  const netDelta = totalInvoicedOrders - totalStartedOrders;
 
   return (
-    <div className="px-1">
-      <div className="flex items-end gap-3 h-36 mb-2">
-        {data.map((d, i) => {
-          const startedPct = (Math.sqrt(d.started) / sqrtMax) * 100;
-          const invoicedPct = (Math.sqrt(d.invoiced) / sqrtMax) * 100;
-          const isToday = i === data.length - 1;
-          const hasAny = d.started > 0 || d.invoiced > 0;
-          return (
-            <div key={i} className="flex-1 group relative flex flex-col justify-end h-full">
-              {hasAny && (
-                <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                  <div>Started: {d.started} orders · {d.started_units.toLocaleString()} units</div>
-                  <div>Invoiced: {d.invoiced} orders · {d.invoiced_units.toLocaleString()} units</div>
-                </div>
-              )}
-              <div className="flex items-end gap-1 h-full">
-                <div className="flex-1 rounded-t transition-all"
-                  style={{
-                    height: `${Math.max(startedPct, d.started > 0 ? 6 : 0)}%`,
-                    background: COLOR_STARTED,
-                    opacity: isToday ? 1 : 0.85,
-                  }}
-                />
-                <div className="flex-1 rounded-t transition-all"
-                  style={{
-                    height: `${Math.max(invoicedPct, d.invoiced > 0 ? 6 : 0)}%`,
-                    background: COLOR_INVOICED,
-                    opacity: isToday ? 1 : 0.85,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-3 mb-0.5">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[10px] tabular-nums">
-            <div className="text-ink-strong font-semibold">{d.started}/{d.invoiced}</div>
-            <div className="text-ink-muted">{d.invoiced_units.toLocaleString()}u</div>
+    <div className="space-y-4">
+      {/* Week totals — two pills */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(194,145,58,0.10)' }}>
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#c2913a' }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Started</div>
+            <div className="text-base font-bold text-ink-strong tabular-nums leading-tight">{totalStartedOrders} <span className="text-xs text-ink-muted font-medium">orders</span></div>
+            <div className="text-[10px] text-ink-mid tabular-nums">{totalStartedUnits.toLocaleString()} units</div>
           </div>
-        ))}
-      </div>
-      <div className="flex gap-3 mb-3">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[10px] text-ink-mid font-medium">
-            {i === data.length - 1 ? "Today" : d.label}
+        </div>
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(91,140,90,0.10)' }}>
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#5b8c5a' }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Invoiced</div>
+            <div className="text-base font-bold text-ink-strong tabular-nums leading-tight">{totalInvoicedOrders} <span className="text-xs text-ink-muted font-medium">orders</span></div>
+            <div className="text-[10px] text-ink-mid tabular-nums">{totalInvoicedUnits.toLocaleString()} units</div>
           </div>
-        ))}
+        </div>
       </div>
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-4 text-[10px] text-ink-mid">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm" style={{ background: COLOR_STARTED }} />Started
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm" style={{ background: COLOR_INVOICED }} />Invoiced
-        </span>
+
+      {/* Per-day grid */}
+      <div className="border-t pt-3" style={{ borderColor: 'var(--surface-border)' }}>
+        <table className="w-full text-xs tabular-nums">
+          <thead>
+            <tr className="text-ink-muted">
+              <th className="text-left font-medium text-[10px] uppercase tracking-wider pb-1.5">Day</th>
+              {data.map((d, i) => (
+                <th key={i} className="text-right font-medium text-[10px] uppercase tracking-wider pb-1.5">
+                  {i === data.length - 1 ? 'Today' : d.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="text-ink-mid py-1.5 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c2913a' }} />
+                Started
+              </td>
+              {data.map((d, i) => (
+                <td key={i} className="text-right py-1.5 text-ink-strong">
+                  {d.started > 0 ? (
+                    <span><span className="font-semibold">{d.started}</span> <span className="text-ink-muted">· {d.started_units.toLocaleString()}u</span></span>
+                  ) : (
+                    <span className="text-ink-muted">—</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+            <tr>
+              <td className="text-ink-mid py-1.5 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#5b8c5a' }} />
+                Invoiced
+              </td>
+              {data.map((d, i) => (
+                <td key={i} className="text-right py-1.5 text-ink-strong">
+                  {d.invoiced > 0 ? (
+                    <span><span className="font-semibold">{d.invoiced}</span> <span className="text-ink-muted">· {d.invoiced_units.toLocaleString()}u</span></span>
+                  ) : (
+                    <span className="text-ink-muted">—</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Net flow indicator */}
+      <div className="border-t pt-3 text-[11px] text-ink-mid" style={{ borderColor: 'var(--surface-border)' }}>
+        {netDelta > 0 ? (
+          <span>Net flow: <span className="text-status-healthy font-semibold">+{netDelta} draining</span> · invoicing faster than starting</span>
+        ) : netDelta < 0 ? (
+          <span>Net flow: <span className="text-status-warning font-semibold">{netDelta} building</span> · starting faster than invoicing</span>
+        ) : (
+          <span>Net flow: <span className="font-semibold">balanced</span></span>
+        )}
       </div>
     </div>
   );
