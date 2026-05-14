@@ -138,36 +138,148 @@ function DailySalesChart({ data = [] }) {
   // Sqrt scaling — compresses outliers, expands small days
   const sqrtSales = data.map(d => Math.sqrt(Math.max(0, d.sales)));
   const maxSqrt = Math.max(...sqrtSales, 1);
+  const SEG = {
+    roller: '#b85d3a',  // accent clay (matches roller tile)
+    faux:   '#c2913a',  // accent gold (matches faux tile)
+    other:  '#8c7758',  // muted brown
+  };
   return (
     <div className="px-1">
-      <div className="flex items-end gap-3 h-32 mb-2">
+      <div className="flex items-end gap-3 h-36 mb-2">
         {data.map((d, i) => {
           const pct = maxSqrt > 0 ? (sqrtSales[i] / maxSqrt) * 100 : 0;
           const isToday = i === data.length - 1;
           const hasData = d.sales > 0;
+          // Within the bar, split into three segments proportional to product line
+          const segs = hasData ? [
+            { key: 'roller', amt: d.roller, color: SEG.roller },
+            { key: 'faux',   amt: d.faux,   color: SEG.faux },
+            { key: 'other',  amt: d.other,  color: SEG.other },
+          ].filter(s => s.amt > 0) : [];
           return (
-            <div key={i} className="flex-1 group relative flex flex-col justify-end"
-              style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%` }}>
+            <div key={i} className="flex-1 group relative flex flex-col items-stretch justify-end">
               {hasData && (
-                <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                  {fmt$(d.sales)} · {d.orders} orders
+                <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                  <div>{fmt$(d.sales)} · {d.orders} orders</div>
+                  {d.roller > 0 && <div>Roller: {fmt$(d.roller)}</div>}
+                  {d.faux   > 0 && <div>Faux: {fmt$(d.faux)}</div>}
+                  {d.other  > 0 && <div>Other: {fmt$(d.other)}</div>}
                 </div>
               )}
-              <div className="w-full h-full rounded-t transition-all"
-                style={{
-                  background: isToday ? '#b85d3a' : hasData ? '#cfa370' : 'transparent',
-                }}
-              />
+              <div className="flex flex-col-reverse w-full rounded-t overflow-hidden transition-all"
+                style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%`, opacity: isToday ? 1 : 0.9 }}>
+                {segs.map(s => {
+                  const segPct = (s.amt / d.sales) * 100;
+                  return (
+                    <div key={s.key}
+                      style={{ height: `${segPct}%`, background: s.color }}
+                    />
+                  );
+                })}
+              </div>
             </div>
           );
         })}
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-3 mb-1">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 text-center text-[11px] text-ink-strong font-semibold tabular-nums">
+            {d.sales > 0 ? fmt$(d.sales) : '—'}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-3 mb-3">
         {data.map((d, i) => (
           <div key={i} className="flex-1 text-center text-[10px] text-ink-mid font-medium">
             {i === data.length - 1 ? "Today" : d.label}
           </div>
         ))}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 text-[10px] text-ink-mid">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.roller }} />Roller
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.faux }} />Faux
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.other }} />Other
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Production Flow chart — Started vs Invoiced per day ──────────────────────
+
+function ProductionFlowChart({ data = [] }) {
+  if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
+  // Scale to whichever metric is larger across days; sqrt for outlier compression
+  const allValues = data.flatMap(d => [d.started, d.invoiced]);
+  const sqrtMax = Math.max(...allValues.map(v => Math.sqrt(Math.max(0, v))), 1);
+  const COLOR_STARTED = '#c2913a';   // gold — work-in
+  const COLOR_INVOICED = '#5b8c5a';  // green — work-out
+
+  return (
+    <div className="px-1">
+      <div className="flex items-end gap-3 h-36 mb-2">
+        {data.map((d, i) => {
+          const startedPct = (Math.sqrt(d.started) / sqrtMax) * 100;
+          const invoicedPct = (Math.sqrt(d.invoiced) / sqrtMax) * 100;
+          const isToday = i === data.length - 1;
+          const hasAny = d.started > 0 || d.invoiced > 0;
+          return (
+            <div key={i} className="flex-1 group relative flex flex-col justify-end">
+              {hasAny && (
+                <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                  <div>Started: {d.started} orders · {d.started_units.toLocaleString()} units</div>
+                  <div>Invoiced: {d.invoiced} orders · {d.invoiced_units.toLocaleString()} units</div>
+                </div>
+              )}
+              <div className="flex items-end gap-1 h-full">
+                <div className="flex-1 rounded-t transition-all"
+                  style={{
+                    height: `${Math.max(startedPct, d.started > 0 ? 6 : 0)}%`,
+                    background: COLOR_STARTED,
+                    opacity: isToday ? 1 : 0.85,
+                  }}
+                />
+                <div className="flex-1 rounded-t transition-all"
+                  style={{
+                    height: `${Math.max(invoicedPct, d.invoiced > 0 ? 6 : 0)}%`,
+                    background: COLOR_INVOICED,
+                    opacity: isToday ? 1 : 0.85,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-3 mb-0.5">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 text-center text-[10px] tabular-nums">
+            <div className="text-ink-strong font-semibold">{d.started}/{d.invoiced}</div>
+            <div className="text-ink-muted">{d.invoiced_units.toLocaleString()}u</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-3 mb-3">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 text-center text-[10px] text-ink-mid font-medium">
+            {i === data.length - 1 ? "Today" : d.label}
+          </div>
+        ))}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 text-[10px] text-ink-mid">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm" style={{ background: COLOR_STARTED }} />Started
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm" style={{ background: COLOR_INVOICED }} />Invoiced
+        </span>
       </div>
     </div>
   );
@@ -239,6 +351,7 @@ export default function ExecutiveHome() {
     inProductionUnits: 0,
     topCustomers: [],
     dailySales: [],
+    productionFlow: [],
     todayEntered: 0, todayShipped: 0, todaySales: 0,
   });
 
@@ -467,24 +580,86 @@ export default function ExecutiveHome() {
       const earliestBizDay = businessDays[0].toISOString().slice(0, 10);
       const { data: dailySalesRows } = await supabase
         .from("orders")
-        .select("order_date, order_amount")
+        .select("order_date, order_amount, product_line")
         .gte("order_date", earliestBizDay)
         .neq("status", "quote")
         .not("order_date", "is", null);
 
+      // Bucket by day + product line so the chart can render stacked bars.
+      // product_line normalized into roller/faux/other (anything else lumped).
       const salesByDay = {};
       (dailySalesRows ?? []).forEach(r => {
         const d = r.order_date;
         const amt = Number(r.order_amount || 0);
-        salesByDay[d] = salesByDay[d] || { orders: 0, sales: 0 };
+        const line = (r.product_line || '').toLowerCase();
+        const seg = line === 'roller' ? 'roller' : line === 'faux' ? 'faux' : 'other';
+        salesByDay[d] = salesByDay[d] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
         salesByDay[d].orders++;
         salesByDay[d].sales += amt;
+        salesByDay[d][seg] += amt;
       });
       const dailySales = businessDays.map(d => {
         const key = d.toISOString().slice(0, 10);
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        const bucket = salesByDay[key] || { orders: 0, sales: 0 };
-        return { label, orders: bucket.orders, sales: bucket.sales };
+        const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
+        return {
+          label,
+          orders: bucket.orders,
+          sales: bucket.sales,
+          roller: bucket.roller,
+          faux: bucket.faux,
+          other: bucket.other,
+        };
+      });
+
+      // ── Production Flow — last 5 business days ────────────────────────
+      // Two metrics per day:
+      //   • Started: orders Rene flipped to in_production that day (wrangl_status_set_at)
+      //   • Invoiced: orders PIC marked invoiced that day (epic_status_date + status='invoiced')
+      // Units summed for each, surfaced under the bars.
+      const [startedRowsRes, invoicedFlowRes] = await Promise.all([
+        supabase.from("orders")
+          .select("wrangl_status_set_at, total_units")
+          .eq("wrangl_status", "in_production")
+          .gte("wrangl_status_set_at", earliestBizDay),
+        supabase.from("orders")
+          .select("epic_status_date, total_units")
+          .eq("status", "invoiced")
+          .gte("epic_status_date", earliestBizDay),
+      ]);
+
+      const flowByDay = {};
+      businessDays.forEach(d => {
+        const key = d.toISOString().slice(0, 10);
+        flowByDay[key] = { started: 0, started_units: 0, invoiced: 0, invoiced_units: 0 };
+      });
+      (startedRowsRes.data ?? []).forEach(r => {
+        if (!r.wrangl_status_set_at) return;
+        const key = r.wrangl_status_set_at.slice(0, 10);
+        if (flowByDay[key]) {
+          flowByDay[key].started++;
+          flowByDay[key].started_units += Number(r.total_units || 0);
+        }
+      });
+      (invoicedFlowRes.data ?? []).forEach(r => {
+        if (!r.epic_status_date) return;
+        const key = r.epic_status_date;
+        if (flowByDay[key]) {
+          flowByDay[key].invoiced++;
+          flowByDay[key].invoiced_units += Number(r.total_units || 0);
+        }
+      });
+      const productionFlow = businessDays.map(d => {
+        const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString("en-US", { weekday: "short" });
+        const b = flowByDay[key];
+        return {
+          label,
+          started: b.started,
+          started_units: b.started_units,
+          invoiced: b.invoiced,
+          invoiced_units: b.invoiced_units,
+        };
       });
 
       // ── Sparklines (30 days, by product line) ─────────────────────────
@@ -563,7 +738,7 @@ export default function ExecutiveHome() {
         printedTotal, fauxPrintedTotal,
         inProductionCount: inProductionCount ?? 0,
         inProductionUnits: inProductionUnits ?? 0,
-        topCustomers, dailySales,
+        topCustomers, dailySales, productionFlow,
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
         todaySales,
@@ -780,59 +955,24 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* Top Customers This Week — full-width row below the action zone */}
-        <div className="mb-4">
-          <div className="card-soft p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-ink-strong">Top Customers · This Week</h3>
-              <button onClick={() => navigate("/customers")}
-                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
-            </div>
-            <TopCustomersList
-              customers={data.topCustomers}
-              loading={loading}
-              onCustomerClick={(name) => navigate(`/customers?search=${encodeURIComponent(name)}`)}
-            />
-          </div>
-        </div>
-
-        {/* ── Context Zone: Team Activity + Daily Sales ──────────────────── */}
+        {/* ── Flow Zone: Daily Sales + Production Flow ──────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* Team Activity */}
-          <div className="card-soft p-5">
-            <h3 className="text-sm font-medium text-ink-strong mb-4">Team · Orders Invoiced This Week</h3>
-            {data.repOrders?.length === 0 ? (
-              <p className="text-sm text-ink-muted text-center py-6">No orders invoiced this week yet</p>
-            ) : (
-              <div className="space-y-3">
-                {data.repOrders.map((rep) => {
-                  const max = Math.max(...data.repOrders.map(r => r.count), 1);
-                  const pct = Math.round((rep.count / max) * 100);
-                  return (
-                    <div key={rep.name}>
-                      <div className="flex justify-between items-baseline mb-1.5">
-                        <span className="text-sm text-ink-strong truncate pr-2">{rep.name}</span>
-                        <span className="text-sm font-medium text-ink-strong tabular-nums whitespace-nowrap">
-                          {rep.count} order{rep.count !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      <div className="h-1 bg-[#e6dcc8] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#5b8c5a' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Daily Sales chart */}
+          {/* Daily Sales — stacked by product line */}
           <div className="card-soft p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
             </div>
             <DailySalesChart data={data.dailySales} />
+          </div>
+
+          {/* Production Flow — started vs invoiced per day */}
+          <div className="card-soft p-5">
+            <div className="flex items-baseline justify-between mb-4">
+              <h3 className="text-sm font-medium text-ink-strong">Production Flow · Last 5 Business Days</h3>
+              <span className="text-xs text-ink-muted">started vs invoiced</span>
+            </div>
+            <ProductionFlowChart data={data.productionFlow} />
           </div>
         </div>
 
