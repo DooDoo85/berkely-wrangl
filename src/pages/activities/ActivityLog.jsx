@@ -225,7 +225,7 @@ export default function ActivityLog() {
   useEffect(() => { fetchActivities() }, [filter, repFilter, period, profile])
 
   useEffect(() => {
-    if (isSales && repId) fetchKpis()
+    if (isSales) fetchKpis()
     // Load rep list for non-sales users (so execs can filter)
     if (profile && !isSales) loadReps()
   }, [isSales, repId, profile])
@@ -324,10 +324,14 @@ export default function ActivityLog() {
           .select('activity_type')
           .eq('user_id', profile.id)
           .gte('activity_date', weekStartDate),
-        supabase.from('customers')
-          .select('id')
-          .eq('sales_rep', repId)
-          .gte('created_at', weekStart),
+        // New Accounts only counts if rep_id is set on the profile.
+        // Without it, we can't match against customers.sales_rep — return empty.
+        repId
+          ? supabase.from('customers')
+              .select('id')
+              .eq('sales_rep', repId)
+              .gte('created_at', weekStart)
+          : Promise.resolve({ data: [] }),
       ])
 
       const acts = actsRes.data || []
