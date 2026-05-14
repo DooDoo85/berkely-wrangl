@@ -222,6 +222,7 @@ export default function ExecutiveHome() {
   const [wipModal, setWipModal] = useState(null);
   const [creditOkModal, setCreditOkModal] = useState(false);
   const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
+  const [inProductionModal, setInProductionModal] = useState(false);
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     stuckOrders: [], avgDays: null, repOrders: [],
@@ -247,11 +248,13 @@ export default function ExecutiveHome() {
       const weekStartDate = weekStart.slice(0, 10);
       const today = new Date().toISOString().slice(0, 10);
 
-      // ── In Production count (status OR wrangl_status flag) ────────────
-      // Rene's "Mark In Production" button only sets wrangl_status to keep ePIC sync from overwriting
+      // ── In Production count ──────────────────────────────────────────
+      // PIC's flow is Printed → Invoiced (no in-between). Rene's "Start Production"
+      // button in Wrangl creates this middle stage by setting wrangl_status only.
+      // So wrangl_status is the sole source of truth here.
       const { count: inProductionCount } = await supabase.from("orders")
         .select("*", { count: "exact", head: true })
-        .or("status.eq.in_production,wrangl_status.eq.in_production");
+        .eq("wrangl_status", "in_production");
 
       // ── Avg days printed → invoiced (last 90 days) ───────────────────
       const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
@@ -624,6 +627,7 @@ export default function ExecutiveHome() {
             label="In Production"
             value={loading ? "—" : data.inProductionCount}
             sub={data.inProductionCount > 0 ? "cutting now" : null}
+            onClick={() => setInProductionModal(true)}
           />
           <PipelineTile
             label="Avg P→Inv"
@@ -908,6 +912,7 @@ export default function ExecutiveHome() {
 
       {/* ── Faux Printed Modal ──────────────────────────────────────────── */}
       {fauxPrintedModal && <FauxPrintedModal onClose={() => setFauxPrintedModal(false)} />}
+      {inProductionModal && <InProductionModal onClose={() => setInProductionModal(false)} />}
     </div>
   );
 }
@@ -988,6 +993,103 @@ function FauxPrintedModal({ onClose }) {
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                           days > 5 ? "bg-red-100 text-red-600" :
                           days > 2 ? "bg-amber-100 text-amber-700" :
+                          "bg-gray-100 text-gray-600"}`}>
+                          {days}d
+                        </span>
+                      ) : <span className="text-xs text-gray-400">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units || 0}</td>
+                    <td className="px-5 py-3 text-right text-sm text-gray-500">
+                      ${Number(r.order_amount || 0).toLocaleString("en-US",{maximumFractionDigits:0})}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InProductionModal({ onClose }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    (async () => {
+      // PIC has no in_production state — Rene's "Start Production" flips wrangl_status only.
+      // wrangl_status_set_at is when Rene started; this is the timer for days-in-production.
+      const { data } = await supabase
+        .from('orders')
+        .select('order_number, customer_name, sidemark, total_units, order_amount, product_line, wrangl_status_set_at')
+        .eq('wrangl_status', 'in_production')
+        .order('wrangl_status_set_at', { ascending: false })
+      setRows(data || [])
+      setLoading(false)
+    })()
+  }, [])
+
+  const totalUnits = rows.reduce((s, r) => s + (r.total_units || 0), 0)
+
+  // Business-day calculation (skips weekends)
+  const daysSinceFn = (dateStr) => {
+    if (!dateStr) return null
+    const start = new Date(dateStr)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date()
+    end.setHours(0, 0, 0, 0)
+    let days = 0
+    const cur = new Date(start)
+    cur.setDate(cur.getDate() + 1)
+    while (cur <= end) {
+      const dow = cur.getDay()
+      if (dow !== 0 && dow !== 6) days++
+      cur.setDate(cur.getDate() + 1)
+    }
+    return days
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">In Production</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits.toLocaleString()} units</p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <tr>
+                {["Order","Customer","Sidemark","Line","Days","Units","Value"].map(h => (
+                  <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order","Customer","Sidemark","Line"].includes(h) ? "text-left" : "text-right"}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">No orders in production</td></tr>
+              ) : rows.map((r, i) => {
+                const days = daysSinceFn(r.wrangl_status_set_at)
+                return (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
+                    <td className="px-5 py-3 text-xs text-gray-500">{r.sidemark || '—'}</td>
+                    <td className="px-5 py-3 text-xs text-gray-500 uppercase">{r.product_line || '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      {days !== null ? (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          days > 10 ? "bg-red-100 text-red-600" :
+                          days > 5  ? "bg-amber-100 text-amber-700" :
                           "bg-gray-100 text-gray-600"}`}>
                           {days}d
                         </span>
