@@ -66,6 +66,9 @@ import PurchaseOrderDetail from './pages/purchasing/PurchaseOrderDetail'
 // Settings
 import EmailPreferences from './pages/settings/EmailPreferences'
 
+// Rep personal worklist
+import MyOpenQuotes from './pages/MyOpenQuotes'
+
 import SetPasswordRequired from './components/SetPasswordRequired'
 
 function AppRoutes() {
@@ -92,6 +95,9 @@ function AppRoutes() {
 
         {/* Pipeline */}
         <Route path="/pipeline" element={<Placeholder title="Pipeline" />} />
+
+        {/* My Open Quotes — rep's personal aging-quote worklist */}
+        <Route path="/my-quotes" element={<MyOpenQuotes />} />
 
         {/* Orders */}
         <Route path="/orders" element={<OrderList />} />
