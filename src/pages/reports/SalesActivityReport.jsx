@@ -482,7 +482,11 @@ function ExecutiveIntelligence({ profile }) {
       supabase.from('v_rep_attention_quotes').select('*').order('attention_score', { ascending: false }),
       supabase.from('v_attention_engagement').select('*'),
     ])
-    setAllCards(cardsRes.data || [])
+    // Filter to recent quotes only — customer must have at least one quote within the last 30 days.
+    // Using oldest_quote_age_days as the gate: if even the oldest is <= 30, all quotes are recent.
+    // Customers with stale quotes (> 30 days) drop out of the worklist entirely.
+    const recent = (cardsRes.data || []).filter(c => (c.oldest_quote_age_days ?? 999) <= 30)
+    setAllCards(recent)
     setEngagement(engRes.data || [])
     setLoading(false)
   }
@@ -501,7 +505,9 @@ function ExecutiveIntelligence({ profile }) {
 
   const cardsForSelectedRep = useMemo(() => {
     if (!selectedRep) return []
-    return allCards.filter(c => c.rep_name === selectedRep).slice(0, 8)
+    // Show all flagged customers for the rep — no top-N cap. The list view handles density.
+    // Already sorted by attention_score desc at the data layer.
+    return allCards.filter(c => c.rep_name === selectedRep)
   }, [allCards, selectedRep])
 
   useEffect(() => {
@@ -572,7 +578,7 @@ function ExecutiveIntelligence({ profile }) {
             Executive Intelligence
           </span>
           <span className="text-xs text-ink-mid">
-            {loading ? 'Loading…' : `${allCards.length} customers flagged across ${reps.length} reps`}
+            {loading ? 'Loading…' : `${allCards.length} customers flagged across ${reps.length} reps · quotes within 30 days`}
           </span>
         </div>
         <span className={`text-xs text-ink-muted transition-transform duration-200 ${collapsed ? '' : 'rotate-90'}`}>›</span>
@@ -633,18 +639,26 @@ function TabButton({ active, onClick, children }) {
 }
 
 function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, navigate, loading }) {
+  const [search, setSearch] = useState('')
+
   if (loading) return <div className="text-ink-muted text-sm p-4">Loading…</div>
   if (reps.length === 0) {
     return (
       <div className="card p-6 text-ink-mid">
-        ✓ All caught up — no aging quotes across the team.
+        ✓ All caught up — no aging quotes across the team within the last 30 days.
       </div>
     )
   }
 
+  // Filter by customer name (client-side)
+  const q = search.trim().toLowerCase()
+  const filteredCards = q
+    ? cards.filter(c => (c.account_name || '').toLowerCase().includes(q))
+    : cards
+
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <label className="text-sm font-semibold text-ink-strong">View as rep:</label>
         <select
           value={selectedRep || ''}
@@ -653,8 +667,17 @@ function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, na
         >
           {reps.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
-        <span className="text-xs text-ink-muted">
-          Showing top 8 of {allCardsForRep} flagged
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search customers..."
+          className="input flex-1 max-w-xs"
+        />
+        <span className="text-xs text-ink-muted ml-auto">
+          {q
+            ? `Showing ${filteredCards.length} of ${cards.length} flagged`
+            : `${cards.length} flagged · quotes within 30 days`}
         </span>
       </div>
 
@@ -662,40 +685,53 @@ function ByRepTab({ reps, selectedRep, setSelectedRep, cards, allCardsForRep, na
         🔍 Viewing as <strong className="text-ink-strong">{selectedRep}</strong>. Engagement events from this view are tracked separately and don't affect rep funnel metrics.
       </div>
 
-      {cards.length === 0 ? (
-        <div className="text-ink-muted text-sm p-4">No flagged cards for this rep right now.</div>
+      {filteredCards.length === 0 ? (
+        <div className="text-ink-muted text-sm p-4">
+          {q ? 'No customers match the search.' : 'No flagged cards for this rep within the last 30 days.'}
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {cards.map(card => {
-            const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
-            const lastActivityLabel = card.last_activity_at
-              ? `Last activity ${fmtDays(card.days_since_activity)} ago`
-              : 'No activity logged yet'
-            const cardClass = card.tier === 'urgent' ? 'card-priority' : 'card'
-            return (
-              <div
-                key={card.customer_id}
-                onClick={() => navigate(`/customers/${card.customer_id}?tab=quotes`)}
-                className={`${cardClass} card-hover p-4 cursor-pointer`}
-              >
-                <div className="mb-2">
-                  <span className={style.pill}>{style.label}</span>
-                </div>
-                <div className="text-sm font-bold text-ink-strong mb-1">
-                  {card.account_name}
-                </div>
-                <div className="text-xs text-ink-mid mb-2.5">
-                  {card.aging_quote_count} {card.aging_quote_count === 1 ? 'quote' : 'quotes'} · {fmtMoney(card.aging_quote_total_value)} · oldest {fmtDays(card.oldest_quote_age_days)}
-                </div>
-                <div className="text-xs text-ink-muted mb-2.5 italic">
-                  {lastActivityLabel}
-                </div>
-                <div className="text-xs text-ink-muted">
-                  Score: <strong className="text-ink-mid">{card.attention_score}</strong> · YTD revenue: {fmtMoney(card.ytd_revenue || 0)}
-                </div>
-              </div>
-            )
-          })}
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-surface-border" style={{ background: 'rgba(141,123,104,0.06)' }}>
+              <tr>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider w-24">Tier</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Customer</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">Quotes</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">Total Value</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">Oldest</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">Last Activity</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">YTD Revenue</th>
+                <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-ink-muted uppercase tracking-wider whitespace-nowrap">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCards.map(card => {
+                const style = TIER_STYLES[card.tier] || TIER_STYLES.flagged
+                return (
+                  <tr
+                    key={card.customer_id}
+                    onClick={() => navigate(`/customers/${card.customer_id}?tab=quotes`)}
+                    className="border-b border-surface-border-soft hover:bg-black/[0.02] cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-2.5">
+                      <span className={style.pill}>{style.label}</span>
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-ink-strong">
+                      {card.account_name}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-mid">{card.aging_quote_count}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-mid">{fmtMoney(card.aging_quote_total_value)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-mid">{fmtDays(card.oldest_quote_age_days)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted italic">
+                      {card.last_activity_at ? `${fmtDays(card.days_since_activity)} ago` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-mid">{fmtMoney(card.ytd_revenue || 0)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-ink-strong">{card.attention_score}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
