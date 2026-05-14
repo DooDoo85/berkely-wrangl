@@ -89,6 +89,14 @@ export default function FauxUsage() {
     return m ? [parseFloat(m[1]), parseFloat(m[2])] : [9999, 9999]
   }
 
+  // Compact display — full string is "12.5 X 72 E02 WHITE SMOOTH 2\" FW BLIND".
+  // Every size shares the suffix; truncating to just width × height keeps the table dense.
+  function shortSize(sizeStr) {
+    if (!sizeStr) return ''
+    const m = sizeStr.match(/^(\d+(?:\.\d+)?\s*[xX×]\s*\d+(?:\.\d+)?)/)
+    return m ? m[1].replace(/\s*[xX×]\s*/, ' × ') : sizeStr
+  }
+
   const upcomingEtas = useMemo(() => {
     const dates = new Set()
     for (const r of rows) {
@@ -240,15 +248,14 @@ export default function FauxUsage() {
         </button>
       </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead
-              className="border-b border-surface-border sticky top-0 z-10"
-              style={{ background: '#faf6f0' }}
-            >
-              <tr>
+      {/* Table — note: no overflow wrapper, so sticky <thead> attaches to page scroll */}
+      <div className="card">
+        <table className="w-full text-sm">
+          <thead
+            className="border-b border-surface-border sticky top-0 z-10"
+            style={{ background: '#faf6f0' }}
+          >
+            <tr>
                 <Th align="left">Size</Th>
                 <Th>Avg/Wk</Th>
                 <Th>On Hand</Th>
@@ -277,26 +284,26 @@ export default function FauxUsage() {
               ) : visibleRows.map(row => (
                 <tr key={row.id} onClick={() => navigate(`/inventory/${row.id}`)}
                     className="border-b border-surface-border-soft hover:bg-surface-page/40 cursor-pointer transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-ink-strong whitespace-nowrap min-w-[240px]">
-                    {row.size}
+                  <td className="px-3 py-2 font-medium text-ink-strong whitespace-nowrap" title={row.size}>
+                    {shortSize(row.size)}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-mid">
+                  <td className="px-3 py-2 text-right tabular-nums text-ink-mid">
                     {row.avg_per_week > 0 ? row.avg_per_week.toFixed(1) : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-strong">
+                  <td className="px-3 py-2 text-right tabular-nums text-ink-strong">
                     {Math.round(row.qty_on_hand).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
+                  <td className="px-3 py-2 text-right tabular-nums text-ink-muted">
                     {row.qty_committed > 0 ? Math.round(row.qty_committed).toLocaleString() : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-ink-strong">
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-ink-strong">
                     {Math.round(row.qty_available).toLocaleString()}
                   </td>
 
                   {upcomingEtas.map(eta => {
                     const qty = qtyForEta(row, eta)
                     return (
-                      <td key={eta} className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                      <td key={eta} className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
                         {qty != null
                           ? <span className={isPastEta(eta) ? 'text-status-critical font-medium' : 'text-ink-mid'}>
                               {Math.round(qty).toLocaleString()}
@@ -306,7 +313,7 @@ export default function FauxUsage() {
                     )
                   })}
 
-                  <td className="px-4 py-2.5 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {row.status === 'stockout' ? (
                       <span className="text-status-critical font-semibold">0</span>
                     ) : row.avg_per_week <= 0 ? (
@@ -321,7 +328,7 @@ export default function FauxUsage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-center">
+                  <td className="px-3 py-2 text-center">
                     <span className={STATUS_PILL[row.status]}>
                       {STATUS_LABEL[row.status]}
                     </span>
@@ -330,7 +337,6 @@ export default function FauxUsage() {
               ))}
             </tbody>
           </table>
-        </div>
       </div>
 
       <p className="text-xs text-ink-muted mt-3">
