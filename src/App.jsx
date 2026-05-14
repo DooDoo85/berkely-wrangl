@@ -43,10 +43,10 @@ import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 import SalesActivityReport from './pages/reports/SalesActivityReport'
 
-// Quotes
-import QuotesList from './pages/quotes/QuotesList'
-import QuoteBuilder from './pages/quotes/QuoteBuilder'
-import QuoteDetail from './pages/quotes/QuoteDetail'
+// Quotes (feature hidden — Quote Builder not yet active; routes removed from production nav)
+// import QuotesList from './pages/quotes/QuotesList'
+// import QuoteBuilder from './pages/quotes/QuoteBuilder'
+// import QuoteDetail from './pages/quotes/QuoteDetail'
 
 // Calendar
 import CalendarPage from './pages/calendar/CalendarPage'
@@ -145,10 +145,10 @@ function AppRoutes() {
         <Route path="/reports/faux-usage"          element={<Navigate to="/inventory/faux-blinds" replace />} />
         <Route path="/reports/inventory-velocity" element={<Navigate to="/inventory/faux-blinds" replace />} />
 
-        {/* Quotes */}
-        <Route path="/quotes" element={<QuotesList />} />
-        <Route path="/quotes/new" element={<QuoteBuilder />} />
-        <Route path="/quotes/:id" element={<QuoteDetail />} />
+        {/* Quotes — feature hidden, see commented imports at top */}
+        {/* <Route path="/quotes" element={<QuotesList />} /> */}
+        {/* <Route path="/quotes/new" element={<QuoteBuilder />} /> */}
+        {/* <Route path="/quotes/:id" element={<QuoteDetail />} /> */}
 
         {/* Calendar */}
         <Route path="/calendar" element={<CalendarPage />} />
