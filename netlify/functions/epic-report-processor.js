@@ -1959,7 +1959,9 @@ async function processInventorySnapshot(csvText) {
     const qtyAvail   = parseFloat(row.QtyAvailable || 0) || 0
     const qtyBo      = parseFloat(row.QtyBackorder || 0) || 0
     const unitCost   = parseFloat(row.UnitCost     || 0) || null
-    const lastAct    = (row.LastActivityDate || '').trim().slice(0, 10) || null
+    const lastActRaw = (row.LastActivityDate || '').trim().slice(0, 10)
+    // Coerce "0000-00-00" (PIC's "never touched" sentinel) to null — Postgres rejects it
+    const lastAct    = (!lastActRaw || lastActRaw === '0000-00-00') ? null : lastActRaw
     const warehouse  = (row.Warehouse || '').trim() || null
 
     stats.total++
