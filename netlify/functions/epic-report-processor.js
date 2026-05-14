@@ -2049,8 +2049,11 @@ async function processInventorySnapshot(csvText) {
 
   // Upsert snapshot rows (idempotent by stock_code + snapshot_date)
   const BATCH = 200
+  let storedOK = 0
+  let storedFail = 0
   for (let i = 0; i < snapshotRows.length; i += BATCH) {
-    await fetch(`${SUPABASE_URL}/rest/v1/epic_inventory_snapshot`, {
+    const batch = snapshotRows.slice(i, i + BATCH)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/epic_inventory_snapshot`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_KEY,
@@ -2058,10 +2061,20 @@ async function processInventorySnapshot(csvText) {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify(snapshotRows.slice(i, i + BATCH)),
+      body: JSON.stringify(batch),
     })
+    if (res.ok) {
+      storedOK += batch.length
+    } else {
+      storedFail += batch.length
+      const errBody = await res.text().catch(() => '<unreadable>')
+      console.error(`  ❌ SNAPSHOT INSERT FAILED — status: ${res.status}, batch starting at index ${i}`)
+      console.error(`     Response body: ${errBody.slice(0, 600)}`)
+      // Log first row of batch so we can see what shape was sent
+      console.error(`     First row sample: ${JSON.stringify(batch[0]).slice(0, 500)}`)
+    }
   }
-  console.log(`  Snapshot rows stored: ${snapshotRows.length}`)
+  console.log(`  Snapshot rows stored: ${storedOK} ok, ${storedFail} failed (of ${snapshotRows.length})`)
 
   // Write authoritative balances to parts (FW + RS PART only)
   let partsUpdated = 0
