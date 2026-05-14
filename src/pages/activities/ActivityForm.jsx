@@ -6,7 +6,7 @@ const TYPES = [
   { value: 'scheduled_meeting', label: 'Scheduled Meeting', icon: '🤝' },
   { value: 'cold_call',         label: 'Cold Call',         icon: '📞' },
   { value: 'sample_book',       label: 'Sample Book',       icon: '📚' },
-  { value: 'call',              label: 'Other Call',        icon: '☎️' },
+  { value: 'call',              label: 'Customer Call',     icon: '☎️' },
   { value: 'email',             label: 'Email',             icon: '✉️' },
   { value: 'note',              label: 'Note',              icon: '📝' },
 ]
