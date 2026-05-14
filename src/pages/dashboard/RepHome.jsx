@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../components/AuthProvider";
 import { supabase } from "../../lib/supabase";
-import NeedsAttention from "../../components/NeedsAttention";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -17,9 +16,19 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Compact money: $145K, $12.3K, $850 — keeps KPI subtext short
+function fmtMoneyCompact(n) {
+  const v = Number(n) || 0
+  if (v >= 1000) {
+    const k = v / 1000
+    return '$' + (k >= 10 ? Math.round(k) : k.toFixed(1)) + 'K'
+  }
+  return '$' + Math.round(v)
+}
+
 // ─── KPI Tile (goal-aware) ──────────────────────────────────────────────────
 
-function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon }) {
+function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon, valueSubtext, onClick }) {
   const v = Number(value || 0)
   const g = Number(goal || 0)
   const pct = g > 0 ? Math.min((v / g) * 100, 100) : 0
@@ -29,8 +38,11 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon }) {
   const barColor = hit ? 'bg-status-healthy' : onTrack ? 'bg-status-warning' : 'bg-[var(--surface-border)]'
   const valueColor = hit ? 'text-status-healthy' : 'text-ink-strong'
 
+  const clickable = !!onClick
+  const tileClass = `card p-5 transition-shadow duration-200 ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`
+
   return (
-    <div className="card p-5 transition-shadow duration-200">
+    <div className={tileClass} onClick={onClick}>
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
           <span className={iconColor}>{icon}</span>
@@ -57,6 +69,8 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon }) {
                 {hit ? '✓ Goal hit' : `${Math.round(pct)}% to goal`}
               </div>
             </div>
+          ) : valueSubtext ? (
+            <div className="text-xs text-ink-mid mt-2 tabular-nums truncate">{valueSubtext}</div>
           ) : (
             <div className="text-xs text-ink-muted mt-2">This week</div>
           )}
@@ -222,6 +236,7 @@ export default function RepHome() {
       cold_calls:         0,
     },
     pipeline: { printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 },
+    openQuotes: { count: 0, value: 0 },
     followUps: [],
     upcomingTasks: [],
   });
@@ -251,6 +266,7 @@ export default function RepHome() {
         inProdRes,
         onHoldRes,
         invoicedWtdRes,
+        openQuotesRes,
         followUpsRes,
         upcomingTasksRes,
       ] = await Promise.all([
@@ -296,6 +312,13 @@ export default function RepHome() {
               .gte("epic_status_date", weekStartDate)
           : Promise.resolve({ count: 0 }),
 
+        // OPEN QUOTES — aggregate from v_rep_attention_quotes (last 30 days, customer-grouped)
+        repName
+          ? supabase.from("v_rep_attention_quotes")
+              .select("aging_quote_count, aging_quote_total_value, oldest_quote_age_days")
+              .ilike("rep_name", repName)
+          : Promise.resolve({ data: [] }),
+
         supabase.from("activities")
           .select("id, subject, body, follow_up_date, customer_id, customers(account_name, phone)")
           .eq("user_id", profile.id).eq("completed", false)
@@ -313,6 +336,11 @@ export default function RepHome() {
       const goalsMap = { scheduled_meetings: 15, new_accounts: 2, sample_books: 3, cold_calls: 0 }
       ;(goalsRes?.data || []).forEach(g => { goalsMap[g.metric_key] = g.target_value })
 
+      // Aggregate open quotes — filter to customers with quotes in the last 30 days
+      const recentQuotes = (openQuotesRes.data || []).filter(c => (c.oldest_quote_age_days ?? 999) <= 30)
+      const openQuoteCount = recentQuotes.reduce((s, c) => s + (Number(c.aging_quote_count) || 0), 0)
+      const openQuoteValue = recentQuotes.reduce((s, c) => s + (Number(c.aging_quote_total_value) || 0), 0)
+
       setData({
         kpis: {
           scheduledMeetings: scheduledMeetingsRes.count ?? 0,
@@ -326,6 +354,10 @@ export default function RepHome() {
           inProduction: inProdRes.count ?? 0,
           onHold:       onHoldRes.count ?? 0,
           invoicedWtd:  invoicedWtdRes.count ?? 0,
+        },
+        openQuotes: {
+          count: openQuoteCount,
+          value: openQuoteValue,
         },
         followUps:     followUpsRes.data ?? [],
         upcomingTasks: upcomingTasksRes.data ?? [],
@@ -366,8 +398,8 @@ export default function RepHome() {
         </div>
       </div>
 
-      {/* Weekly KPI Strip */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      {/* Weekly KPI Strip — 5 tiles including Open Quotes */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
         <KpiTile
           label="Scheduled Meetings"
           value={data.kpis.scheduledMeetings}
@@ -396,17 +428,16 @@ export default function RepHome() {
           loading={loading}
           iconBg="bg-status-warning-soft"  iconColor="text-status-warning" icon={Icon.message}
         />
+        <KpiTile
+          label="Open Quotes"
+          value={data.openQuotes.count}
+          goal={0}
+          loading={loading}
+          iconBg="bg-accent-clay-soft"     iconColor="text-accent-clay"    icon={Icon.fileText}
+          valueSubtext={data.openQuotes.value > 0 ? `${fmtMoneyCompact(data.openQuotes.value)} · 30d` : 'last 30 days'}
+          onClick={() => navigate("/my-quotes")}
+        />
       </div>
-
-      {/* Needs Attention — compact horizontal cards (top-5), expandable to vertical top-N */}
-      {profile && (
-        <div className="mb-8">
-          <NeedsAttention
-            currentUser={profile}
-            repName={profile.full_name}
-          />
-        </div>
-      )}
 
       {/* Quick Actions */}
       <div className="mb-6">
@@ -418,8 +449,9 @@ export default function RepHome() {
         </div>
       </div>
 
-      {/* Follow-ups */}
-      <div className="mb-6">
+      {/* 2-column row: Follow-ups (left) + Upcoming Activities (right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Follow-ups */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
             <h2 className="text-sm font-semibold text-ink-strong">Follow-ups</h2>
@@ -478,49 +510,8 @@ export default function RepHome() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* My Pipeline */}
-      <div className="mb-6">
-        <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
-        <div className="grid grid-cols-4 gap-4">
-          <PipelineCard
-            label="Printed"
-            count={data.pipeline.printed}
-            dotStyle={{ backgroundColor: '#b85d3a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders?status=printed")}
-          />
-          <PipelineCard
-            label="In Production"
-            count={data.pipeline.inProduction}
-            dotStyle={{ backgroundColor: '#c2913a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders?status=in_production")}
-          />
-          <PipelineCard
-            label="On Hold"
-            count={data.pipeline.onHold}
-            dotStyle={{ backgroundColor: '#b54a3a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders/on-hold")}
-          />
-          <PipelineCard
-            label="Invoiced WTD"
-            count={data.pipeline.invoicedWtd}
-            dotStyle={{ backgroundColor: '#5b8c5a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
-            loading={loading}
-            onClick={() => navigate("/orders?status=invoiced")}
-          />
-        </div>
-      </div>
-
-      {/* Upcoming activities */}
-      <div className="mb-6">
+        {/* Upcoming activities */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
             <h2 className="text-sm font-semibold text-ink-strong">Upcoming activities</h2>
@@ -565,6 +556,45 @@ export default function RepHome() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* My Pipeline — full width strip at the bottom */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <PipelineCard
+            label="Printed"
+            count={data.pipeline.printed}
+            dotStyle={{ backgroundColor: '#b85d3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=printed")}
+          />
+          <PipelineCard
+            label="In Production"
+            count={data.pipeline.inProduction}
+            dotStyle={{ backgroundColor: '#c2913a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=in_production")}
+          />
+          <PipelineCard
+            label="On Hold"
+            count={data.pipeline.onHold}
+            dotStyle={{ backgroundColor: '#b54a3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders/on-hold")}
+          />
+          <PipelineCard
+            label="Invoiced WTD"
+            count={data.pipeline.invoicedWtd}
+            dotStyle={{ backgroundColor: '#5b8c5a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=invoiced")}
+          />
         </div>
       </div>
       </div>
