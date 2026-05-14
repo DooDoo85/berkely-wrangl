@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import AddToReorderModal from '../../components/AddToReorderModal'
+import FauxUsage from './FauxUsage'
 
 // =====================================================================
 // InventoryList — operational page (page-mode = operational)
@@ -50,6 +51,12 @@ function StockBadge({ qty, reorder }) {
 }
 
 export default function InventoryList({ partType }) {
+  // Faux Wood Blinds page is now the Faux Usage Dashboard — richer view with
+  // velocity, ETAs, and weeks-of-supply. Bypasses standard inventory list entirely.
+  if (partType === 'blind') {
+    return <FauxUsage />
+  }
+
   const navigate = useNavigate()
   const [parts, setParts]               = useState([])
   const [loading, setLoading]           = useState(true)
