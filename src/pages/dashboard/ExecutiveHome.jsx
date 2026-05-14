@@ -225,6 +225,7 @@ export default function ExecutiveHome() {
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     stuckOrders: [], avgDays: null, repOrders: [],
+    overdueOrders: [],
     faux: {}, roller: {},
     fauxSpark: [], rollerSpark: [],
     wip: { creditOK: [], printed: [] },
@@ -301,9 +302,11 @@ export default function ExecutiveHome() {
       // Filters by hold_reason (not status) to capture both flavors:
       //   • status='on_hold' + reason set → full hold (e.g., Pete)
       //   • status=printed/in_production + reason set → operational hold (e.g., Rene waiting on parts)
+      // Exclude invoiced/cancelled — once shipped/closed, the hold is historical.
       const { data: heldOrders } = await supabase.from("orders")
         .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at")
-        .not("hold_reason", "is", null);
+        .not("hold_reason", "is", null)
+        .not("status", "in", "(invoiced,cancelled)");
       const stuckOrders = (heldOrders ?? []).map(o => {
         const holdDate = o.wrangl_status_set_at || o.updated_at;
         const days = holdDate ? daysSince(holdDate) : 0;
@@ -317,6 +320,42 @@ export default function ExecutiveHome() {
           hold_reason: o.hold_reason,
         };
       }).sort((a, b) => b.days - a.days).slice(0, 5);
+
+      // ── Overdue / Stuck Orders (printed status, past SLA) ───────────────
+      // Uses roller_wip.days_in_status (calendar days) as the source of truth,
+      // matching the existing PRINTED modal's badge logic. Per-customer SLA
+      // overrides allow contractual exceptions (e.g., Blindster 48-hour rule).
+      // Default threshold = 5 calendar days (matches modal's red badge).
+      const { data: slaRows } = await supabase
+        .from("customers")
+        .select("account_name, sla_print_to_ship_days")
+        .not("sla_print_to_ship_days", "is", null);
+      const slaMap = {};
+      (slaRows ?? []).forEach(r => {
+        if (r.account_name) slaMap[r.account_name.toUpperCase()] = Number(r.sla_print_to_ship_days);
+      });
+      const DEFAULT_PRINT_SLA = 5;
+      const overdueOrders = printed
+        .map(r => {
+          const customerKey = (r.customer || '').toUpperCase();
+          const slaDays = slaMap[customerKey] ?? DEFAULT_PRINT_SLA;
+          const daysOver = (r.days_in_status ?? 0) - slaDays;
+          return {
+            key: `overdue-${r.id || r.order_no}`,
+            order_id: r.id,
+            order_no: r.order_no,
+            customer: r.customer,
+            sidemark: r.sidemark,
+            days_in_status: r.days_in_status,
+            sla_days: slaDays,
+            days_over: daysOver,
+            total_units: r.total_units,
+            total_sales: r.total_sales,
+          };
+        })
+        .filter(r => r.days_over > 0)
+        .sort((a, b) => b.days_over - a.days_over)
+        .slice(0, 5);
 
       // ── Credit OK / HOLD ──────────────────────────────────────────────
       const { data: creditOkRowsData } = await supabase
@@ -477,6 +516,7 @@ export default function ExecutiveHome() {
 
       setData({
         stuckOrders, avgDays, repOrders, faux, roller,
+        overdueOrders,
         fauxSpark, rollerSpark,
         wip: { creditOK, printed },
         creditOk, creditOkRoller, creditOkFaux,
@@ -495,6 +535,7 @@ export default function ExecutiveHome() {
   useEffect(() => { load(); }, [load]);
 
   const stuckTotal = data.stuckOrders?.length ?? 0;
+  const overdueTotal = data.overdueOrders?.length ?? 0;
   const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
 
   const ROLLER_ACCENT = "#b85d3a";  // accent-clay
@@ -591,7 +632,7 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Action Zone: Orders on Hold + Top Customers ─────────────────── */}
+        {/* ── Action Zone: Orders on Hold + Stuck Orders ─────────────────── */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Orders on Hold */}
           <div className="card-priority p-5">
@@ -646,7 +687,59 @@ export default function ExecutiveHome() {
             )}
           </div>
 
-          {/* Top Customers This Week */}
+          {/* Stuck Orders (printed, past SLA) */}
+          <div className="card-priority p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-ink-strong">Stuck Orders</h3>
+                {overdueTotal > 0 && (
+                  <span className="pill-critical">
+                    {overdueTotal} past SLA
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setWipModal("PRINTED")}
+                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
+            </div>
+            {overdueTotal === 0 ? (
+              <p className="text-sm text-ink-muted text-center py-6">All printed orders within SLA ✓</p>
+            ) : (
+              <div className="space-y-1">
+                {data.overdueOrders.map(o => (
+                  <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                    className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
+                        <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                          PRINTED
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-mid mt-0.5 truncate">
+                        {o.customer ?? "—"}
+                        {o.sidemark && (
+                          <span className="text-ink-muted"> · {o.sidemark}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2 whitespace-nowrap">
+                      <span className="text-[10px] text-ink-muted">SLA {o.sla_days}d</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        o.days_over >= 5 ? "bg-status-critical-soft text-status-critical" :
+                                            "bg-status-warning-soft text-status-warning"
+                      }`}>
+                        {o.days_in_status}d · +{o.days_over}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Customers This Week — full-width row below the action zone */}
+        <div className="mb-4">
           <div className="card-soft p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Top Customers · This Week</h3>
