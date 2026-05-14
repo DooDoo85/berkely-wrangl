@@ -82,6 +82,13 @@ export default function FauxUsage() {
   }
 
   // ─── Derived ──────────────────────────────────────────────────────────
+  // Parse "WIDTH X HEIGHT ..." → [width, height] for size-ascending sort
+  function parseSize(sizeStr) {
+    if (!sizeStr) return [9999, 9999]
+    const m = sizeStr.match(/^(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/)
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : [9999, 9999]
+  }
+
   const upcomingEtas = useMemo(() => {
     const dates = new Set()
     for (const r of rows) {
@@ -97,10 +104,13 @@ export default function FauxUsage() {
     const filtered = q
       ? rows.filter(r => r.size.toLowerCase().includes(q))
       : rows
+    // Sort by size ascending (width primary, height secondary)
+    // — clean catalog walk starting at 12.5×72
     return [...filtered].sort((a, b) => {
-      if (SORT_ORDER[a.status] !== SORT_ORDER[b.status])
-        return SORT_ORDER[a.status] - SORT_ORDER[b.status]
-      return b.avg_per_week - a.avg_per_week
+      const [aw, ah] = parseSize(a.size)
+      const [bw, bh] = parseSize(b.size)
+      if (aw !== bw) return aw - bw
+      return ah - bh
     })
   }, [rows, search])
 
@@ -234,7 +244,10 @@ export default function FauxUsage() {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-surface-page/40 border-b border-surface-border">
+            <thead
+              className="border-b border-surface-border sticky top-0 z-10"
+              style={{ background: '#faf6f0' }}
+            >
               <tr>
                 <Th align="left">Size</Th>
                 <Th>Avg/Wk</Th>
