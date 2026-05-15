@@ -57,21 +57,24 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
 function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printedCount, loading, onClick }) {
   return (
     <div onClick={onClick}
-      className="card card-hover p-6 cursor-pointer">
+      className="card card-hover p-4 md:p-6 cursor-pointer">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
-          <span className="text-sm font-medium text-ink-strong">{label}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
+          <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
         </div>
-        <span className="text-xs text-ink-muted">View orders →</span>
+        <span className="text-xs text-ink-muted flex-shrink-0 ml-2">View →</span>
       </div>
 
-      <div className="flex items-baseline gap-3 mb-3">
-        <span className="text-3xl font-medium text-ink-strong tabular-nums">
-          {loading ? "—" : fmt$Full(data.sales_wtd)}
-        </span>
-        <span className="text-xs text-ink-muted">WTD</span>
-        <span className="text-xs text-ink-muted ml-auto tabular-nums">
+      {/* Dollar amount: stack WTD label below on mobile (was inline-baseline) */}
+      <div className="mb-3">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
+            {loading ? "—" : fmt$Full(data.sales_wtd)}
+          </span>
+          <span className="text-xs text-ink-muted">WTD</span>
+        </div>
+        <span className="text-xs text-ink-muted tabular-nums">
           {loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}
         </span>
       </div>
@@ -80,7 +83,8 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
         <Sparkline data={sparkData} color={accent} fillColor={fill} />
       </div>
 
-      <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100">
+      {/* Stats row — 2x2 on mobile, 4-col on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-100">
         <div>
           <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
@@ -123,7 +127,7 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
   const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
   return (
     <div onClick={onClick} style={accentStyle}
-      className={`card px-4 py-3.5 ${clickable ? "cursor-pointer card-hover" : ""}`}>
+      className={`card px-3 py-3 md:px-4 md:py-3.5 ${clickable ? "cursor-pointer card-hover" : ""}`}>
       <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-ink-mid mt-0.5">{sub}</p>}
@@ -786,12 +790,12 @@ export default function ExecutiveHome() {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-screen-xl mx-auto p-8">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-8">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between mb-6">
+        {/* ── Header — stacks on mobile so Refresh isn't crammed ────────── */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-5 md:mb-6">
           <div>
-            <h1 className="font-display">Business Overview</h1>
+            <h1 className="font-display text-2xl md:text-4xl">Business Overview</h1>
             <p className="text-sm text-ink-mid mt-1">
               {loading ? "Loading…" : (
                 <>
@@ -802,19 +806,19 @@ export default function ExecutiveHome() {
               )}
             </p>
           </div>
-          <div className="text-right pt-1">
-            <div className="text-xs text-ink-muted mb-1.5">
+          <div className="flex items-center justify-between md:flex-col md:items-end md:text-right md:pt-1">
+            <div className="text-xs text-ink-muted md:mb-1.5">
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
             <button onClick={load} disabled={loading}
-              className="btn-ghost text-xs">
+              className="btn-ghost text-xs px-3 py-1.5">
               {loading ? "Refreshing…" : "↻ Refresh"}
             </button>
           </div>
         </div>
 
-        {/* ── Hero Row ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* ── Hero Row ── stacks on mobile so cards aren't cramped ─────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mb-4">
           <HeroCard
             label="Roller Shades"
             accent={ROLLER_ACCENT}
@@ -839,8 +843,12 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Pipeline Strip ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-5 gap-3 mb-4">
+        {/* ── Pipeline Strip — horizontal scroll on mobile, 5-col grid on desktop ─ */}
+        <div className="md:grid md:grid-cols-5 md:gap-3 mb-4
+                        flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
+                        snap-x snap-mandatory md:snap-none
+                        [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
+                        [&>*]:snap-start">
           <PipelineTile
             label="Credit OK"
             value={loading ? "—" : data.creditOk.count}
@@ -874,10 +882,10 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Action Zone: Orders on Hold + Stuck Orders ─────────────────── */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* ── Action Zone: Orders on Hold + Stuck Orders ─ stacks on mobile ─ */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           {/* Orders on Hold */}
-          <div className="card-priority p-5">
+          <div className="card-priority p-4 md:p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-medium text-ink-strong">Orders on Hold</h3>
@@ -930,7 +938,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Stuck Orders (printed, past SLA) */}
-          <div className="card-priority p-5">
+          <div className="card-priority p-4 md:p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-medium text-ink-strong">Stuck Orders</h3>
@@ -980,10 +988,10 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* ── Flow Zone: Daily Sales + Production Flow ──────────────────── */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* ── Flow Zone: Daily Sales + Production Flow ─ stacks on mobile ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           {/* Daily Sales — stacked by product line */}
-          <div className="card-priority p-5">
+          <div className="card-priority p-4 md:p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
               <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
@@ -992,7 +1000,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* Production Flow — started vs invoiced per day */}
-          <div className="card-priority p-5">
+          <div className="card-priority p-4 md:p-5">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="text-sm font-medium text-ink-strong">Production Flow · Last 5 Business Days</h3>
               <span className="text-xs text-ink-muted">started vs invoiced</span>
