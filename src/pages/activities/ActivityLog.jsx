@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 import ActivityForm from './ActivityForm'
@@ -222,7 +222,29 @@ export default function ActivityLog() {
   const [teamRows,    setTeamRows]    = useState([])
   const [teamLoading, setTeamLoading] = useState(false)
 
+  // URL params: ?rep=Name&period=this_week — used when navigating from Sales Activity Report
+  const [searchParams] = useSearchParams()
+
   useEffect(() => { fetchActivities() }, [filter, repFilter, period, profile])
+
+  useEffect(() => {
+    if (isSales) fetchKpis()
+    // Load rep list for non-sales users (so execs can filter)
+    if (profile && !isSales) loadReps()
+  }, [isSales, repId, profile])
+
+  // Apply URL params once reps are loaded (so we can resolve rep name → user_id)
+  useEffect(() => {
+    const urlPeriod = searchParams.get('period')
+    const urlRep = searchParams.get('rep')
+    if (urlPeriod && ['today','this_week','last_week','this_month'].includes(urlPeriod)) {
+      setPeriod(urlPeriod)
+    }
+    if (urlRep && reps.length > 0) {
+      const matchedRep = reps.find(r => r.full_name === urlRep)
+      if (matchedRep) setRepFilter(matchedRep.id)
+    }
+  }, [searchParams, reps])
 
   useEffect(() => {
     if (isSales) fetchKpis()
