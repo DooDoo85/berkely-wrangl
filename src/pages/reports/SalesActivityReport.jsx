@@ -32,10 +32,12 @@ const PERIODS = [
 ]
 
 const ACTIVITY_TYPES = {
-  call:     { icon: '📞', label: 'Call'    },
-  meeting:  { icon: '🤝', label: 'Meeting' },
-  note:     { icon: '📝', label: 'Note'    },
-  email:    { icon: '✉️',  label: 'Email'   },
+  scheduled_meeting: { icon: '🤝', label: 'Meeting'    },
+  cold_call:         { icon: '📞', label: 'Cold Call'  },
+  sample_book:       { icon: '📚', label: 'Sample Book' },
+  call:              { icon: '☎️',  label: 'Customer Call' },
+  email:             { icon: '✉️',  label: 'Email'      },
+  note:              { icon: '📝', label: 'Note'       },
 }
 
 const TIER_STYLES = {
@@ -98,7 +100,7 @@ function getPeriodRange(period, offset = 0) {
 }
 
 function ActivityBreakdown({ activities }) {
-  const counts = { call:0, meeting:0, note:0, email:0 }
+  const counts = Object.fromEntries(Object.keys(ACTIVITY_TYPES).map(k => [k, 0]))
   activities.forEach(a => { if (counts[a.activity_type] !== undefined) counts[a.activity_type]++ })
   const total = Object.values(counts).reduce((a,b)=>a+b,0)
   if (!total) return <div className="text-xs text-ink-muted text-center py-2">No activities logged</div>
@@ -137,6 +139,7 @@ function TrendBadge({ current, previous }) {
 // =====================================================================
 export default function SalesActivityReport() {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const isExec = profile && ALLOWED_INTEL_ROLES.includes(profile.role)
 
   const [period,  setPeriod]  = useState('week')
@@ -156,7 +159,7 @@ export default function SalesActivityReport() {
           supabase.from('orders')
             .select('order_number, order_amount, status, epic_status_date')
             .eq('sales_rep', rep)
-            .in('status', ['invoiced', 'printed', 'credit_ok', 'po_sent', 'quote'])
+            .in('status', ['invoiced', 'printed', 'credit_ok', 'po_sent', 'in_production'])
             .gte('epic_status_date', range.startStr)
             .lte('epic_status_date', range.endStr),
 
@@ -200,10 +203,22 @@ export default function SalesActivityReport() {
         const invoiced    = orders.filter(o => o.status === 'invoiced')
         const pipeline    = orders.filter(o => o.status !== 'invoiced')
 
+        // KPI breakdowns from activity types
+        const scheduledMeetings = activities.filter(a => a.activity_type === 'scheduled_meeting').length
+        const coldCalls         = activities.filter(a => a.activity_type === 'cold_call').length
+        const sampleBooks       = activities.filter(a => a.activity_type === 'sample_book').length
+
+        // Total activities = all logged activities + completed follow-ups
+        const totalActivities = activities.length + (followUpsRes.count || 0)
+
         results[rep] = {
           orders:       { count: invoiced.length, value: invoiced.reduce((s,o) => s + Number(o.order_amount||0), 0) },
           pipeline:     { count: pipeline.length, value: pipeline.reduce((s,o) => s + Number(o.order_amount||0), 0) },
           activities:   { count: activities.length, items: activities },
+          totalActivities,
+          scheduledMeetings,
+          coldCalls,
+          sampleBooks,
           newCustomers: newCustomersRes.count || 0,
           followUps:    followUpsRes.count || 0,
           prev: {
@@ -343,34 +358,53 @@ export default function SalesActivityReport() {
                       {loading ? '' : fmt$(d?.pipeline.value)}
                     </span>
                   </div>
-                  <div className="text-xs text-ink-muted mt-0.5">quotes, credit ok, po sent, printed</div>
+                  <div className="text-xs text-ink-muted mt-0.5">credit ok, po sent, printed, in production</div>
                 </div>
 
-                <div className="px-4 py-3">
+                <div className="px-4 py-3 cursor-pointer hover:bg-surface-page/40 transition-colors"
+                     onClick={() => navigate(`/activities?rep=${encodeURIComponent(rep)}&period=${period}`)}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Activities</span>
-                    <TrendBadge current={d?.activities.count||0} previous={d?.prev.activities||0} />
+                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Total Activities</span>
+                    <span className="text-xs text-accent-clay font-medium">View →</span>
                   </div>
-                  <div className="text-2xl font-bold text-ink-strong tabular-nums mb-2">
-                    {loading ? '—' : d?.activities.count ?? 0}
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-2xl font-bold text-ink-strong tabular-nums">
+                      {loading ? '—' : d?.totalActivities ?? 0}
+                    </span>
+                    <span className="text-xs text-ink-muted">
+                      {!loading && d?.followUps > 0 && `incl. ${d.followUps} follow-ups`}
+                    </span>
                   </div>
                   {!loading && d?.activities.items && (
                     <ActivityBreakdown activities={d.activities.items} />
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-surface-border-soft">
-                  <div className="px-4 py-3 text-center">
-                    <div className="text-xl font-bold text-ink-strong tabular-nums">
+                {/* Bottom KPI strip — 4 tiles */}
+                <div className="grid grid-cols-4 divide-x divide-surface-border-soft">
+                  <div className="px-3 py-3 text-center">
+                    <div className="text-lg font-bold text-ink-strong tabular-nums">
+                      {loading ? '—' : d?.scheduledMeetings ?? 0}
+                    </div>
+                    <div className="text-[10px] text-ink-muted mt-0.5 leading-tight">Meetings</div>
+                  </div>
+                  <div className="px-3 py-3 text-center">
+                    <div className="text-lg font-bold text-ink-strong tabular-nums">
+                      {loading ? '—' : d?.coldCalls ?? 0}
+                    </div>
+                    <div className="text-[10px] text-ink-muted mt-0.5 leading-tight">Cold Calls</div>
+                  </div>
+                  <div className="px-3 py-3 text-center">
+                    <div className="text-lg font-bold text-ink-strong tabular-nums">
+                      {loading ? '—' : d?.sampleBooks ?? 0}
+                    </div>
+                    <div className="text-[10px] text-ink-muted mt-0.5 leading-tight">Sample Books</div>
+                  </div>
+                  <div className="px-3 py-3 text-center">
+                    <div className="text-lg font-bold text-ink-strong tabular-nums">
                       {loading ? '—' : d?.newCustomers ?? 0}
                     </div>
-                    <div className="text-xs text-ink-muted mt-0.5">New Customers</div>
-                  </div>
-                  <div className="px-4 py-3 text-center">
-                    <div className="text-xl font-bold text-ink-strong tabular-nums">
-                      {loading ? '—' : d?.followUps ?? 0}
-                    </div>
-                    <div className="text-xs text-ink-muted mt-0.5">Follow-ups Done</div>
+                    <div className="text-[10px] text-ink-muted mt-0.5 leading-tight">New Customers</div>
                   </div>
                 </div>
               </div>
