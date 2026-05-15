@@ -1,8 +1,11 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import MobileBottomNav from './MobileBottomNav'
+import InstallPrompt from './InstallPrompt'
 import FeedbackButton from './FeedbackButton'
 import ImpersonationBanner from './ImpersonationBanner'
 import NotificationBell from './NotificationBell'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 // ═══════════════════════════════════════════════════════════════════════
 // Page classification — determines visual intensity (executive ←→ utility)
@@ -55,6 +58,7 @@ const PAGE_TITLES = {
 
 export default function Layout() {
   const location = useLocation()
+  const isMobile = useIsMobile()
   const title    = PAGE_TITLES[location.pathname] || 'Berkely Wrangl'
   const pageMode = classifyPage(location.pathname)
 
@@ -64,35 +68,64 @@ export default function Layout() {
       <ImpersonationBanner />
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        {/* Sidebar — desktop only. Hidden on mobile in favor of bottom nav. */}
+        {!isMobile && <Sidebar />}
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Top bar — parchment matching page, single hairline border below */}
+          {/* Top bar — same on both, with mobile-friendly adjustments */}
           <header
-            className="h-14 min-h-[56px] flex items-center justify-between px-6 flex-shrink-0 border-b"
+            className={`h-14 min-h-[56px] flex items-center justify-between flex-shrink-0 border-b ${isMobile ? 'px-4' : 'px-6'}`}
             style={{
               background: '#f4eee2',
               borderColor: 'rgba(92,67,42,0.10)',
             }}
           >
-            <h1 className="text-base font-semibold text-ink-strong" style={{ fontFamily: 'Inter' }}>
-              {title}
-            </h1>
-            <div className="flex items-center gap-3">
+            {/* Mobile: small Wrangl badge on the left so brand stays visible */}
+            {isMobile ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'linear-gradient(135deg, #c89860 0%, #9d4f30 100%)',
+                    color: '#1a0f08',
+                    fontFamily: 'Merriweather, Georgia, serif',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    lineHeight: 1,
+                  }}
+                >
+                  W
+                </div>
+                <h1 className="text-base font-semibold text-ink-strong truncate" style={{ fontFamily: 'Inter' }}>
+                  {title}
+                </h1>
+              </div>
+            ) : (
+              <h1 className="text-base font-semibold text-ink-strong" style={{ fontFamily: 'Inter' }}>
+                {title}
+              </h1>
+            )}
+
+            <div className="flex items-center gap-3 flex-shrink-0">
               <NotificationBell />
-              <span className="text-xs text-ink-muted">
-                {new Date().toLocaleDateString('en-US', {
-                  weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-                })}
-              </span>
+              {/* Date hidden on mobile to save horizontal space */}
+              {!isMobile && (
+                <span className="text-xs text-ink-muted">
+                  {new Date().toLocaleDateString('en-US', {
+                    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+                  })}
+                </span>
+              )}
             </div>
           </header>
 
           {/* Page content — receives page-mode via data attribute,
-              which drives all the CSS custom-property switching */}
+              which drives all the CSS custom-property switching.
+              Bottom padding on mobile so content doesn't hide behind bottom nav. */}
           <main
             data-page-mode={pageMode}
             className="flex-1 overflow-y-auto page-surface"
+            style={isMobile ? { paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' } : undefined}
           >
             <div className="page-enter">
               <Outlet />
@@ -101,7 +134,12 @@ export default function Layout() {
         </div>
       </div>
 
-      <FeedbackButton />
+      {/* Mobile-only: bottom nav + install prompt */}
+      {isMobile && <MobileBottomNav />}
+      {isMobile && <InstallPrompt />}
+
+      {/* FeedbackButton — desktop only. On mobile it'd conflict with the bottom nav. */}
+      {!isMobile && <FeedbackButton />}
     </div>
   )
 }
