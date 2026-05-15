@@ -39,18 +39,18 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon, valueSu
   const valueColor = hit ? 'text-status-healthy' : 'text-ink-strong'
 
   const clickable = !!onClick
-  const tileClass = `card p-5 transition-shadow duration-200 ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`
+  const tileClass = `card p-4 md:p-5 transition-shadow duration-200 ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`
 
   return (
     <div className={tileClass} onClick={onClick}>
-      <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+      <div className="flex items-start gap-2 md:gap-3">
+        <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
           <span className={iconColor}>{icon}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">{label}</div>
+          <div className="text-[10px] md:text-[11px] font-semibold text-ink-muted uppercase tracking-wider">{label}</div>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>
+            <span className={`text-2xl md:text-3xl font-bold tabular-nums leading-none ${valueColor}`}>
               {loading ? "—" : v}
             </span>
             {g > 0 && !loading && (
@@ -87,7 +87,7 @@ function QuickAction({ icon, label, primary, onClick }) {
     return (
       <button
         onClick={onClick}
-        className="flex items-center justify-center gap-2.5 rounded-xl px-5 py-4 transition-colors duration-200 font-medium text-sm"
+        className="flex items-center justify-center gap-2 md:gap-2.5 rounded-xl px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 font-medium text-xs md:text-sm"
         style={{ background: '#2a1d10', color: '#f7f0e0' }}
         onMouseEnter={e => (e.currentTarget.style.background = '#1a0f08')}
         onMouseLeave={e => (e.currentTarget.style.background = '#2a1d10')}
@@ -100,7 +100,7 @@ function QuickAction({ icon, label, primary, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="card flex items-center justify-center gap-2.5 px-5 py-4 transition-colors duration-200 text-ink-mid font-medium text-sm hover:text-ink-strong"
+      className="card flex items-center justify-center gap-2 md:gap-2.5 px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 text-ink-mid font-medium text-xs md:text-sm hover:text-ink-strong"
     >
       {icon}
       <span>{label}</span>
@@ -114,7 +114,7 @@ function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotSty
   return (
     <button
       onClick={onClick}
-      className="card p-5 text-left transition-all duration-200 hover:-translate-y-px w-full"
+      className="card p-4 md:p-5 text-left transition-all duration-200 hover:-translate-y-px w-full"
     >
       <div className="flex items-center gap-2 mb-3">
         <div className={`w-2 h-2 rounded-full ${dotColor || ''}`} style={dotStyle} />
@@ -123,7 +123,7 @@ function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotSty
 
       <div className="flex items-end justify-between">
         <div>
-          <div className="text-3xl font-bold text-ink-strong tabular-nums leading-none">
+          <div className="text-2xl md:text-3xl font-bold text-ink-strong tabular-nums leading-none">
             {loading ? "—" : count}
           </div>
           <div className="text-xs font-medium mt-2 text-accent-clay">View all →</div>
@@ -383,23 +383,23 @@ export default function RepHome() {
 
   return (
     <div className="min-h-screen">
-      <div className="p-8 max-w-screen-xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="p-3 md:p-8 max-w-screen-xl mx-auto">
+      {/* Header — stacks on mobile, hides full date (already in top bar) */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between mb-5 md:mb-8">
         <div>
-          <h1 className="text-3xl tracking-tight">
+          <h1 className="text-2xl md:text-3xl tracking-tight">
             {greeting}, {firstName}
           </h1>
           <p className="text-sm text-ink-muted mt-1.5">{todayShort}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-ink-muted">
+        <div className="hidden md:flex items-center gap-2 text-xs text-ink-muted">
           <span className="text-ink-muted">{Icon.cal}</span>
           <span>{fullDate}</span>
         </div>
       </div>
 
       {/* Weekly KPI Strip — 5 tiles including Open Quotes */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
         <KpiTile
           label="Scheduled Meetings"
           value={data.kpis.scheduledMeetings}
@@ -440,9 +440,9 @@ export default function RepHome() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mb-6">
+      <div className="mb-5 md:mb-6">
         <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
           <QuickAction primary icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
           <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/activities")} />
           <QuickAction         icon={Icon.userPlus}  label="New Customer" onClick={() => navigate("/customers/new")} />
@@ -450,7 +450,7 @@ export default function RepHome() {
       </div>
 
       {/* 2-column row: Follow-ups (left) + Upcoming Activities (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-5 md:mb-6">
         {/* Follow-ups */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -560,9 +560,9 @@ export default function RepHome() {
       </div>
 
       {/* My Pipeline — full width strip at the bottom */}
-      <div className="mb-6">
+      <div className="mb-5 md:mb-6">
         <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <PipelineCard
             label="Printed"
             count={data.pipeline.printed}
