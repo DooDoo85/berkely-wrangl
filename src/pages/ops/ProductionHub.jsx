@@ -33,7 +33,7 @@ export default function ProductionHub() {
     async function loadFabrics() {
       const { data } = await supabase
         .from('parts')
-        .select('id, name, qty_on_hand')
+        .select('id, name, qty_on_hand, qty_committed')
         .eq('part_type', 'fabric')
         .eq('active', true)
         .order('name')
@@ -144,14 +144,14 @@ export default function ProductionHub() {
       return
     }
 
-    // Check stock for each cut
-    for (const cut of validCuts) {
-      const fabric = fabrics.find(f => f.id === cut.fabricId)
-      if (fabric && parseFloat(cut.cutLength) > (fabric.qty_on_hand || 0)) {
-        setError(`Not enough stock for ${fabric.name} — need ${cut.cutLength}" but only ${Math.floor(fabric.qty_on_hand)}" on hand`)
-        return
-      }
-    }
+    // ── Removed hard-block on insufficient stock ────────────────────────
+    // Previously rejected cuts where parseFloat(cutLength) > qty_on_hand.
+    // But reminants and reclaimed fabric aren't tracked in the system today,
+    // so Rene legitimately has fabric available that Wrangl doesn't know about.
+    // The dropdown now flags oversold fabrics with an "Oversold" badge so the
+    // cut is a deliberate decision, but it's no longer blocked.
+    // qty_on_hand gets clamped to 0 on the deduct (see Math.max below) so we
+    // never write a negative inventory value.
 
     setSaving(true)
     setError(null)
@@ -402,7 +402,11 @@ export default function ProductionHub() {
                   const searchVal = cut.search || ''
                   const filteredFabrics = fabrics.filter(f =>
                     stripAccents(f.name.toLowerCase()).includes(stripAccents(searchVal.toLowerCase()))
-                  ).slice(0, 8)
+                  )
+                  // No slice — show every match. The dropdown is scrollable
+                  // (max-h-48 / max-h-64). Capping at 8 hid alphabetically-late
+                  // colors of popular fabric series (e.g. "Orléans 5% White/White"
+                  // is #10 in the Orléans group and was getting cut off).
 
                   return (
                     <div key={idx} className="flex gap-3 items-start">
@@ -429,22 +433,38 @@ export default function ProductionHub() {
                               className="input w-full"
                             />
                             {showFabricDropdown === idx && (
-                              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-[var(--surface-card)] border border-[var(--surface-border)] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-[var(--surface-card)] border border-[var(--surface-border)] rounded-xl shadow-lg max-h-72 overflow-y-auto">
                                 {filteredFabrics.length === 0 ? (
                                   <div className="px-3 py-2 text-xs text-ink-muted">No fabrics found</div>
                                 ) : (
-                                  filteredFabrics.map(f => (
-                                    <button
-                                      key={f.id}
-                                      onClick={() => selectFabric(idx, f)}
-                                      className="w-full text-left px-3 py-2 hover:bg-black/[0.02] flex items-center justify-between text-sm transition-colors"
-                                    >
-                                      <span className="text-ink-strong">{f.name}</span>
-                                      <span className={`text-xs font-mono ${(f.qty_on_hand || 0) <= 0 ? 'text-status-critical' : 'text-ink-muted'}`}>
-                                        {Math.floor(f.qty_on_hand || 0).toLocaleString()}"
-                                      </span>
-                                    </button>
-                                  ))
+                                  filteredFabrics.map(f => {
+                                    const onHand    = Number(f.qty_on_hand || 0)
+                                    const committed = Number(f.qty_committed || 0)
+                                    const oversold  = committed > onHand
+                                    return (
+                                      <button
+                                        key={f.id}
+                                        onClick={() => selectFabric(idx, f)}
+                                        className="w-full text-left px-3 py-2 hover:bg-black/[0.02] flex items-center justify-between text-sm transition-colors"
+                                      >
+                                        <span className="text-ink-strong">{f.name}</span>
+                                        <span className="flex items-center gap-2 flex-shrink-0">
+                                          {oversold && (
+                                            <span
+                                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                                              style={{ background: 'rgba(220, 38, 38, 0.10)', color: '#b91c1c' }}
+                                              title={`${Math.floor(committed)}" committed exceeds ${Math.floor(onHand)}" on hand`}
+                                            >
+                                              Oversold
+                                            </span>
+                                          )}
+                                          <span className={`text-xs font-mono ${onHand <= 0 ? 'text-status-critical' : 'text-ink-muted'}`}>
+                                            {Math.floor(onHand).toLocaleString()}"
+                                          </span>
+                                        </span>
+                                      </button>
+                                    )
+                                  })
                                 )}
                               </div>
                             )}
