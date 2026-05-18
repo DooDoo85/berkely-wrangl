@@ -85,22 +85,24 @@ export default function ActivityForm({
   async function fetchCustomers() {
     const { data } = await supabase
       .from('customers').select('id, account_name')
-      .eq('active', true).order('account_name').limit(200)
+      .eq('active', true)
+      .not('account_name', 'is', null)
+      .order('account_name').limit(200)
     setCustomers(data || [])
   }
 
   async function loadDefaultCustomer(id) {
     const { data } = await supabase.from('customers').select('account_name').eq('id', id).single()
-    if (data) setCustSearch(data.account_name)
+    if (data?.account_name) setCustSearch(data.account_name)
   }
 
   async function loadDefaultOrder(id) {
     const { data } = await supabase.from('orders').select('order_number, customer_name').eq('id', id).single()
-    if (data) setOrderSearch(`#${data.order_number} — ${data.customer_name}`)
+    if (data) setOrderSearch(`#${data.order_number ?? ''} — ${data.customer_name ?? ''}`)
   }
 
   const filteredCustomers = customers.filter(c =>
-    c.account_name.toLowerCase().includes(custSearch.toLowerCase())
+    (c.account_name || '').toLowerCase().includes(custSearch.toLowerCase())
   ).slice(0, 6)
 
   async function searchOrders(q) {
