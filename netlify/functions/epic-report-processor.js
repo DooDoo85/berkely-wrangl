@@ -2321,6 +2321,36 @@ exports.handler = async function(event, context) {
       try {
         let count = 0
 
+        // ── DEPRECATED handlers (May 18 cutover to MASTER SALES REPORT) ────────
+        // These reports used to populate orders.status, roller_wip, and
+        // credit_ok_orders. Their functionality has been folded into the
+        // MASTER SALES REPORT handler below. The ePIC subscriptions for these
+        // reports should be turned off; this block is a belt-and-suspenders
+        // catch so any straggler emails get acknowledged but not processed.
+        //
+        // Handler functions (processFullShip, processPrinted, processRollerWIP,
+        // processCreditOk) are intentionally left in the file. If something
+        // breaks and we need to revert, comment out this block and re-enable
+        // the original handlers below.
+        const DEPRECATED_SUBJECTS = [
+          'ROLLER SHADE FULL SHIP',
+          'FAUX FULL SHIP',
+          'ROLLER SHADE PRINTED',
+          'FAUX PRINTED',
+          'PRINTED ORDERS',
+          'ROLLER SHADE WIP',
+          'CREDIT HOLD/OK ORDERS',
+          'CREDIT OK ORDERS',
+          'CREDIT HOLD',
+        ]
+        const matchedDeprecated = DEPRECATED_SUBJECTS.find(s => subject.includes(s))
+        if (matchedDeprecated) {
+          console.log(`  ⊘ Deprecated subject — skipped (folded into MASTER SALES REPORT): ${matchedDeprecated}`)
+          await markProcessed(messageId, 'deprecated_skipped', 0)
+          results.skipped++
+          continue
+        }
+
         if (subject.includes('ROLLER SHADE FULL SHIP')) {
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
