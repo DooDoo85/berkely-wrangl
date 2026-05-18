@@ -7,6 +7,7 @@ import ImpersonationBanner from './ImpersonationBanner'
 import NotificationBell from './NotificationBell'
 import ErrorBoundary from './ErrorBoundary'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useUsageTracking } from '../hooks/useUsageTracking'
 
 // ═══════════════════════════════════════════════════════════════════════
 // Page classification — determines visual intensity (executive ←→ utility)
@@ -62,6 +63,10 @@ export default function Layout() {
   const isMobile = useIsMobile()
   const title    = PAGE_TITLES[location.pathname] || 'Berkely Wrangl'
   const pageMode = classifyPage(location.pathname)
+
+  // Fire usage_events.pageview on every route change.
+  // Owner-only readable per RLS — see usage_analytics_migration.sql.
+  useUsageTracking()
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
