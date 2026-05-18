@@ -442,9 +442,10 @@ export default function ExecutiveHome() {
       }
 
       // ── Roller WIP ────────────────────────────────────────────────────
-      const { data: wipData } = await supabase.from("roller_wip").select("*").order("days_in_status", { ascending: false });
-      const creditOK = (wipData ?? []).filter(r => r.order_status === "CREDIT OK");
-      const printed  = (wipData ?? []).filter(r => r.order_status === "PRINTED");
+      // (Previously read from legacy roller_wip snapshot. Now derived from
+      // the orders table via `trulyIdleOrders` further down — see line ~494.
+      // The dead `wipData` query was removed during the May 18 master_sales_report
+      // cutover. roller_wip table is scheduled for DROP after 7 days clean.)
 
       // ── Orders on Hold ──────────────────────────────────────────────────
       // Filters by hold_reason (not status) to capture both flavors:
@@ -472,18 +473,36 @@ export default function ExecutiveHome() {
       // ── Overdue / Stuck Orders calculated after trulyIdleOrders loads below ──
 
       // ── Credit OK / HOLD ──────────────────────────────────────────────
-      const { data: creditOkRowsData } = await supabase
-        .from("credit_ok_orders")
-        .select("order_no, salesperson, customer_name, order_amount, entered_date, order_status, product_line")
-        .order("entered_date", { ascending: false });
-      const creditAll = (creditOkRowsData ?? []).filter(r => r.order_status === 'CREDIT OK');
+      // Reads from `orders` (populated by MASTER SALES REPORT) instead of
+      // the legacy `credit_ok_orders` snapshot. The legacy table is preserved
+      // for rep-attribution fallback below until we confirm a week clean,
+      // then DROP.
+      const { data: creditOkOrdersFromOrders } = await supabase
+        .from("orders")
+        .select("order_number, sales_rep, customer_name, order_amount, order_date, product_line")
+        .eq("status", "credit_ok")
+        .order("order_date", { ascending: false });
+      const creditAll = creditOkOrdersFromOrders ?? [];
       const creditOk = {
         count: creditAll.length,
         total: creditAll.reduce((s, r) => s + Number(r.order_amount || 0), 0),
       };
       const creditOkRoller = { count: creditAll.filter(r => r.product_line === 'roller').length };
       const creditOkFaux   = { count: creditAll.filter(r => r.product_line === 'faux').length };
-      setCreditOkRows(creditOkRowsData ?? []);
+
+      // For the Credit OK modal table — map to the legacy shape so the modal
+      // doesn't need to change. (order_no, salesperson, etc. match what the
+      // modal expects to render today.)
+      const creditOkRowsData = creditAll.map(r => ({
+        order_no:      r.order_number,
+        salesperson:   r.sales_rep,
+        customer_name: r.customer_name,
+        order_amount:  r.order_amount,
+        entered_date:  r.order_date,
+        order_status:  'CREDIT OK',
+        product_line:  r.product_line,
+      }));
+      setCreditOkRows(creditOkRowsData);
 
       // ── Truly Printed (idle, ready for Rene to start) ─────────────────
       // Source of truth for both PRINTED tiles + Stuck Orders. Uses Wrangl's
@@ -561,17 +580,13 @@ export default function ExecutiveHome() {
       const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
 
       // ── Team — orders invoiced this week ──────────────────────────────
-      // sales_rep is null on most invoiced orders (ePIC processor doesn't populate it).
-      // Fallback chain: orders.sales_rep → credit_ok_orders.salesperson (recent) → customers.sales_rep (always)
+      // Fallback chain (simplified post master_sales_report cutover):
+      //   orders.sales_rep → customers.sales_rep
+      // The legacy credit_ok_orders.salesperson middle fallback was removed
+      // since orders.sales_rep is now reliably populated by MASTER SALES REPORT.
       const { data: invoicedRows } = await supabase.from("orders")
         .select("order_number, customer_name, sales_rep")
         .eq("status", "invoiced").gte("epic_status_date", weekStartDate);
-
-      // Build rep lookup from credit_ok_orders snapshot (recent passers-through)
-      const repByOrderNo = {};
-      (creditOkRowsData ?? []).forEach(r => {
-        if (r.order_no && r.salesperson) repByOrderNo[r.order_no] = r.salesperson;
-      });
 
       // Build rep lookup from customers table (most reliable)
       const customerNames = [...new Set((invoicedRows ?? []).map(r => r.customer_name).filter(Boolean))];
@@ -587,7 +602,7 @@ export default function ExecutiveHome() {
 
       const repMap = {};
       (invoicedRows ?? []).forEach(r => {
-        const name = (r.sales_rep || repByOrderNo[r.order_number] || repByCustomer[r.customer_name] || "").trim();
+        const name = (r.sales_rep || repByCustomer[r.customer_name] || "").trim();
         if (name) repMap[name] = (repMap[name] ?? 0) + 1;
       });
       const repOrders = Object.entries(repMap)
