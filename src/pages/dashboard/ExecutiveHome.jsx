@@ -644,12 +644,16 @@ export default function ExecutiveHome() {
       // ── Production Flow — last 5 business days ────────────────────────
       // Two metrics per day:
       //   • Started: orders Rene flipped to in_production that day (wrangl_status_set_at)
+      //     We count by timestamp regardless of current wrangl_status — once
+      //     an order moves out of in_production (to invoiced, etc.) the status
+      //     clears to NULL but wrangl_status_set_at is preserved, so it stays
+      //     attributable to the day it was started.
       //   • Invoiced: orders PIC marked invoiced that day (epic_status_date + status='invoiced')
       // Units summed for each, surfaced under the bars.
       const [startedRowsRes, invoicedFlowRes] = await Promise.all([
         supabase.from("orders")
           .select("wrangl_status_set_at, total_units")
-          .eq("wrangl_status", "in_production")
+          .not("wrangl_status_set_at", "is", null)
           .gte("wrangl_status_set_at", earliestBizDay),
         supabase.from("orders")
           .select("epic_status_date, total_units")
