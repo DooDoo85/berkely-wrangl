@@ -446,6 +446,11 @@ export default function ExecutiveHome() {
       // the orders table via `trulyIdleOrders` further down — see line ~494.
       // The dead `wipData` query was removed during the May 18 master_sales_report
       // cutover. roller_wip table is scheduled for DROP after 7 days clean.)
+      //
+      // creditOK is kept as an empty array for back-compat with the legacy WIP
+      // modal (data.wip.creditOK). The modal still opens but shows no rows —
+      // that flow has been superseded by creditOkModal (separate state).
+      const creditOK = [];
 
       // ── Orders on Hold ──────────────────────────────────────────────────
       // Filters by hold_reason (not status) to capture both flavors:
