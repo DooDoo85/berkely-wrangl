@@ -95,15 +95,29 @@ export function useUsageTracking() {
   // Keep track of where we just came from so we can record referrer
   const previousPathRef = useRef(null)
 
+  // Stable refs to profile fields — these change on every auth refresh,
+  // but we don't want that to re-trigger the effect. Snapshot inside.
+  const profileRef = useRef(profile)
+  profileRef.current = profile
+
   useEffect(() => {
     // Don't fire if no authenticated user yet
-    if (!user?.id || !profile) return
+    if (!user?.id) return
 
+    // Don't fire if we just logged this exact path (double-render guard).
+    // React StrictMode and some auth flows can cause a mount to fire twice.
+    if (previousPathRef.current === location.pathname) return
+
+    const currentProfile = profileRef.current
     const path           = location.pathname
     const path_template  = templatize(path)
     const referrer_path  = previousPathRef.current
     const viewport       = getViewport()
     const session_id     = getOrCreateSessionId()
+
+    // Update ref BEFORE the async insert so a fast second render
+    // doesn't fire a duplicate
+    previousPathRef.current = path
 
     // Fire-and-forget. We never await this — page navigation should not
     // wait on analytics. If it fails, we just drop the event silently.
@@ -111,8 +125,8 @@ export function useUsageTracking() {
       .from('usage_events')
       .insert({
         user_id:       user.id,
-        email:         profile.email || null,
-        role:          profile.role || null,
+        email:         currentProfile?.email || null,
+        role:          currentProfile?.role || null,
         event_type:    'pageview',
         path,
         path_template,
@@ -122,8 +136,5 @@ export function useUsageTracking() {
       })
       .then(() => {})
       .catch(() => {})
-
-    // Remember this path for next navigation's referrer
-    previousPathRef.current = path
-  }, [location.pathname, user?.id, profile])
+  }, [location.pathname, user?.id])
 }
