@@ -5,6 +5,7 @@ import InstallPrompt from './InstallPrompt'
 import FeedbackButton from './FeedbackButton'
 import ImpersonationBanner from './ImpersonationBanner'
 import NotificationBell from './NotificationBell'
+import ErrorBoundary from './ErrorBoundary'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -128,7 +129,13 @@ export default function Layout() {
             style={isMobile ? { paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' } : undefined}
           >
             <div className="page-enter">
-              <Outlet />
+              {/* ErrorBoundary catches render crashes per-page, so a buggy page
+                  shows a friendly error UI instead of blanking the whole app.
+                  key={pathname} resets the boundary when the user navigates,
+                  so a crash on /activities doesn't persist after going to /home. */}
+              <ErrorBoundary key={location.pathname} where={location.pathname}>
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </main>
         </div>
