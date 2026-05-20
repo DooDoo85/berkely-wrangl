@@ -299,10 +299,11 @@ export default function RepHome() {
               .or("wrangl_status.eq.in_production,status.eq.in_production")
           : Promise.resolve({ count: 0 }),
 
-        // ORDERS ON HOLD — anything with on_hold flag
+        // ORDERS ON HOLD — status='on_hold' OR wrangl_status='on_hold'
         repName
           ? supabase.from("orders").select("id", { count: "exact", head: true })
-              .eq("sales_rep", repName).eq("on_hold", true)
+              .eq("sales_rep", repName)
+              .or("status.eq.on_hold,wrangl_status.eq.on_hold")
           : Promise.resolve({ count: 0 }),
 
         // INVOICED WTD — invoiced this week (uses epic_status_date for actual invoice date)
