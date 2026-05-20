@@ -7,6 +7,7 @@ import ImpersonationBanner from './ImpersonationBanner'
 import NotificationBell from './NotificationBell'
 import ErrorBoundary from './ErrorBoundary'
 import GlobalActivityModal from './GlobalActivityModal'
+import WranglBadge from './WranglBadge'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useUsageTracking } from '../hooks/useUsageTracking'
 
@@ -90,19 +91,7 @@ export default function Layout() {
             {/* Mobile: small Wrangl badge on the left so brand stays visible */}
             {isMobile ? (
               <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: 'linear-gradient(135deg, #c89860 0%, #9d4f30 100%)',
-                    color: '#1a0f08',
-                    fontFamily: 'Merriweather, Georgia, serif',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                    lineHeight: 1,
-                  }}
-                >
-                  W
-                </div>
+                <WranglBadge size={28} />
                 <h1 className="text-base font-semibold text-ink-strong truncate" style={{ fontFamily: 'Inter' }}>
                   {title}
                 </h1>
