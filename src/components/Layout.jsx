@@ -6,6 +6,7 @@ import FeedbackButton from './FeedbackButton'
 import ImpersonationBanner from './ImpersonationBanner'
 import NotificationBell from './NotificationBell'
 import ErrorBoundary from './ErrorBoundary'
+import GlobalActivityModal from './GlobalActivityModal'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useUsageTracking } from '../hooks/useUsageTracking'
 
@@ -152,6 +153,12 @@ export default function Layout() {
 
       {/* FeedbackButton — desktop only. On mobile it'd conflict with the bottom nav. */}
       {!isMobile && <FeedbackButton />}
+
+      {/* GlobalActivityModal — mounted once at app level so any page can open
+          the Log Activity form without navigating. Triggered via custom event
+          'wrangl:open-activity-modal'. Click LOG button anywhere → modal
+          slides up over current page → save → modal closes → user stays where they were. */}
+      <GlobalActivityModal />
     </div>
   )
 }
