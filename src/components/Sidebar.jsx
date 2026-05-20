@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
+import WranglBadge from './WranglBadge'
 
 // ═══════════════════════════════════════════════════════════════════════
 // Sidebar — premium dark brown with gradient, gold accent for active state
@@ -242,20 +243,7 @@ export default function Sidebar() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4 border-b border-[rgba(247,240,224,0.08)]">
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'linear-gradient(135deg, #c89860 0%, #9d4f30 100%)',
-              color: '#1a0f08',
-              fontFamily: 'Merriweather, Georgia, serif',
-              fontWeight: 700,
-              fontSize: '20px',
-              lineHeight: 1,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
-            }}
-          >
-            W
-          </div>
+          <WranglBadge size={40} />
           <div>
             <div
               className="text-lg font-bold tracking-tight"
