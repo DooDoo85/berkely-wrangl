@@ -320,7 +320,7 @@ export default function RepHome() {
           : Promise.resolve({ data: [] }),
 
         supabase.from("activities")
-          .select("id, subject, body, follow_up_date, customer_id, customers(account_name, phone)")
+          .select("id, subject, body, follow_up_date, customer_id, customers(account_name)")
           .eq("user_id", profile.id).eq("completed", false)
           .lte("follow_up_date", today)
           .order("follow_up_date", { ascending: true }).limit(8),
