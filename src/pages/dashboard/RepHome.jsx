@@ -444,7 +444,7 @@ export default function RepHome() {
         <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
         <div className="grid grid-cols-3 gap-2 md:gap-3">
           <QuickAction primary icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
-          <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/activities")} />
+          <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/log")} />
           <QuickAction         icon={Icon.userPlus}  label="New Customer" onClick={() => navigate("/customers/new")} />
         </div>
       </div>
