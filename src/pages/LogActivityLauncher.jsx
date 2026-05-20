@@ -1,15 +1,21 @@
-import { useEffect } from 'react'
+import { useRef } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 
 /**
  * LogActivityLauncher — handles the /log route.
  *
- * Mounting this route fires the global activity modal event and immediately
- * redirects the user to home (or wherever they came from via ?from=).
+ * Dispatches the modal-open event synchronously during render, then redirects
+ * to home (or wherever ?from= points). The persistent GlobalActivityModal in
+ * Layout hears the event and opens — so the user sees the modal land on top
+ * of the destination page.
  *
- * Why this exists: lets us point ANY "Log Activity" button at /log via simple
- * navigate('/log'), and the modal opens over the home page. Reps never land on
- * a broken /activities page or have to click through a multi-step flow.
+ * Why no useEffect: <Navigate> unmounts this component synchronously after
+ * render, which would clear any pending timer/effect cleanup before it fires.
+ * Dispatching during render is safe because GlobalActivityModal's listener
+ * was registered at app startup and is always present.
+ *
+ * Why the ref: React StrictMode renders components twice in dev. The ref
+ * ensures we only fire the event once per mount.
  *
  * Optional query params:
  *   ?customerId=xxx  - pre-select customer in the modal
@@ -22,20 +28,19 @@ export default function LogActivityLauncher() {
   const orderId    = params.get('orderId')
   const from       = params.get('from') || '/'
 
-  useEffect(() => {
-    // Fire the modal-open event on next tick so the redirect has time to land
-    // the user on the home page first. This way they see the modal open over
-    // home, not over a flash of the /log "page".
-    const t = setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('wrangl:open-activity-modal', {
-        detail: {
-          customerId: customerId || null,
-          orderId:    orderId    || null,
-        },
-      }))
-    }, 50)
-    return () => clearTimeout(t)
-  }, [customerId, orderId])
+  // useRef survives both renders of StrictMode's double-mount, so we only
+  // dispatch the event once even if React renders this component twice.
+  const dispatched = useRef(false)
+
+  if (!dispatched.current) {
+    dispatched.current = true
+    window.dispatchEvent(new CustomEvent('wrangl:open-activity-modal', {
+      detail: {
+        customerId: customerId || null,
+        orderId:    orderId    || null,
+      },
+    }))
+  }
 
   return <Navigate to={from} replace />
 }
