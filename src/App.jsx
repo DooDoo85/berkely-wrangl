@@ -70,6 +70,9 @@ import EmailPreferences from './pages/settings/EmailPreferences'
 // Rep personal worklist
 import MyOpenQuotes from './pages/MyOpenQuotes'
 
+// Activity logging — global launcher route that fires the modal anywhere
+import LogActivityLauncher from './pages/LogActivityLauncher'
+
 import SetPasswordRequired from './components/SetPasswordRequired'
 
 function AppRoutes() {
@@ -93,6 +96,12 @@ function AppRoutes() {
         {/* Activities */}
         <Route path="/activities" element={<ActivityLog />} />
         <Route path="/activities/new" element={<ActivityForm />} />
+
+        {/* /log — fires the GlobalActivityModal event and redirects home.
+            Any "Log Activity" button points here so the modal opens over
+            whatever page the user was on, without depending on /activities
+            rendering. See src/components/GlobalActivityModal.jsx. */}
+        <Route path="/log" element={<LogActivityLauncher />} />
 
         {/* Pipeline */}
         <Route path="/pipeline" element={<Placeholder title="Pipeline" />} />
