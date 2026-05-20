@@ -8,8 +8,10 @@ import MoreDrawer from './MoreDrawer'
 // Five slots: Home · Customers · LOG (raised) · Orders · More
 //
 // LOG is the action button — larger, centered, accent-colored. Tapping
-// it routes to /activities/new which opens the activity form, regardless
-// of which page the user is currently on.
+// it routes to /log which fires the GlobalActivityModal event and
+// redirects home. The Log Activity modal opens over whatever page the
+// user was on (or home if they're brand new), without navigating to a
+// dedicated activity-logging page. Works regardless of /activities state.
 //
 // More opens a slide-up drawer with everything else (Reports, Inventory,
 // Calendar, Settings, etc.) so any future page slots in without
@@ -59,7 +61,7 @@ export default function MobileBottomNav() {
 
         {/* Slot 3 — LOG (raised center button) */}
         <button
-          onClick={() => navigate('/activities/new')}
+          onClick={() => navigate('/log')}
           aria-label="Log activity"
           className="relative flex flex-col items-center justify-center
                      transition-transform active:scale-95"
