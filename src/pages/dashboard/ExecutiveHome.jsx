@@ -1496,8 +1496,8 @@ export default function ExecutiveHome() {
   const FAUX_FILL     = "#f5e8d4";  // accent-gold-soft
 
   return (
-    <div className="min-h-full">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-6 pb-10 md:pb-14">
+    <div className="min-h-full bg-surface-page">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-6 pb-16 md:pb-20">
 
         {/* ── Compact top bar — refresh + timestamp only (page header is in sidebar) ── */}
         <div className="flex items-center justify-end mb-3 md:mb-4">
