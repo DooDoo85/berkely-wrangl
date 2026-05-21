@@ -2471,67 +2471,67 @@ export default function ExecutiveHome() {
             {/* 2×2 KPI cards — no WoW deltas, matches mockup style */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">Sales Summary</p>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 {/* 5-day total sales */}
-                <div className="card p-3">
-                  <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-2">
+                <div className="card p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                       <polyline points="17 6 23 6 23 12" />
                     </svg>
                   </span>
-                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : fmt$(data.salesKpis.sumSales)}
                   </p>
-                  <p className="text-[11px] text-ink-mid mt-1">5-day total sales</p>
+                  <p className="text-[10.5px] text-ink-mid mt-1">5-day total sales</p>
                 </div>
 
                 {/* Orders entered */}
-                <div className="card p-3">
-                  <span className="w-8 h-8 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-2">
+                <div className="card p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <circle cx="9" cy="21" r="1" />
                       <circle cx="20" cy="21" r="1" />
                       <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                     </svg>
                   </span>
-                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : data.salesKpis.sumOrders}
                   </p>
-                  <p className="text-[11px] text-ink-mid mt-1">Orders entered</p>
+                  <p className="text-[10.5px] text-ink-mid mt-1">Orders entered</p>
                 </div>
 
                 {/* Avg roller order — Monthly */}
-                <div className="card p-3">
-                  <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-2">
+                <div className="card p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <circle cx="12" cy="12" r="10" />
                       <path d="M12 6v6l4 2" />
                     </svg>
                   </span>
-                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
                   </p>
-                  <p className="text-[11px] text-ink-mid mt-1">Avg roller order · Monthly</p>
+                  <p className="text-[10.5px] text-ink-mid mt-1">Avg roller · Monthly</p>
                 </div>
 
                 {/* Top product */}
-                <div className="card p-3">
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center mb-2"
+                <div className="card p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center mb-1.5"
                         style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
                                  color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </span>
-                  <p className="text-xl font-bold text-ink-strong leading-none">
+                  <p className="text-lg font-bold text-ink-strong leading-none">
                     {loading ? "—" : data.salesKpis.topProductLabel}
                   </p>
-                  <p className="text-[11px] text-ink-mid mt-1">
+                  <p className="text-[10.5px] text-ink-mid mt-1">
                     Top product
                     {!loading && data.salesKpis.topProductPct > 0 && (
                       <span className="text-ink-muted"> · {data.salesKpis.topProductPct}%</span>
