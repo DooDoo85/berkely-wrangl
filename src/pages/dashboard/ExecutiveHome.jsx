@@ -681,6 +681,308 @@ function TrendLineChart({ current = [], prior = [], width = 360, height = 180 })
   );
 }
 
+// ─── Combo bar+line chart — stacked bars with two overlay lines ───────────
+//
+// The hero panel's primary visualization. Stacked bars show each day's sales
+// segmented by product line (Roller / Faux / Other). A solid red line overlays
+// total daily sales (actually the SAME values as the bar heights, but a line
+// makes the trend pop visually). A dashed gray line shows the prior 5-day daily
+// average — a single flat baseline so you can see if any given day is above
+// or below the recent average.
+//
+// Dual Y-axis: both sides show the same dollar scale. This is purely visual —
+// makes values readable from either edge of the chart, common in financial
+// dashboards. The right axis tracks the line series specifically.
+//
+function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 }) {
+  if (!data.length) return <div className="h-64 flex items-center justify-center text-sm text-ink-muted">No data</div>;
+
+  const SEG = {
+    roller: '#b85d3a',
+    faux:   '#c2913a',
+    other:  '#8c7758',
+  };
+  const LINE_COLOR = '#b85d3a';
+  const PRIOR_COLOR = '#a7a29a';
+
+  const padL = 56, padR = 56, padT = 16, padB = 60;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+
+  // Y scale based on max of bar totals (and the prior average, in case it's higher than any bar)
+  const maxVal = Math.max(
+    ...data.map(d => d.sales || 0),
+    priorDailyAvg,
+    1,
+  );
+  // Round up to a nice number for the y axis
+  const niceMax = (() => {
+    const pow = Math.pow(10, Math.floor(Math.log10(maxVal)));
+    return Math.ceil(maxVal / pow) * pow * 1.1;
+  })();
+
+  const n = data.length;
+  const barSlotW = innerW / n;
+  const barW = Math.min(barSlotW * 0.55, 56);
+
+  const xCenter = i => padL + barSlotW * (i + 0.5);
+  const yAt = v => padT + innerH - (innerH * v) / niceMax;
+
+  // Y-axis grid lines (5 ticks: 0, 25%, 50%, 75%, 100%)
+  const ticks = [0, 0.25, 0.5, 0.75, 1.0];
+
+  // Line path through bar tops
+  const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xCenter(i).toFixed(1)} ${yAt(d.sales).toFixed(1)}`).join(' ');
+
+  // Dashed prior-average baseline — flat horizontal line
+  const priorY = yAt(priorDailyAvg);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        {/* Y axis grid */}
+        {ticks.map(t => {
+          const y = padT + innerH - innerH * t;
+          const val = niceMax * t;
+          const label = `$${val >= 1000 ? `${Math.round(val / 1000)}k` : Math.round(val)}`;
+          return (
+            <g key={t}>
+              <line x1={padL} x2={width - padR} y1={y} y2={y}
+                    stroke="#e7e5e4" strokeWidth="1" strokeDasharray={t === 0 ? '' : '2 3'} />
+              <text x={padL - 10} y={y + 4} textAnchor="end"
+                    fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
+              <text x={width - padR + 10} y={y + 4} textAnchor="start"
+                    fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
+            </g>
+          );
+        })}
+
+        {/* Stacked bars */}
+        {data.map((d, i) => {
+          const hasData = d.sales > 0;
+          if (!hasData) return null;
+          const totalH = innerH * (d.sales / niceMax);
+          const yTop = padT + innerH - totalH;
+          const segs = [
+            { key: 'roller', amt: d.roller, color: SEG.roller },
+            { key: 'faux',   amt: d.faux,   color: SEG.faux },
+            { key: 'other',  amt: d.other,  color: SEG.other },
+          ].filter(s => s.amt > 0);
+          // Stack from bottom up — roller first, then faux, then other on top
+          let yCursor = padT + innerH;
+          return (
+            <g key={i} transform={`translate(${xCenter(i) - barW / 2}, 0)`}>
+              {segs.map(s => {
+                const segH = totalH * (s.amt / d.sales);
+                yCursor -= segH;
+                return (
+                  <rect key={s.key}
+                        x="0" y={yCursor} width={barW} height={segH}
+                        fill={s.color} opacity="0.92" />
+                );
+              })}
+              {/* Round the top corners of the topmost segment with a subtle highlight */}
+              <rect x="0" y={yTop} width={barW} height="2" fill="white" opacity="0.15" />
+            </g>
+          );
+        })}
+
+        {/* Dashed prior-average horizontal line */}
+        {priorDailyAvg > 0 && (
+          <line x1={padL} x2={width - padR} y1={priorY} y2={priorY}
+                stroke={PRIOR_COLOR} strokeWidth="1.5" strokeDasharray="6 4" opacity="0.7" />
+        )}
+
+        {/* Solid line through bar tops with dots */}
+        <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" />
+        {data.map((d, i) => (
+          <circle key={i} cx={xCenter(i)} cy={yAt(d.sales)} r="4"
+                  fill={LINE_COLOR} stroke="white" strokeWidth="2" />
+        ))}
+
+        {/* X-axis labels — day name + date stacked */}
+        {data.map((d, i) => (
+          <g key={i}>
+            <text x={xCenter(i)} y={height - padB + 22} textAnchor="middle"
+                  fontSize="12" fontWeight="600" fill="#3b2c1f" fontFamily="ui-sans-serif">{d.label}</text>
+            <text x={xCenter(i)} y={height - padB + 38} textAnchor="middle"
+                  fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{d.dateLabel}</text>
+          </g>
+        ))}
+      </svg>
+
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-5 text-[11px] mt-3">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.roller }} />
+          <span className="text-ink-mid">Roller</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.faux }} />
+          <span className="text-ink-mid">Faux</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.other }} />
+          <span className="text-ink-mid">Other</span>
+        </span>
+        {priorDailyAvg > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: PRIOR_COLOR }} />
+            <span className="text-ink-mid">Prior 5 Days (avg)</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Product breakdown donut ──────────────────────────────────────────────
+//
+// Donut chart with center total + legend rows on the right. Takes a generic
+// `breakdown` array of `{ label, value, color }` so the data source is easily
+// swappable — currently fed the top-level Roller/Faux/Other split, but
+// designed to later receive the sub-product breakdown (ANABELLE CLUTCH,
+// DESIGNER MOTORIZED, etc.) once that data lands in Supabase.
+//
+function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
+  if (!breakdown.length || total === 0) {
+    return <div className="h-40 flex items-center justify-center text-sm text-ink-muted">No data</div>;
+  }
+  const filtered = breakdown.filter(b => b.value > 0);
+  const grandTotal = filtered.reduce((s, b) => s + b.value, 0);
+
+  // Polar coords for SVG arc rendering.
+  const R = 64;       // outer radius
+  const r = 42;       // inner radius (donut hole)
+  const cx = 80, cy = 80;
+  const size = 160;
+
+  // Pre-compute arc segments
+  let cumAngle = -90 * (Math.PI / 180);  // start at 12 o'clock
+  const segments = filtered.map(b => {
+    const fraction = b.value / grandTotal;
+    const sweep = fraction * 2 * Math.PI;
+    const startAngle = cumAngle;
+    const endAngle = cumAngle + sweep;
+    cumAngle = endAngle;
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    const x1 = cx + R * Math.cos(startAngle);
+    const y1 = cy + R * Math.sin(startAngle);
+    const x2 = cx + R * Math.cos(endAngle);
+    const y2 = cy + R * Math.sin(endAngle);
+    const xi1 = cx + r * Math.cos(endAngle);
+    const yi1 = cy + r * Math.sin(endAngle);
+    const xi2 = cx + r * Math.cos(startAngle);
+    const yi2 = cy + r * Math.sin(startAngle);
+    const path = `M ${x1.toFixed(2)} ${y1.toFixed(2)}
+                  A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}
+                  L ${xi1.toFixed(2)} ${yi1.toFixed(2)}
+                  A ${r} ${r} 0 ${largeArc} 0 ${xi2.toFixed(2)} ${yi2.toFixed(2)} Z`;
+    return { ...b, path, pct: Math.round(fraction * 100) };
+  });
+
+  return (
+    <div className="flex items-center gap-5">
+      {/* SVG donut */}
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-32 h-32 flex-shrink-0">
+        {segments.map((s, i) => (
+          <path key={i} d={s.path} fill={s.color} opacity="0.92"
+                stroke="white" strokeWidth="1.5" />
+        ))}
+        {/* Center label */}
+        <text x={cx} y={cy - 4} textAnchor="middle"
+              fontSize="18" fontWeight="700" fill="#3b2c1f" fontFamily="ui-sans-serif">
+          {`$${total >= 1000 ? `${Math.round(total / 1000)}k` : Math.round(total)}`}
+        </text>
+        <text x={cx} y={cy + 14} textAnchor="middle"
+              fontSize="10" fill="#a7a29a" fontFamily="ui-sans-serif">{centerLabel}</text>
+      </svg>
+
+      {/* Legend rows */}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        {segments.map((s, i) => (
+          <div key={i} className="flex items-center justify-between gap-3 text-[12px]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+              <span className="text-ink-strong font-medium truncate">{s.label}</span>
+            </div>
+            <div className="flex items-center gap-2 tabular-nums flex-shrink-0">
+              <span className="text-ink-strong font-semibold">
+                {`$${s.value >= 1000 ? `${(s.value / 1000).toFixed(1)}k` : Math.round(s.value)}`}
+              </span>
+              <span className="text-ink-muted text-[11px] w-9 text-right">{s.pct}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Daily Trend vs Prior 5-Day Average — mini bar-pair grid ──────────────
+//
+// Five mini comparisons (one per business day). Each cell shows:
+//   - Day label + date
+//   - Today's $ + ↑/↓% delta vs the prior 5-day daily average
+//   - Two small bars side-by-side: this week's actual (solid) vs prior avg (dashed outline)
+//
+function DailyTrendBars({ data = [], priorDailyAvg = 0 }) {
+  if (!data.length) return null;
+  const ROLLER = '#b85d3a';
+  const PRIOR_COLOR = '#a7a29a';
+  // Bar heights: scale so the larger of (max bar, priorDailyAvg) sets the top.
+  const maxVal = Math.max(...data.map(d => d.sales || 0), priorDailyAvg, 1);
+  const barAreaH = 60;
+  return (
+    <div>
+      <div className="grid grid-cols-5 gap-2">
+        {data.map((d, i) => {
+          const delta = priorDailyAvg > 0 ? Math.round(((d.sales - priorDailyAvg) / priorDailyAvg) * 100) : null;
+          const positive = delta !== null && delta >= 0;
+          const currentH = (d.sales / maxVal) * barAreaH;
+          const priorH   = (priorDailyAvg / maxVal) * barAreaH;
+          return (
+            <div key={i} className="flex flex-col items-center">
+              <div className="text-[11px] font-semibold text-ink-strong">{d.label}</div>
+              <div className="text-[10px] text-ink-muted mb-1">{d.dateLabel}</div>
+              <div className="text-sm font-semibold text-ink-strong tabular-nums">
+                {d.sales > 0 ? fmt$(d.sales) : '—'}
+              </div>
+              {delta !== null && d.sales > 0 && (
+                <div className={`text-[10px] tabular-nums mb-1.5 ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {positive ? '↑' : '↓'} {Math.abs(delta)}%
+                </div>
+              )}
+              {/* Bar pair */}
+              <div className="flex items-end justify-center gap-1 w-full" style={{ height: `${barAreaH}px` }}>
+                <div className="w-3 rounded-t" style={{ background: ROLLER, height: `${Math.max(currentH, d.sales > 0 ? 3 : 0)}px`, opacity: d.sales > 0 ? 1 : 0 }} />
+                <div className="w-3 rounded-t border-2 border-dashed"
+                     style={{
+                       borderColor: PRIOR_COLOR,
+                       height: `${Math.max(priorH, priorDailyAvg > 0 ? 3 : 0)}px`,
+                       background: 'transparent',
+                     }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 text-[11px] mt-3">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ background: ROLLER }} />
+          <span className="text-ink-mid">This Week</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm border-2 border-dashed" style={{ borderColor: PRIOR_COLOR }} />
+          <span className="text-ink-mid">Prior 5-Day Avg</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Production Flow — Started vs Invoiced per day (grid readout) ──────────────────
 
 function ProductionFlowChart({ data = [] }) {
@@ -852,7 +1154,8 @@ export default function ExecutiveHome() {
     priorDailySales: [],
     salesKpis: {
       sumSales: 0, sumOrders: 0, aov: 0,
-      priorSales: 0, priorOrders: 0, priorAov: 0,
+      sumRoller: 0, sumFaux: 0, sumOther: 0,
+      priorSales: 0, priorOrders: 0, priorAov: 0, priorDailyAvg: 0,
       salesTrendWoW: null, ordersTrendWoW: null, aovTrendWoW: null,
       topProductLabel: '—', topProductPct: 0, topProductSales: 0,
       rollerAovMonthly: 0, rollerOrdersMonthly: 0,
@@ -1254,12 +1557,16 @@ export default function ExecutiveHome() {
         salesByDay[d].sales += amt;
         salesByDay[d][seg] += amt;
       });
-      const dailySales = businessDays.map(d => {
+      const dailySales = businessDays.map((d, i) => {
         const key = d.toISOString().slice(0, 10);
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
+        const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
         const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
+        const isToday = i === businessDays.length - 1;
         return {
-          label,
+          label: isToday ? "Today" : label,
+          dateLabel,
+          isoDate: key,
           orders: bucket.orders,
           sales: bucket.sales,
           roller: bucket.roller,
@@ -1292,6 +1599,9 @@ export default function ExecutiveHome() {
       const topProductSales = Math.max(sumRoller, sumFaux);
       const topProductLabel = sumRoller >= sumFaux ? 'Roller' : 'Faux';
       const topProductPct   = sumSales > 0 ? Math.round((topProductSales / sumSales) * 100) : 0;
+      // Prior 5-day daily average — flat baseline used by the bar-chart overlay
+      // and by the mini Daily Trend comparison bars.
+      const priorDailyAvg = priorDailySales.length > 0 ? priorSales / priorDailySales.length : 0;
 
       // ── Production Flow — last 5 business days ────────────────────────
       // Two metrics per day:
@@ -1500,7 +1810,8 @@ export default function ExecutiveHome() {
         // Daily Sales hero — 5-day rollup KPIs + WoW comparisons
         salesKpis: {
           sumSales, sumOrders, aov,
-          priorSales, priorOrders, priorAov,
+          sumRoller, sumFaux, sumOther,
+          priorSales, priorOrders, priorAov, priorDailyAvg,
           salesTrendWoW, ordersTrendWoW, aovTrendWoW,
           topProductLabel, topProductPct, topProductSales,
           rollerAovMonthly, rollerOrdersMonthly,
@@ -1806,113 +2117,186 @@ export default function ExecutiveHome() {
         </div>
 
         {/* ═══ ROW 3 — Daily Sales hero ═══════════════════════════════════
-            Full-width primary analytics section. Three columns: bar chart of
-            last 5 business days (left), KPI summary cards (middle), and a
-            trend line chart comparing this week vs prior 5 days (right). */}
-        <div className="card-priority p-5 md:p-6">
+            Full-width primary analytics. Mockup-driven layout:
+              Top-left:  combo bar+line chart with dual Y-axis
+              Top-right: 2x2 KPI grid (Sales / Orders / AOV / Top Product)
+              Bottom-left:  product breakdown donut (Roller / Faux / Other)
+              Bottom-right: daily trend mini bars vs prior 5-day average
+              Footer: callout banner with trend interpretation
+            Architected so the donut data source is swappable — currently
+            top-level product line, will switch to sub-product when that data
+            (ROLLER SHADE INVOICE BY PRODUCT report) is ingested. */}
+        <div className="card-priority bg-surface-page/40 p-5 md:p-7">
+
           {/* Header */}
-          <div className="flex items-end justify-between mb-5">
-            <div>
-              <h3 className="text-base font-semibold text-ink-strong">Daily Sales · Last 5 Business Days</h3>
-              <p className="text-[12px] text-ink-muted mt-0.5">Orders entered, ex. quotes</p>
+          <div className="flex items-start justify-between mb-5 pb-5 border-b border-stone-200/50">
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl bg-stone-100 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                     strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+              </span>
+              <div>
+                <h3 className="font-display font-bold text-ink-strong text-xl md:text-2xl leading-tight">
+                  Daily Sales · Last 5 Business Days
+                </h3>
+                <p className="text-[12px] text-ink-muted mt-0.5">Orders entered, ex. quotes</p>
+              </div>
             </div>
-            <div className="text-[11px] text-ink-muted">5-day rolling window</div>
           </div>
 
-          {/* 3-column grid: bar chart | KPI cards | trend line */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1.3fr] gap-5 lg:gap-6">
+          {/* TOP ROW — Combo chart + KPI grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 lg:gap-8 mb-6">
 
-            {/* LEFT — bar chart */}
+            {/* Combo chart */}
             <div>
-              <DailySalesChart data={data.dailySales} />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Orders entered</p>
+              <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
             </div>
 
-            {/* MIDDLE — KPI insights */}
-            <div className="space-y-3 lg:border-x lg:border-stone-100/80 lg:px-5">
-              {/* 5-day total sales */}
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <line x1="12" y1="1" x2="12" y2="23" />
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+            {/* 2x2 KPI grid */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Sales Summary</p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* 5-day total sales */}
+                <div className="card p-3.5">
+                  <div className="flex items-start gap-2.5 mb-1">
+                    <span className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                        <polyline points="17 6 23 6 23 12" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : fmt$(data.salesKpis.sumSales)}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">5-day total sales</p>
+                  <p className="text-[11px] text-ink-mid mt-1">5-day total sales</p>
                 </div>
-              </div>
 
-              {/* Orders entered (5-day) */}
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+                {/* Orders entered */}
+                <div className="card p-3.5">
+                  <div className="flex items-start gap-2.5 mb-1">
+                    <span className="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : data.salesKpis.sumOrders}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">Orders entered · 5 days</p>
+                  <p className="text-[11px] text-ink-mid mt-1">Orders entered</p>
                 </div>
-              </div>
 
-              {/* Avg Roller Shade order value — Monthly (30-day window) */}
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 6v6l4 2" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+                {/* Avg roller order value · Monthly */}
+                <div className="card p-3.5">
+                  <div className="flex items-start gap-2.5 mb-1">
+                    <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
                     {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">Avg roller order value · Monthly</p>
+                  <p className="text-[11px] text-ink-mid mt-1">Avg roller order · Monthly</p>
                 </div>
-              </div>
 
-              {/* Top product (5-day) */}
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
-                               color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xl font-semibold text-ink-strong leading-tight">
+                {/* Top product */}
+                <div className="card p-3.5">
+                  <div className="flex items-start gap-2.5 mb-1">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
+                                   color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-semibold text-ink-strong leading-none">
                     {loading ? "—" : data.salesKpis.topProductLabel}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">Top product</p>
-                  {!loading && data.salesKpis.topProductPct > 0 && (
-                    <p className="text-[11px] text-ink-muted mt-0.5 tabular-nums">
-                      {data.salesKpis.topProductPct}% of sales
-                    </p>
-                  )}
+                  <p className="text-[11px] text-ink-mid mt-1">
+                    Top product
+                    {!loading && data.salesKpis.topProductPct > 0 && (
+                      <span className="text-ink-muted ml-1">· {data.salesKpis.topProductPct}% of sales</span>
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* RIGHT — trend line chart */}
+          {/* BOTTOM ROW — Donut + Daily Trend bars */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-6 lg:gap-8 pt-5 border-t border-stone-200/50">
+
+            {/* Donut — sales by product breakdown.
+                TODO: when "ROLLER SHADE INVOICE BY PRODUCT" report is ingested
+                into Supabase, swap the `breakdown` array for the finer-grained
+                roller sub-products (Anabelle Clutch, Designer Motorized, etc).
+                The ProductDonut component takes a generic array of {label, value, color}. */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-[12px] font-medium text-ink-strong">Sales Trend</h4>
-                <span className="text-[11px] text-ink-muted">5 days</span>
-              </div>
-              <TrendLineChart current={data.dailySales} prior={data.priorDailySales} />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Sales by Product (5 Days)</p>
+              <ProductDonut
+                breakdown={[
+                  { label: "Roller Shades",     value: data.salesKpis.sumRoller, color: "#b85d3a" },
+                  { label: "Faux Wood Blinds",  value: data.salesKpis.sumFaux,   color: "#d4a574" },
+                  { label: "Other",             value: data.salesKpis.sumOther,  color: "#8c7758" },
+                ]}
+                total={data.salesKpis.sumSales}
+                centerLabel="Total"
+              />
+            </div>
+
+            {/* Daily trend mini bars vs prior 5-day average */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Daily Trend vs Prior 5-Day Average</p>
+              <DailyTrendBars data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
             </div>
           </div>
+
+          {/* Footer callout — trend interpretation */}
+          {!loading && data.salesKpis.salesTrendWoW !== null && (() => {
+            const delta = data.salesKpis.salesTrendWoW;
+            // Tinting thresholds: green if up >5%, red if down >5%, amber if within ±5%
+            let tone, copy;
+            if (delta >= 5) {
+              tone = { bg: 'bg-emerald-50/60', ring: 'ring-emerald-100/70', iconBg: 'bg-emerald-100 text-emerald-700', textColor: 'text-emerald-900' };
+              copy = `Sales are up ${delta}% compared to the prior 5 business days. You are trending above average.`;
+            } else if (delta <= -5) {
+              tone = { bg: 'bg-red-50/60', ring: 'ring-red-100/70', iconBg: 'bg-red-100 text-red-700', textColor: 'text-red-900' };
+              copy = `Sales are down ${Math.abs(delta)}% compared to the prior 5 business days. You are trending below average.`;
+            } else {
+              tone = { bg: 'bg-amber-50/60', ring: 'ring-amber-100/70', iconBg: 'bg-amber-100 text-amber-800', textColor: 'text-amber-900' };
+              copy = `Sales are ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta)}% compared to the prior 5 business days. Trending stable.`;
+            }
+            return (
+              <div className={`mt-5 rounded-xl ${tone.bg} ring-1 ${tone.ring} px-4 py-3 flex items-center gap-3`}>
+                <span className={`w-9 h-9 rounded-lg ${tone.iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    {delta >= 0
+                      ? <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>
+                      : <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></>}
+                  </svg>
+                </span>
+                <p className={`text-[13px] ${tone.textColor} flex-1`}>{copy}</p>
+              </div>
+            );
+          })()}
         </div>
 
       </div>
