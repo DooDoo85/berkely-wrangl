@@ -124,40 +124,47 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
 
 // ─── Business Overview card ────────────────────────────────────────────────
 //
-// Top-left card consolidating the day's most-asked KPIs into one panel:
-// Sales WTD, Units WTD, Orders WTD, Avg P→Inv. Each shows the headline
-// figure plus a "vs last week" comparison where applicable.
+// Top-left executive panel. Three KPIs each capture a distinct slice of the
+// week:
+//
+//   Sales (WTD)  — revenue invoiced this week (orders that shipped/closed).
+//   Sold (WTD)   — revenue on orders that newly hit credit_ok this week
+//                  (committed sales — approved & ready, but not yet shipped).
+//   Lead Time    — avg days printed→invoiced for orders invoiced this week
+//                  (falls back to 30-day rolling if too few WTD samples).
+//
+// Together: Sales = "what closed", Sold = "what we sold", Lead Time = "how
+// fast the floor is moving." Plays well as a CEO morning glance.
 //
 function BusinessOverviewCard({
   loading, todayEntered, todaySales,
-  salesWTD, unitsWTD, ordersWTD,
-  salesWoW, unitsWoW, ordersWoW,
-  avgDays,
+  salesInvoicedWTD, salesInvoicedWoW,
+  soldWTD, soldWoW,
+  leadTimeDays, leadTimeWindow,
 }) {
   const kpis = [
     {
       label: "Sales (WTD)",
-      value: loading ? "—" : fmt$(salesWTD),
-      sub: salesWoW === null ? null : { wow: salesWoW, label: "vs last week" },
-      icon: "📊",
+      hint: "Invoiced this week",
+      value: loading ? "—" : fmt$(salesInvoicedWTD),
+      sub: salesInvoicedWoW === null ? null : { wow: salesInvoicedWoW, label: "vs last week" },
+      icon: "💰",
     },
     {
-      label: "Units Sold (WTD)",
-      value: loading ? "—" : (unitsWTD ?? 0).toLocaleString(),
-      sub: unitsWoW === null ? null : { wow: unitsWoW, label: "vs last week" },
-      icon: "📦",
+      label: "Sold (WTD)",
+      hint: "Credit OK this week",
+      value: loading ? "—" : fmt$(soldWTD),
+      sub: soldWoW === null ? null : { wow: soldWoW, label: "vs last week" },
+      icon: "✍️",
     },
     {
-      label: "Orders (WTD)",
-      value: loading ? "—" : (ordersWTD ?? 0).toLocaleString(),
-      sub: ordersWoW === null ? null : { wow: ordersWoW, label: "vs last week" },
-      icon: "📋",
-    },
-    {
-      label: "Avg P → Inv",
-      value: loading ? "—" : (avgDays !== null ? `${avgDays}` : "—"),
-      valueSuffix: avgDays !== null ? "days" : null,
-      sub: { text: "90-day rolling" },
+      label: "Lead Time",
+      hint: "Printed → Invoiced",
+      value: loading ? "—" : (leadTimeDays !== null ? `${leadTimeDays}` : "—"),
+      valueSuffix: leadTimeDays !== null ? "days" : null,
+      sub: leadTimeDays === null
+        ? { text: "Not enough data yet" }
+        : { text: leadTimeWindow === 'wtd' ? "Invoiced this week" : "Last 30 days (low WTD volume)" },
       icon: "🕐",
     },
   ];
@@ -176,14 +183,15 @@ function BusinessOverviewCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {kpis.map(k => (
           <div key={k.label} className="bg-surface-page/40 rounded-xl p-3">
             <div className="w-8 h-8 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-2">
               {k.icon}
             </div>
             <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{k.label}</p>
-            <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1">
+            {k.hint && <p className="text-[10px] text-ink-muted mt-0.5">{k.hint}</p>}
+            <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">
               {k.value}
               {k.valueSuffix && <span className="text-sm font-normal text-ink-muted ml-1">{k.valueSuffix}</span>}
             </p>
@@ -208,11 +216,20 @@ function BusinessOverviewCard({
   );
 }
 
-// ─── Operations Status table ───────────────────────────────────────────────
+// ─── Operations Status panel ───────────────────────────────────────────────
 //
-// 3-row × (label + 2 product columns) compact pipeline view.
-// Replaces the two horizontal product-line rows. Reads like a table:
-// rows = stages, columns = product line. Eye scans diagonally.
+// Three softly-tinted bands stacked vertically — one per pipeline stage.
+// Each band has a status chip on the left (icon + stage name + sub-label)
+// and two product columns on the right (Roller + Faux) with prominent counts
+// and small unit/$-pending subtext. A subtle vertical divider separates the
+// two product columns to aid scanning. Each cell is a clickable button that
+// opens the matching modal.
+//
+// Tint palette uses existing tokens to stay on-brand with Wrangl's warm
+// neutrals — no introduction of new bright colors:
+//   - Credit OK   → subtle sage-tinted band (cleared, calm)
+//   - Printed     → neutral stone band (in-flight)
+//   - In Production → subtle gold band (active, hottest stage)
 //
 function OperationsStatusTable({
   loading,
@@ -226,13 +243,17 @@ function OperationsStatusTable({
   const ROLLER = "#b85d3a";
   const FAUX   = "#d4a574";
 
+  // Each stage's visual identity. tone classes use Tailwind utilities so they
+  // work even without Wrangl-specific tokens; sticking to muted, warm hues.
   const stages = [
     {
       key: "credit_ok",
       icon: "✓",
-      iconBg: "bg-emerald-50 text-emerald-700",
       label: "Credit OK",
       sub: "Ready to print",
+      bandBg: "bg-emerald-50/40",
+      bandBorder: "border-l-emerald-500/40",
+      chipBg: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
       roller: {
         value: loading ? "—" : creditOkRoller.count,
         sub: creditOkRoller.total > 0 ? `${fmt$(creditOkRoller.total)} pending` : null,
@@ -247,9 +268,11 @@ function OperationsStatusTable({
     {
       key: "printed",
       icon: "🖨",
-      iconBg: "bg-amber-50 text-amber-700",
       label: "Printed",
       sub: "Ready for production",
+      bandBg: "bg-stone-50/50",
+      bandBorder: "border-l-stone-300",
+      chipBg: "bg-stone-100 text-stone-700 ring-1 ring-stone-200",
       roller: {
         value: loading ? "—" : printedRoller.count,
         sub: printedRoller.units > 0 ? `${printedRoller.units.toLocaleString()} units` : null,
@@ -264,9 +287,11 @@ function OperationsStatusTable({
     {
       key: "in_production",
       icon: "⚙",
-      iconBg: "bg-stone-100 text-stone-700",
       label: "In Production",
       sub: "On the floor",
+      bandBg: "bg-amber-50/40",
+      bandBorder: "border-l-amber-500/40",
+      chipBg: "bg-amber-50 text-amber-800 ring-1 ring-amber-100",
       roller: {
         value: loading ? "—" : inProdRoller.count,
         sub: inProdRoller.units > 0 ? `${inProdRoller.units.toLocaleString()} units` : null,
@@ -281,52 +306,72 @@ function OperationsStatusTable({
   ];
 
   return (
-    <div className="card p-4 md:p-6 h-full">
-      <h3 className="text-sm font-medium text-ink-strong mb-4">Operations Status</h3>
-
-      {/* Column headers */}
-      <div className="grid grid-cols-[1fr_1fr_1fr] gap-3 pb-2 border-b border-stone-100 mb-2">
-        <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-[0.1em]">Stage</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
-             style={{ color: ROLLER }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
-          Roller Shades
+    <div className="card p-4 md:p-5 h-full">
+      {/* Panel header with column legend */}
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-medium text-ink-strong">Operations Status</h3>
+          <p className="text-[11px] text-ink-muted mt-0.5">Pipeline by product line</p>
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
-             style={{ color: FAUX }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
-          Faux Wood Blinds
+        <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-[0.1em]">
+          <span className="flex items-center gap-1.5" style={{ color: ROLLER }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
+            Roller
+          </span>
+          <span className="flex items-center gap-1.5" style={{ color: FAUX }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
+            Faux
+          </span>
         </div>
       </div>
 
-      {/* Rows */}
-      <div className="divide-y divide-stone-100">
+      {/* Stacked stage bands */}
+      <div className="space-y-2.5">
         {stages.map(s => (
-          <div key={s.key} className="grid grid-cols-[1fr_1fr_1fr] gap-3 py-3 items-center">
-            {/* Stage label cell */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${s.iconBg}`}>
-                {s.icon}
+          <div key={s.key}
+            className={`${s.bandBg} ${s.bandBorder} border-l-2 rounded-lg overflow-hidden`}>
+            <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
+
+              {/* Stage chip — icon, label, sub-label */}
+              <div className="flex items-center gap-3 p-3 md:p-3.5">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-[15px] flex-shrink-0 ${s.chipBg}`}>
+                  {s.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink-strong leading-tight">{s.label}</p>
+                  <p className="text-[11px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-strong leading-tight">{s.label}</p>
-                <p className="text-[11px] text-ink-muted leading-tight">{s.sub}</p>
-              </div>
+
+              {/* Roller cell */}
+              <button onClick={s.roller.onClick}
+                className="group relative text-left px-3 md:px-4 py-3 md:py-3.5
+                           border-l border-stone-200/60
+                           hover:bg-white/60 hover:shadow-sm transition-all">
+                <p className="text-2xl md:text-[26px] font-medium text-ink-strong tabular-nums leading-none">
+                  {s.roller.value}
+                </p>
+                {s.roller.sub && (
+                  <p className="text-[11px] text-ink-muted mt-1.5">{s.roller.sub}</p>
+                )}
+                {/* Subtle right-arrow on hover */}
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+              </button>
+
+              {/* Faux cell */}
+              <button onClick={s.faux.onClick}
+                className="group relative text-left px-3 md:px-4 py-3 md:py-3.5
+                           border-l border-stone-200/60
+                           hover:bg-white/60 hover:shadow-sm transition-all">
+                <p className="text-2xl md:text-[26px] font-medium text-ink-strong tabular-nums leading-none">
+                  {s.faux.value}
+                </p>
+                {s.faux.sub && (
+                  <p className="text-[11px] text-ink-muted mt-1.5">{s.faux.sub}</p>
+                )}
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+              </button>
             </div>
-
-            {/* Roller cell */}
-            <button onClick={s.roller.onClick}
-              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
-              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.roller.value}</p>
-              {s.roller.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.roller.sub}</p>}
-            </button>
-
-            {/* Faux cell */}
-            <button onClick={s.faux.onClick}
-              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
-              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.faux.value}</p>
-              {s.faux.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.faux.sub}</p>}
-            </button>
           </div>
         ))}
       </div>
@@ -563,9 +608,10 @@ export default function ExecutiveHome() {
   const [creditOkModal, setCreditOkModal] = useState(false);    // false|true|'roller'|'faux'
   const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
   const [inProductionModal, setInProductionModal] = useState(false);  // false|true|'roller'|'faux'
+  const [onHoldModal, setOnHoldModal] = useState(false);
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
-    stuckOrders: [], avgDays: null, repOrders: [],
+    stuckOrders: [], heldOrdersAll: [], avgDays: null, repOrders: [],
     overdueOrders: [],
     faux: {}, roller: {},
     fauxSpark: [], rollerSpark: [],
@@ -583,6 +629,9 @@ export default function ExecutiveHome() {
     dailySales: [],
     productionFlow: [],
     todayEntered: 0, todayShipped: 0, todaySales: 0,
+    salesInvoicedWTD: 0, salesInvoicedWoW: null,
+    soldWTD: 0, soldWoW: null,
+    leadTimeDays: null, leadTimeWindow: null,
     salesWTD: 0, unitsWTD: 0, ordersWTD: 0,
     salesWoW: null, unitsWoW: null, ordersWoW: null,
     rollerWoW: null, fauxWoW: null,
@@ -616,45 +665,125 @@ export default function ExecutiveHome() {
         units: inProdFauxRows.reduce((s, r) => s + (r.total_units || 0), 0),
       };
 
-      // ── Avg days printed → invoiced (last 90 days) ───────────────────
-      const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      // ── Lead Time, Sales Invoiced WTD, Sold (Credit OK) WTD ───────────
+      //
+      // Three executive KPIs powered by order_status_history.
+      //
+      //   Sales (WTD)    — order_amount where status='invoiced' and the
+      //                    invoicing happened this week (epic_status_date).
+      //                    "What we actually shipped/closed this week."
+      //
+      //   Sold (WTD)     — order_amount for orders that entered credit_ok
+      //                    this week (newly approved/cleared credit hold).
+      //                    "What we sold this week — committed but not yet shipped."
+      //
+      //   Lead Time      — avg days from printed → invoiced for orders
+      //                    invoiced this week. Falls back to last 30 days
+      //                    if fewer than 3 invoicings this week (low-volume
+      //                    early in the week). Subtitle reflects which.
+      //
+      // We pull 30 days of status_history so the fallback has data, then
+      // filter client-side for the this-week subset.
+      const leadTimeWindowStart = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      const lastWeekStartShifted = new Date(weekStart);
+      lastWeekStartShifted.setDate(lastWeekStartShifted.getDate() - 7);
+      const lastWeekStartStr2 = lastWeekStartShifted.toISOString().slice(0, 10);
+      const lastWeekEndShifted = new Date(weekStart);
+      lastWeekEndShifted.setDate(lastWeekEndShifted.getDate() - 1);
+      const lastWeekEndStr2 = lastWeekEndShifted.toISOString().slice(0, 10);
+
       const { data: printedHistory } = await supabase
         .from('order_status_history')
         .select('order_number, status_date')
         .eq('to_status', 'printed')
-        .gte('status_date', ninetyDaysAgo);
+        .gte('status_date', leadTimeWindowStart);
       const { data: invoicedHistory } = await supabase
         .from('order_status_history')
         .select('order_number, status_date')
         .eq('to_status', 'invoiced')
-        .gte('status_date', ninetyDaysAgo);
+        .gte('status_date', leadTimeWindowStart);
+      const { data: creditOkHistory } = await supabase
+        .from('order_status_history')
+        .select('order_number, status_date')
+        .eq('to_status', 'credit_ok')
+        .gte('status_date', lastWeekStartStr2);
 
-      let avgDays = null;
-      if (printedHistory?.length && invoicedHistory?.length) {
-        const printedMap = {};
-        printedHistory.forEach(r => {
-          if (!printedMap[r.order_number] || r.status_date < printedMap[r.order_number]) {
-            printedMap[r.order_number] = r.status_date;
-          }
-        });
-        const invoicedMap = {};
-        invoicedHistory.forEach(r => {
-          if (!invoicedMap[r.order_number] || r.status_date > invoicedMap[r.order_number]) {
-            invoicedMap[r.order_number] = r.status_date;
-          }
-        });
-        const deltas = [];
-        for (const [orderNo, printedDate] of Object.entries(printedMap)) {
-          const invoicedDate = invoicedMap[orderNo];
-          if (invoicedDate && invoicedDate >= printedDate) {
-            const days = Math.round((new Date(invoicedDate) - new Date(printedDate)) / 86400000);
-            if (days >= 0 && days <= 60) deltas.push(days);
-          }
+      // Build printed-date lookup (earliest printed event per order)
+      const printedMap = {};
+      (printedHistory ?? []).forEach(r => {
+        if (!printedMap[r.order_number] || r.status_date < printedMap[r.order_number]) {
+          printedMap[r.order_number] = r.status_date;
         }
-        if (deltas.length >= 3) {
-          avgDays = (deltas.reduce((a, b) => a + b, 0) / deltas.length).toFixed(1);
-        }
+      });
+
+      // Compute lead-time deltas for orders invoiced this week and last 30d
+      const deltasWTD = [];
+      const deltas30d = [];
+      (invoicedHistory ?? []).forEach(r => {
+        const printedDate = printedMap[r.order_number];
+        if (!printedDate || r.status_date < printedDate) return;
+        const days = Math.round((new Date(r.status_date) - new Date(printedDate)) / 86400000);
+        if (days < 0 || days > 60) return;
+        if (r.status_date >= weekStartDate) deltasWTD.push(days);
+        deltas30d.push(days);
+      });
+
+      const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+      let leadTimeDays = null;
+      let leadTimeWindow = null;  // 'wtd' | '30d'
+      if (deltasWTD.length >= 3) {
+        leadTimeDays = Number(avg(deltasWTD).toFixed(1));
+        leadTimeWindow = 'wtd';
+      } else if (deltas30d.length >= 3) {
+        leadTimeDays = Number(avg(deltas30d).toFixed(1));
+        leadTimeWindow = '30d';
       }
+      // avgDays kept for back-compat — same as the new leadTime value
+      const avgDays = leadTimeDays;
+
+      // Sold (Credit OK) WTD — orders that newly hit credit_ok this week.
+      // We have order_number from history; need to join to orders.order_amount.
+      // Pull the matching order rows in a single query.
+      const creditOkThisWk = (creditOkHistory ?? []).filter(r => r.status_date >= weekStartDate);
+      const creditOkLastWk = (creditOkHistory ?? []).filter(r =>
+        r.status_date >= lastWeekStartStr2 && r.status_date <= lastWeekEndStr2
+      );
+      const allCreditOkOrderNos = [
+        ...new Set([
+          ...creditOkThisWk.map(r => r.order_number),
+          ...creditOkLastWk.map(r => r.order_number),
+        ]),
+      ];
+      let soldWTD = 0, soldLastWk = 0;
+      if (allCreditOkOrderNos.length) {
+        const { data: creditOkOrderAmts } = await supabase.from('orders')
+          .select('order_number, order_amount')
+          .in('order_number', allCreditOkOrderNos);
+        const amtByOrder = {};
+        (creditOkOrderAmts ?? []).forEach(r => {
+          amtByOrder[r.order_number] = Number(r.order_amount || 0);
+        });
+        soldWTD = creditOkThisWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
+        soldLastWk = creditOkLastWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
+      }
+      const soldWoW = wow(soldWTD, soldLastWk);
+
+      // Sales (Invoiced) WTD — orders invoiced this week.
+      // Independent of the order_status_history feed; uses the orders table
+      // directly so it's accurate even if status_history misses some events.
+      const { data: invoicedWeekRows } = await supabase
+        .from('orders')
+        .select('order_amount, epic_status_date')
+        .eq('status', 'invoiced')
+        .gte('epic_status_date', lastWeekStartStr2);
+      let salesInvoicedWTD = 0, salesInvoicedLastWk = 0;
+      (invoicedWeekRows ?? []).forEach(r => {
+        const amt = Number(r.order_amount || 0);
+        const d = r.epic_status_date;
+        if (d >= weekStartDate) salesInvoicedWTD += amt;
+        else if (d >= lastWeekStartStr2 && d <= lastWeekEndStr2) salesInvoicedLastWk += amt;
+      });
+      const salesInvoicedWoW = wow(salesInvoicedWTD, salesInvoicedLastWk);
 
       // ── Roller WIP ────────────────────────────────────────────────────
       // (Previously read from legacy roller_wip snapshot. Now derived from
@@ -673,10 +802,10 @@ export default function ExecutiveHome() {
       //   • status=printed/in_production + reason set → operational hold (e.g., Rene waiting on parts)
       // Exclude invoiced/cancelled — once shipped/closed, the hold is historical.
       const { data: heldOrders } = await supabase.from("orders")
-        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at")
+        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at, sales_rep, order_amount")
         .not("hold_reason", "is", null)
         .not("status", "in", "(invoiced,cancelled)");
-      const stuckOrders = (heldOrders ?? []).map(o => {
+      const heldOrdersAll = (heldOrders ?? []).map(o => {
         const holdDate = o.wrangl_status_set_at || o.updated_at;
         const days = holdDate ? daysSince(holdDate) : 0;
         return {
@@ -687,8 +816,13 @@ export default function ExecutiveHome() {
           status_label: o.status,
           days,
           hold_reason: o.hold_reason,
+          hold_note: o.hold_note,
+          sales_rep: o.sales_rep,
+          order_amount: o.order_amount,
         };
-      }).sort((a, b) => b.days - a.days).slice(0, 5);
+      }).sort((a, b) => b.days - a.days);
+      // stuckOrders = top 5 for the inline list. heldOrdersAll = full list for the modal.
+      const stuckOrders = heldOrdersAll.slice(0, 5);
 
       // ── Overdue / Stuck Orders calculated after trulyIdleOrders loads below ──
 
@@ -1050,7 +1184,7 @@ export default function ExecutiveHome() {
       }));
 
       setData({
-        stuckOrders, avgDays, repOrders, faux, roller,
+        stuckOrders, heldOrdersAll, avgDays, repOrders, faux, roller,
         overdueOrders,
         fauxSpark, rollerSpark,
         wip: { creditOK, printed: printedForModal },
@@ -1064,7 +1198,11 @@ export default function ExecutiveHome() {
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
         todaySales,
-        // Business Overview totals + WoW
+        // Business Overview KPIs — three executive metrics
+        salesInvoicedWTD, salesInvoicedWoW,
+        soldWTD, soldWoW,
+        leadTimeDays, leadTimeWindow,
+        // (Legacy WTD fields kept for back-compat in case anything else reads them)
         salesWTD, unitsWTD, ordersWTD,
         salesWoW, unitsWoW, ordersWoW,
         rollerWoW, fauxWoW,
@@ -1076,7 +1214,7 @@ export default function ExecutiveHome() {
 
   useEffect(() => { load(); }, [load]);
 
-  const stuckTotal = data.stuckOrders?.length ?? 0;
+  const stuckTotal = data.heldOrdersAll?.length ?? 0;
   const overdueTotal = data.overdueOrders?.length ?? 0;
   const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
 
@@ -1111,13 +1249,12 @@ export default function ExecutiveHome() {
             loading={loading}
             todayEntered={data.todayEntered}
             todaySales={data.todaySales}
-            salesWTD={data.salesWTD}
-            unitsWTD={data.unitsWTD}
-            ordersWTD={data.ordersWTD}
-            salesWoW={data.salesWoW}
-            unitsWoW={data.unitsWoW}
-            ordersWoW={data.ordersWoW}
-            avgDays={data.avgDays}
+            salesInvoicedWTD={data.salesInvoicedWTD}
+            salesInvoicedWoW={data.salesInvoicedWoW}
+            soldWTD={data.soldWTD}
+            soldWoW={data.soldWoW}
+            leadTimeDays={data.leadTimeDays}
+            leadTimeWindow={data.leadTimeWindow}
           />
           <HeroCard
             label="Roller Shades"
@@ -1163,102 +1300,166 @@ export default function ExecutiveHome() {
             onInProdFauxClick={() => setInProductionModal('faux')}
           />
 
-          {/* Needs Attention — combined Hold + SLA widget */}
+          {/* Needs Attention — operational inbox.
+              Two distinct alert groups (On Hold + Past SLA), each rendered as
+              a soft-tinted sub-card containing a header row and a list of
+              compact alert rows. Each alert row has a left-border severity
+              indicator, an issue-type icon, prominent order# + status, muted
+              customer/reason, and a large aging badge on the right. The pills
+              up top remain clickable as quick "see all" entry points. */}
           <div className="card-priority p-4 md:p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-ink-strong">Needs Attention</h3>
-              <div className="flex items-center gap-2">
-                {stuckTotal > 0 && <span className="pill-warning">{stuckTotal} on hold</span>}
-                {overdueTotal > 0 && <span className="pill-critical">{overdueTotal} past SLA</span>}
+              <div>
+                <h3 className="text-sm font-medium text-ink-strong">Needs Attention</h3>
+                <p className="text-[11px] text-ink-muted mt-0.5">
+                  {stuckTotal === 0 && overdueTotal === 0
+                    ? "Nothing flagged"
+                    : `${stuckTotal + overdueTotal} item${(stuckTotal + overdueTotal) !== 1 ? 's' : ''} need a look`}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {stuckTotal > 0 && (
+                  <button onClick={() => setOnHoldModal(true)}
+                    className="pill-warning hover:opacity-80 transition-opacity cursor-pointer">
+                    {stuckTotal} on hold
+                  </button>
+                )}
+                {overdueTotal > 0 && (
+                  <button onClick={() => setWipModal("PRINTED")}
+                    className="pill-critical hover:opacity-80 transition-opacity cursor-pointer">
+                    {overdueTotal} past SLA
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Empty state — only when both lists are empty */}
+            {/* Empty state */}
             {stuckTotal === 0 && overdueTotal === 0 && (
-              <p className="text-sm text-ink-muted text-center py-6">No issues — all clear ✓</p>
-            )}
-
-            {/* On Hold section */}
-            {stuckTotal > 0 && (
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    On Hold
-                  </span>
-                  <button onClick={() => navigate("/orders/on-hold")}
-                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
-                </div>
-                <div className="space-y-0.5">
-                  {data.stuckOrders.slice(0, 4).map(o => {
-                    const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
-                    return (
-                      <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                        className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                            {statusDisplay && (
-                              <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                                {statusDisplay}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-ink-mid mt-0.5 truncate">
-                            {o.customer ?? "—"}
-                            {o.hold_reason && <span className="text-ink-muted"> · {o.hold_reason}</span>}
-                          </p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                          o.days >= 8 ? "bg-status-critical-soft text-status-critical" :
-                          o.days >= 3 ? "bg-status-warning-soft text-status-warning" :
-                                        "bg-surface-page text-ink-mid"
-                        }`}>
-                          {o.days}d
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="rounded-lg bg-emerald-50/40 border border-emerald-100/60 py-8 px-4 text-center">
+                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2 text-base">✓</div>
+                <p className="text-sm text-ink-mid">All orders moving cleanly.</p>
+                <p className="text-[11px] text-ink-muted mt-0.5">No holds. No SLA breaches.</p>
               </div>
             )}
 
-            {/* Past SLA section */}
-            {overdueTotal > 0 && (
-              <div className={stuckTotal > 0 ? "pt-3 border-t border-stone-100" : ""}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    Past SLA
-                  </span>
-                  <button onClick={() => setWipModal("PRINTED")}
-                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
-                </div>
-                <div className="space-y-0.5">
-                  {data.overdueOrders.slice(0, 4).map(o => (
-                    <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                      className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                          <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                            PRINTED
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-ink-mid mt-0.5 truncate">
-                          {o.customer ?? "—"}
-                          {o.sidemark && <span className="text-ink-muted"> · {o.sidemark}</span>}
-                        </p>
-                      </div>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                        o.days_over >= 5 ? "bg-status-critical-soft text-status-critical" :
-                                          "bg-status-warning-soft text-status-warning"
-                      }`}>
-                        +{o.days_over}d
-                      </span>
+            {/* Alert groups */}
+            <div className="space-y-3">
+
+              {/* ── On Hold group ─────────────────────────────────────── */}
+              {stuckTotal > 0 && (
+                <div className="rounded-lg bg-amber-50/30 border border-amber-100/70 overflow-hidden">
+                  <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center text-[11px] font-bold">⏸</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-amber-900">On Hold</span>
+                      <span className="text-[11px] text-amber-700/70">· {stuckTotal}</span>
                     </div>
-                  ))}
+                    <button onClick={() => setOnHoldModal(true)}
+                      className="text-[11px] text-amber-800/70 hover:text-amber-900 font-medium">View all →</button>
+                  </div>
+                  <div className="divide-y divide-amber-100/60">
+                    {data.stuckOrders.slice(0, 3).map(o => {
+                      const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
+                      // Severity: amber by default; red if held 8+ days
+                      const severe = o.days >= 8;
+                      return (
+                        <button key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                          className={`w-full text-left flex items-stretch group hover:bg-white/50 transition-colors`}>
+                          {/* Left-border severity strip */}
+                          <span className={`w-0.5 flex-shrink-0 ${severe ? "bg-red-400" : "bg-amber-300"}`} />
+
+                          <div className="flex items-center justify-between gap-3 px-3 py-2.5 flex-1 min-w-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className="text-sm font-semibold text-ink-strong tabular-nums">#{o.order_no}</p>
+                                {statusDisplay && (
+                                  <span className="text-[10px] font-medium text-ink-mid bg-white/70 ring-1 ring-stone-200/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                    {statusDisplay}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-ink-mid truncate">
+                                <span className="text-ink-muted">{o.customer ?? "—"}</span>
+                                {o.hold_reason && (
+                                  <>
+                                    <span className="text-ink-muted/60 mx-1">·</span>
+                                    <span>{o.hold_reason}</span>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                            {/* Prominent aging badge */}
+                            <div className={`flex flex-col items-end flex-shrink-0 px-2.5 py-1 rounded-md tabular-nums ${
+                              severe
+                                ? "bg-red-100/80 text-red-700 ring-1 ring-red-200/60"
+                                : "bg-amber-100/80 text-amber-900 ring-1 ring-amber-200/60"
+                            }`}>
+                              <span className="text-sm font-bold leading-none">{o.days}d</span>
+                              <span className="text-[9px] uppercase tracking-wider mt-0.5 opacity-70">held</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* ── Past SLA group ────────────────────────────────────── */}
+              {overdueTotal > 0 && (
+                <div className="rounded-lg bg-red-50/30 border border-red-100/70 overflow-hidden">
+                  <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-md bg-red-100 text-red-700 flex items-center justify-center text-[11px] font-bold">!</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-red-900">Past SLA</span>
+                      <span className="text-[11px] text-red-700/70">· {overdueTotal}</span>
+                    </div>
+                    <button onClick={() => setWipModal("PRINTED")}
+                      className="text-[11px] text-red-800/70 hover:text-red-900 font-medium">View all →</button>
+                  </div>
+                  <div className="divide-y divide-red-100/60">
+                    {data.overdueOrders.slice(0, 3).map(o => {
+                      // Severity: dark red for 5+ days over, lighter red otherwise
+                      const severe = o.days_over >= 5;
+                      return (
+                        <button key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                          className="w-full text-left flex items-stretch group hover:bg-white/50 transition-colors">
+                          <span className={`w-0.5 flex-shrink-0 ${severe ? "bg-red-500" : "bg-red-300"}`} />
+
+                          <div className="flex items-center justify-between gap-3 px-3 py-2.5 flex-1 min-w-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className="text-sm font-semibold text-ink-strong tabular-nums">#{o.order_no}</p>
+                                <span className="text-[10px] font-medium text-ink-mid bg-white/70 ring-1 ring-stone-200/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                  PRINTED
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-ink-mid truncate">
+                                <span className="text-ink-muted">{o.customer ?? "—"}</span>
+                                {o.sidemark && (
+                                  <>
+                                    <span className="text-ink-muted/60 mx-1">·</span>
+                                    <span>{o.sidemark}</span>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                            <div className={`flex flex-col items-end flex-shrink-0 px-2.5 py-1 rounded-md tabular-nums ${
+                              severe
+                                ? "bg-red-200/70 text-red-800 ring-1 ring-red-300/50"
+                                : "bg-red-100/80 text-red-700 ring-1 ring-red-200/60"
+                            }`}>
+                              <span className="text-sm font-bold leading-none">+{o.days_over}d</span>
+                              <span className="text-[9px] uppercase tracking-wider mt-0.5 opacity-70">over</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1403,6 +1604,98 @@ export default function ExecutiveHome() {
           onClose={() => setInProductionModal(false)}
         />
       )}
+      {onHoldModal && (
+        <OnHoldModal
+          orders={data.heldOrdersAll}
+          onClose={() => setOnHoldModal(false)}
+          onOrderClick={(id) => { setOnHoldModal(false); navigate(`/orders/${id}`); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── On Hold Modal ──────────────────────────────────────────────────────────
+//
+// Shows the full list of held orders (anything with hold_reason set, excluding
+// invoiced/cancelled). Sorted by days held desc, so the most-overdue are at the top.
+// Click a row to navigate to the order detail page.
+//
+function OnHoldModal({ orders = [], onClose, onOrderClick }) {
+  const total = orders.length;
+  const totalAmt = orders.reduce((s, o) => s + Number(o.order_amount || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">Orders on Hold</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {total} order{total !== 1 ? 's' : ''}
+              {totalAmt > 0 && (
+                <> · ${totalAmt.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</>
+              )}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            ✕
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Status</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Reason</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Rep</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.length === 0 ? (
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">No orders on hold</td></tr>
+              ) : orders.map(o => {
+                const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
+                return (
+                  <tr key={o.key}
+                    onClick={() => onOrderClick?.(o.order_id)}
+                    className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{o.order_no}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{o.customer ?? "—"}</td>
+                    <td className="px-5 py-3 text-xs text-gray-500 uppercase tracking-wide">{statusDisplay}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">
+                      {o.hold_reason ?? "—"}
+                      {o.hold_note && (
+                        <span className="text-xs text-gray-400 block mt-0.5">{o.hold_note}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-500">{o.sales_rep ?? "—"}</td>
+                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                      {o.order_amount > 0
+                        ? `$${Number(o.order_amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        o.days >= 8 ? "bg-red-100 text-red-600" :
+                        o.days >= 3 ? "bg-amber-100 text-amber-700" :
+                                      "bg-gray-100 text-gray-600"}`}>
+                        {o.days}d
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
