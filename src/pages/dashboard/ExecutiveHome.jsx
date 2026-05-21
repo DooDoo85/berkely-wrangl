@@ -87,12 +87,17 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall =
 // sparkline. Credit OK / Printed counts intentionally removed — those now
 // live in the Operations Status table below, so we don't duplicate the info.
 //
+// ─── Hero card (Roller / Faux with sparkline) ───────────────────────────────
+//
+// Revenue-focused card. Shows WTD sales, units, WoW% change, a 30-day sparkline,
+// and a 2-col MTD/YTD footer for at-a-glance period totals.
+//
 function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onClick }) {
   const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
-      className="card card-hover p-4 md:p-5 cursor-pointer h-full flex flex-col">
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+      className="card card-hover p-4 md:p-5 cursor-pointer h-full">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
           <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
@@ -101,7 +106,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* WTD dollar amount */}
-      <div className="mb-1 flex-shrink-0">
+      <div className="mb-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
             {loading ? "—" : fmt$Full(data.sales_wtd)}
@@ -111,7 +116,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* Units + WoW% — one compact line */}
-      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3 flex-shrink-0">
+      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3">
         <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
         {wowPct !== null && !loading && (
           <>
@@ -123,8 +128,32 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
         )}
       </div>
 
-      {/* 30-day sparkline — fills remaining vertical space in the card */}
-      <Sparkline data={sparkData} color={accent} fillColor={fill} tall />
+      {/* 30-day sparkline */}
+      <div className="mb-4">
+        <Sparkline data={sparkData} color={accent} fillColor={fill} />
+      </div>
+
+      {/* MTD / YTD footer */}
+      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-stone-100">
+        <div>
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
+            {loading ? "—" : fmt$(data.sales_mtd)}
+          </p>
+          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
+            {loading ? "" : `${(data.units_mtd ?? 0).toLocaleString()} units`}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD</p>
+          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
+            {loading ? "—" : fmt$(data.sales_ytd)}
+          </p>
+          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
+            {loading ? "" : `${(data.units_ytd ?? 0).toLocaleString()} units`}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -146,23 +175,25 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
 
 // ─── Business Overview card ────────────────────────────────────────────────
 //
-// Top-left executive panel. Three KPIs each capture a distinct slice of the
+// Top-left executive panel. Two KPIs each capture a distinct slice of the
 // week:
 //
 //   Sales (WTD)  — revenue invoiced this week (orders that shipped/closed).
 //   Sold (WTD)   — revenue on orders that newly hit credit_ok this week
 //                  (committed sales — approved & ready, but not yet shipped).
-//   Lead Time    — avg days printed→invoiced for orders invoiced this week
-//                  (falls back to 30-day rolling if too few WTD samples).
 //
-// Together: Sales = "what closed", Sold = "what we sold", Lead Time = "how
-// fast the floor is moving." Plays well as a CEO morning glance.
+// Sales = "what closed", Sold = "what we sold."
+//
+// Lead Time was previously a third KPI here but was removed because
+// order_status_history doesn't currently capture separate printed/invoiced
+// events reliably (master sales report imports them in the same batch),
+// making the metric meaningless. Worth revisiting once status events are
+// recorded at the time they actually happen.
 //
 function BusinessOverviewCard({
   loading, todayEntered, todaySales,
   salesInvoicedWTD, salesInvoicedWoW,
   soldWTD, soldWoW,
-  leadTimeDays, leadTimeWindow,
 }) {
   const kpis = [
     {
@@ -178,16 +209,6 @@ function BusinessOverviewCard({
       value: loading ? "—" : fmt$(soldWTD),
       sub: soldWoW === null ? null : { wow: soldWoW, label: "vs last week" },
       icon: "✍️",
-    },
-    {
-      label: "Lead Time",
-      hint: "Printed → Invoiced",
-      value: loading ? "—" : (leadTimeDays !== null ? `${leadTimeDays}` : "—"),
-      valueSuffix: leadTimeDays !== null ? "days" : null,
-      sub: leadTimeDays === null
-        ? { text: "Not enough data yet" }
-        : { text: leadTimeWindow === 'wtd' ? "Invoiced this week" : "Last 30 days (low WTD volume)" },
-      icon: "🕐",
     },
   ];
 
@@ -205,7 +226,7 @@ function BusinessOverviewCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {kpis.map(k => (
           <div key={k.label} className="bg-surface-page/40 rounded-xl p-3">
             <div className="w-8 h-8 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-2">
@@ -215,20 +236,13 @@ function BusinessOverviewCard({
             {k.hint && <p className="text-[10px] text-ink-muted mt-0.5">{k.hint}</p>}
             <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">
               {k.value}
-              {k.valueSuffix && <span className="text-sm font-normal text-ink-muted ml-1">{k.valueSuffix}</span>}
             </p>
             {k.sub && (
               <div className="mt-1.5 text-[11px] tabular-nums">
-                {k.sub.wow !== undefined ? (
-                  <>
-                    <span className={k.sub.wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
-                      {k.sub.wow >= 0 ? "↑" : "↓"} {Math.abs(k.sub.wow)}%
-                    </span>
-                    <span className="text-ink-muted ml-1">{k.sub.label}</span>
-                  </>
-                ) : (
-                  <span className="text-ink-muted">{k.sub.text}</span>
-                )}
+                <span className={k.sub.wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                  {k.sub.wow >= 0 ? "↑" : "↓"} {Math.abs(k.sub.wow)}%
+                </span>
+                <span className="text-ink-muted ml-1">{k.sub.label}</span>
               </div>
             )}
           </div>
@@ -1553,8 +1567,6 @@ export default function ExecutiveHome() {
             salesInvoicedWoW={data.salesInvoicedWoW}
             soldWTD={data.soldWTD}
             soldWoW={data.soldWoW}
-            leadTimeDays={data.leadTimeDays}
-            leadTimeWindow={data.leadTimeWindow}
           />
           <HeroCard
             label="Roller Shades"
