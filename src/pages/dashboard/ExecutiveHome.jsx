@@ -135,7 +135,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
 
       {/* MTD / YTD footer */}
       <div className="grid grid-cols-2 gap-3 pt-3 border-t border-stone-100">
-        <div>
+        <div className="text-center">
           <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_mtd)}
@@ -144,7 +144,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
             {loading ? "" : `${(data.units_mtd ?? 0).toLocaleString()} units`}
           </p>
         </div>
-        <div>
+        <div className="text-center">
           <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_ytd)}
@@ -299,7 +299,7 @@ function OperationsStatusTable({
       ),
       label: "Credit OK",
       sub: "Ready to print",
-      bandBg: "bg-emerald-50/50",
+      bandBg: "bg-stone-50/40",
       iconCircle: "bg-emerald-100/70 text-emerald-700 ring-1 ring-emerald-200/60",
       roller: {
         value: loading ? "—" : creditOkRoller.count,
@@ -324,7 +324,7 @@ function OperationsStatusTable({
       ),
       label: "Printed",
       sub: "Ready for production",
-      bandBg: "bg-stone-100/40",
+      bandBg: "bg-stone-50/40",
       iconCircle: "bg-stone-200/60 text-stone-700 ring-1 ring-stone-300/40",
       roller: {
         value: loading ? "—" : printedRoller.count,
@@ -348,7 +348,7 @@ function OperationsStatusTable({
       ),
       label: "In Production",
       sub: "On the floor",
-      bandBg: "bg-amber-50/50",
+      bandBg: "bg-stone-50/40",
       iconCircle: "bg-amber-100/70 text-amber-800 ring-1 ring-amber-200/60",
       roller: {
         value: loading ? "—" : inProdRoller.count,
@@ -400,7 +400,7 @@ function OperationsStatusTable({
       <div className="space-y-2.5">
         {stages.map(s => (
           <div key={s.key}
-            className={`${s.bandBg} rounded-xl overflow-hidden`}>
+            className={`${s.bandBg} ring-1 ring-stone-200/50 rounded-xl overflow-hidden`}>
             <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
 
               {/* Stage chip — circular icon + label + sub-label */}
