@@ -881,7 +881,7 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 })
 // Generic `breakdown` prop: array of { label, value, color } so swapping
 // the data source is a one-line change.
 //
-function ProductRankedBars({ breakdown = [], total = 0, maxRows = 6 }) {
+function ProductRankedBars({ breakdown = [], total = 0, maxRows = 9 }) {
   const filtered = breakdown.filter(b => b.value > 0);
   if (!filtered.length || total === 0) {
     return <div className="text-sm text-ink-muted py-4 text-center">No data</div>;
@@ -1429,6 +1429,8 @@ export default function ExecutiveHome() {
     dailySales: [],
     productionFlow: [],
     priorDailySales: [],
+    rollerProductBreakdown: [],
+    rollerProductTotal: 0,
     salesKpis: {
       sumSales: 0, sumOrders: 0, aov: 0,
       sumRoller: 0, sumFaux: 0, sumOther: 0,
@@ -1761,6 +1763,40 @@ export default function ExecutiveHome() {
       const { data: productLines } = await supabase.from("product_line_sales").select("*");
       const faux   = (productLines ?? []).find(p => p.product_line === "Faux Wood Blinds") ?? {};
       const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
+
+      // ── Sub-product YTD breakdown — for "Sales by Product · YTD" panel ─
+      // Fed by epic-report-processor.js (processRollerSalesCSV) which ingests
+      // the daily "ROLLER SHADE INVOICE BY PRODUCT" email.
+      // Currently roller-only — when faux sub-product reports come online,
+      // we'd union those rows into the same component.
+      const { data: rollerProductBreakdownRaw } = await supabase
+        .from("roller_product_breakdown")
+        .select("product_line, sales_ytd, units_ytd")
+        .order("sales_ytd", { ascending: false });
+      // Trim noisy CSV labels for cleaner display:
+      //   "ANABELLE CLUTCH ROLLER SHADE"        → "Anabelle Clutch"
+      //   "DESIGNER MOTORIZED ROLLER SHADE USA" → "Designer Motorized USA"
+      // Strip the "ROLLER SHADE" middle, title-case the rest.
+      const cleanName = (raw) => {
+        if (!raw) return '';
+        const noShade = raw.replace(/\s*ROLLER\s+SHADE\s*/i, ' ').replace(/\s+/g, ' ').trim();
+        return noShade.split(' ')
+          .map(w => w.length <= 3 ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ');
+      };
+      // Warm Berkely-palette gradient for the 9 segments.
+      const PRODUCT_PALETTE = [
+        '#9d4f30', '#b85d3a', '#c87355', '#c2913a', '#d4a574',
+        '#a07845', '#8c7758', '#6e5d44', '#574736',
+      ];
+      const rollerProductBreakdown = (rollerProductBreakdownRaw ?? [])
+        .filter(r => Number(r.sales_ytd) > 0)
+        .map((r, i) => ({
+          label: cleanName(r.product_line),
+          value: Number(r.sales_ytd) || 0,
+          color: PRODUCT_PALETTE[i % PRODUCT_PALETTE.length],
+        }));
+      const rollerProductTotal = rollerProductBreakdown.reduce((s, b) => s + b.value, 0);
 
       // ── Team — orders invoiced this week ──────────────────────────────
       // Fallback chain (simplified post master_sales_report cutover):
@@ -2125,6 +2161,7 @@ export default function ExecutiveHome() {
         inProductionRoller,
         inProductionFaux,
         topCustomers, dailySales, productionFlow,
+        rollerProductBreakdown, rollerProductTotal,
         priorDailySales,
         // Daily Sales hero — 5-day rollup KPIs + WoW comparisons
         salesKpis: {
@@ -2556,15 +2593,25 @@ export default function ExecutiveHome() {
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
                   Sales by Product
                 </p>
-                <p className="text-[11px] text-ink-muted">YTD</p>
+                <p className="text-[11px] text-ink-muted">Roller · YTD</p>
               </div>
-              <ProductRankedBars
-                breakdown={[
-                  { label: "Roller Shades",    value: data.roller?.sales_ytd || 0, color: "#b85d3a" },
-                  { label: "Faux Wood Blinds", value: data.faux?.sales_ytd   || 0, color: "#d4a574" },
-                ]}
-                total={(data.roller?.sales_ytd || 0) + (data.faux?.sales_ytd || 0)}
-              />
+              {/* Real sub-product breakdown from roller_product_breakdown table.
+                  If empty (table not seeded yet), fall back to top-level
+                  Roller/Faux totals so the panel isn't blank. */}
+              {data.rollerProductBreakdown && data.rollerProductBreakdown.length > 0 ? (
+                <ProductRankedBars
+                  breakdown={data.rollerProductBreakdown}
+                  total={data.rollerProductTotal}
+                />
+              ) : (
+                <ProductRankedBars
+                  breakdown={[
+                    { label: "Roller Shades",    value: data.roller?.sales_ytd || 0, color: "#b85d3a" },
+                    { label: "Faux Wood Blinds", value: data.faux?.sales_ytd   || 0, color: "#d4a574" },
+                  ]}
+                  total={(data.roller?.sales_ytd || 0) + (data.faux?.sales_ytd || 0)}
+                />
+              )}
             </div>
 
             {/* Insights — auto-generated comparison statements */}
