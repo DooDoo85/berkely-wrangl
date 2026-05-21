@@ -694,7 +694,7 @@ function TrendLineChart({ current = [], prior = [], width = 360, height = 180 })
 // makes values readable from either edge of the chart, common in financial
 // dashboards. The right axis tracks the line series specifically.
 //
-function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 }) {
+function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 }) {
   if (!data.length) return <div className="h-48 flex items-center justify-center text-sm text-ink-muted">No data</div>;
 
   const SEG = {
@@ -720,13 +720,13 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 })
   );
   const niceMax = (() => {
     const pow = Math.pow(10, Math.floor(Math.log10(maxVal)));
-    return Math.ceil(maxVal / pow) * pow * 1.4;
+    return Math.ceil(maxVal / pow) * pow * 1.2;
   })();
 
   const n = data.length;
   const barSlotW = innerW / n;
-  // Narrower bars (38% of slot, max 36px) with more horizontal breathing room
-  const barW = Math.min(barSlotW * 0.38, 36);
+  // Slightly wider bars now that the chart sits in a 2/3-width quadrant
+  const barW = Math.min(barSlotW * 0.5, 48);
 
   const xCenter = i => padL + barSlotW * (i + 0.5);
   const yAt = v => padT + innerH - (innerH * v) / niceMax;
@@ -869,6 +869,166 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 })
 // Generic `breakdown` array means data source is swappable when sub-product
 // data (ROLLER SHADE INVOICE BY PRODUCT) gets ingested.
 //
+// ─── Product ranked bars — horizontal ranked breakdown ────────────────────
+//
+// Renders a list of products sorted by value (largest first), each with a
+// horizontal bar whose width is proportional to its share of total. Shows
+// $ amount + % to the right of each bar. Designed for the YTD product
+// breakdown — currently fed top-level Roller/Faux totals as Phase 1
+// placeholder; will switch to the 9-row sub-product breakdown from the
+// ROLLER SHADE INVOICE BY PRODUCT report once that data is ingested.
+//
+// Generic `breakdown` prop: array of { label, value, color } so swapping
+// the data source is a one-line change.
+//
+function ProductRankedBars({ breakdown = [], total = 0, maxRows = 6 }) {
+  const filtered = breakdown.filter(b => b.value > 0);
+  if (!filtered.length || total === 0) {
+    return <div className="text-sm text-ink-muted py-4 text-center">No data</div>;
+  }
+  // Sort descending by value
+  const sorted = [...filtered].sort((a, b) => b.value - a.value);
+  // Group anything beyond maxRows into "Other"
+  let displayed = sorted;
+  if (sorted.length > maxRows) {
+    const head = sorted.slice(0, maxRows - 1);
+    const rest = sorted.slice(maxRows - 1);
+    const restSum = rest.reduce((s, b) => s + b.value, 0);
+    displayed = [
+      ...head,
+      { label: 'Other', value: restSum, color: '#8c7758' },
+    ];
+  }
+  const grandTotal = sorted.reduce((s, b) => s + b.value, 0);
+  // Bar width: scale based on the LARGEST value (so the top bar is full-width)
+  const maxValue = displayed[0]?.value || 1;
+
+  return (
+    <div className="space-y-2">
+      {displayed.map((b, i) => {
+        const pct = (b.value / grandTotal) * 100;
+        const barPct = (b.value / maxValue) * 100;
+        return (
+          <div key={i} className="flex items-center gap-3 text-[11.5px]">
+            <span className="w-32 truncate text-ink-strong font-medium flex-shrink-0">{b.label}</span>
+            <div className="flex-1 h-3 bg-stone-100/50 rounded-sm overflow-hidden">
+              <div className="h-full rounded-sm transition-all"
+                   style={{ width: `${barPct}%`, background: b.color }} />
+            </div>
+            <span className="tabular-nums text-ink-strong font-semibold w-14 text-right flex-shrink-0">
+              {`$${b.value >= 1000 ? `${(b.value / 1000).toFixed(1)}k` : Math.round(b.value)}`}
+            </span>
+            <span className="tabular-nums text-ink-muted w-8 text-right text-[10.5px] flex-shrink-0">
+              {Math.round(pct)}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Insights — short list of generated bullet statements ─────────────────
+//
+// Auto-generated comparison statements between this 5-day window and the
+// prior 5-day window. Skips any insight that's a wash so the list stays
+// meaningful instead of padded with "+/- 0" noise.
+//
+function InsightsList({ kpis = {}, loading = false }) {
+  if (loading) {
+    return (
+      <div className="space-y-2.5">
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className="h-4 bg-stone-100/60 rounded animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  const insights = [];
+
+  // 1. Sales delta in $
+  if (Math.abs(kpis.salesDeltaDollars || 0) >= 1000) {
+    const up = kpis.salesDeltaDollars > 0;
+    insights.push({
+      key: 'sales',
+      tone: up ? 'up' : 'down',
+      copy: (
+        <>
+          Sales <strong className={up ? "text-emerald-700" : "text-red-700"}>
+            {up ? "up" : "down"} {fmt$(Math.abs(kpis.salesDeltaDollars))}
+          </strong> vs prior 5 days
+        </>
+      ),
+    });
+  }
+
+  // 2. Roller orders delta
+  if (Math.abs(kpis.rollerOrdersDelta || 0) >= 1) {
+    const up = kpis.rollerOrdersDelta > 0;
+    insights.push({
+      key: 'roller',
+      tone: up ? 'up' : 'down',
+      copy: (
+        <>
+          <strong className={up ? "text-emerald-700" : "text-red-700"}>
+            {Math.abs(kpis.rollerOrdersDelta)} {up ? "more" : "fewer"} roller orders
+          </strong> invoiced vs prior 5 days
+        </>
+      ),
+    });
+  }
+
+  // 3. Faux orders delta
+  if (Math.abs(kpis.fauxOrdersDelta || 0) >= 1) {
+    const up = kpis.fauxOrdersDelta > 0;
+    insights.push({
+      key: 'faux',
+      tone: up ? 'up' : 'down',
+      copy: (
+        <>
+          <strong className={up ? "text-emerald-700" : "text-red-700"}>
+            {Math.abs(kpis.fauxOrdersDelta)} {up ? "more" : "fewer"} faux orders
+          </strong> invoiced vs prior 5 days
+        </>
+      ),
+    });
+  }
+
+  // 4. Best day this week
+  if (kpis.bestDay && kpis.bestDay.sales > 0) {
+    insights.push({
+      key: 'best',
+      tone: 'info',
+      copy: (
+        <>
+          Best day: <strong className="text-ink-strong">{kpis.bestDay.label} at {fmt$(kpis.bestDay.sales)}</strong>
+        </>
+      ),
+    });
+  }
+
+  if (!insights.length) {
+    return <p className="text-sm text-ink-muted py-3 text-center">No notable changes vs prior period</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {insights.map(i => (
+        <li key={i.key} className="flex items-start gap-2 text-[12px] text-ink-mid leading-snug">
+          {/* Tone dot */}
+          <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+            i.tone === 'up' ? "bg-emerald-500" :
+            i.tone === 'down' ? "bg-red-500" :
+                                "bg-stone-400"
+          }`} />
+          <span className="flex-1">{i.copy}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ProductMixBar({ breakdown = [], total = 0 }) {
   const filtered = breakdown.filter(b => b.value > 0);
   if (!filtered.length || total === 0) {
@@ -1276,6 +1436,9 @@ export default function ExecutiveHome() {
       salesTrendWoW: null, ordersTrendWoW: null, aovTrendWoW: null,
       topProductLabel: '—', topProductPct: 0, topProductSales: 0,
       rollerAovMonthly: 0, rollerOrdersMonthly: 0,
+      salesDeltaDollars: 0,
+      rollerOrdersDelta: 0, fauxOrdersDelta: 0,
+      bestDay: { sales: 0, label: '—', dateLabel: '' },
     },
     startedToday: 0, startedTodayUnits: 0,
     invoicedToday: 0, invoicedTodayUnits: 0,
@@ -1663,22 +1826,33 @@ export default function ExecutiveHome() {
 
       // Bucket by day + product line so the chart can render stacked bars.
       // product_line normalized into roller/faux/other (anything else lumped).
+      // We track both $ sales AND order counts per product so the Insights
+      // panel can say "20 fewer roller orders vs prior 5 days" etc.
       const salesByDay = {};
       (dailySalesRows ?? []).forEach(r => {
         const d = r.order_date;
         const amt = Number(r.order_amount || 0);
         const line = (r.product_line || '').toLowerCase();
         const seg = line === 'roller' ? 'roller' : line === 'faux' ? 'faux' : 'other';
-        salesByDay[d] = salesByDay[d] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
+        salesByDay[d] = salesByDay[d] || {
+          orders: 0, sales: 0,
+          roller: 0, faux: 0, other: 0,
+          rollerOrders: 0, fauxOrders: 0, otherOrders: 0,
+        };
         salesByDay[d].orders++;
         salesByDay[d].sales += amt;
         salesByDay[d][seg] += amt;
+        salesByDay[d][`${seg}Orders`]++;
       });
       const dailySales = businessDays.map((d, i) => {
         const key = d.toISOString().slice(0, 10);
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
         const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
+        const bucket = salesByDay[key] || {
+          orders: 0, sales: 0,
+          roller: 0, faux: 0, other: 0,
+          rollerOrders: 0, fauxOrders: 0, otherOrders: 0,
+        };
         const isToday = i === businessDays.length - 1;
         return {
           label: isToday ? "Today" : label,
@@ -1689,14 +1863,26 @@ export default function ExecutiveHome() {
           roller: bucket.roller,
           faux: bucket.faux,
           other: bucket.other,
+          rollerOrders: bucket.rollerOrders,
+          fauxOrders: bucket.fauxOrders,
+          otherOrders: bucket.otherOrders,
         };
       });
-      // Prior 5 business days — for the Sales Trend line chart's dashed comparison series.
       const priorDailySales = priorBusinessDays.map(d => {
         const key = d.toISOString().slice(0, 10);
         const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
-        return { label, orders: bucket.orders, sales: bucket.sales };
+        const bucket = salesByDay[key] || {
+          orders: 0, sales: 0,
+          roller: 0, faux: 0, other: 0,
+          rollerOrders: 0, fauxOrders: 0, otherOrders: 0,
+        };
+        return {
+          label,
+          orders: bucket.orders,
+          sales: bucket.sales,
+          rollerOrders: bucket.rollerOrders,
+          fauxOrders: bucket.fauxOrders,
+        };
       });
 
       // 5-day rollup KPIs for the Daily Sales hero panel.
@@ -1719,6 +1905,22 @@ export default function ExecutiveHome() {
       // Prior 5-day daily average — flat baseline used by the bar-chart overlay
       // and by the mini Daily Trend comparison bars.
       const priorDailyAvg = priorDailySales.length > 0 ? priorSales / priorDailySales.length : 0;
+
+      // ── Insights computations ─────────────────────────────────────────
+      // All comparisons use 5-day rolling windows (this week's 5 business
+      // days vs the prior 5). Consistent with everything else in this panel.
+      const sumRollerOrders  = dailySales.reduce((s, d) => s + d.rollerOrders, 0);
+      const sumFauxOrders    = dailySales.reduce((s, d) => s + d.fauxOrders, 0);
+      const priorRollerOrders = priorDailySales.reduce((s, d) => s + d.rollerOrders, 0);
+      const priorFauxOrders   = priorDailySales.reduce((s, d) => s + d.fauxOrders, 0);
+      const salesDeltaDollars = sumSales - priorSales;
+      const rollerOrdersDelta = sumRollerOrders - priorRollerOrders;
+      const fauxOrdersDelta   = sumFauxOrders - priorFauxOrders;
+      // Best day = highest-sales day this week
+      const bestDay = dailySales.reduce(
+        (best, d) => d.sales > best.sales ? d : best,
+        { sales: 0, label: '—', dateLabel: '' },
+      );
 
       // ── Production Flow — last 5 business days ────────────────────────
       // Two metrics per day:
@@ -1932,6 +2134,10 @@ export default function ExecutiveHome() {
           salesTrendWoW, ordersTrendWoW, aovTrendWoW,
           topProductLabel, topProductPct, topProductSales,
           rollerAovMonthly, rollerOrdersMonthly,
+          // Insights data
+          salesDeltaDollars,
+          rollerOrdersDelta, fauxOrdersDelta,
+          bestDay,
         },
         // Operations Status footer — today's flow + 5-day net flow
         startedToday, startedTodayUnits,
@@ -2234,129 +2440,144 @@ export default function ExecutiveHome() {
         </div>
 
         {/* ═══ ROW 3 — Daily Sales hero ═══════════════════════════════════
-            Stripe/Linear/Ramp-inspired premium analytics panel. Structure:
-              Header — title + subtitle, no over-decoration
-              Stat strip — horizontal, borderless, divider-separated KPIs
-              Chart — the hero element, full width, taller, bolder line
-              Secondary row — product mix bar (compact) + comparison table (wider)
-              Callout — trend interpretation banner at the bottom
-            Architected so the donut/mix data source is swappable when
-            ROLLER SHADE INVOICE BY PRODUCT data lands in Supabase. */}
-        <div className="card-priority bg-surface-page/40 p-3.5 md:p-4">
+            2×2 grid layout:
+              TL: Combo chart (orders entered last 5 business days)
+              TR: 2×2 KPI cards (Sales Summary)
+              BL: Sales by Product · YTD (horizontal ranked bars)
+              BR: Insights (auto-generated comparison statements)
+            Card height stays. Internal proportions balanced so chart doesn't
+            dominate and KPIs/secondary row have real presence. */}
+        <div className="card-priority bg-surface-page/40 p-4 md:p-5">
 
           {/* HEADER — single compact line treatment */}
-          <div className="flex items-baseline justify-between mb-2.5">
-            <h3 className="font-display font-bold text-ink-strong text-base md:text-lg leading-none">
-              Daily Sales
+          <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200/50">
+            <h3 className="font-display font-bold text-ink-strong text-lg md:text-xl leading-none">
+              Daily Sales · Last 5 Business Days
             </h3>
-            <p className="text-[10.5px] text-ink-muted">
-              Last 5 business days · Orders entered, ex. quotes
+            <p className="text-[11px] text-ink-muted">
+              Orders entered, ex. quotes
             </p>
           </div>
 
-          {/* STAT STRIP — larger, more prominent. Acts as the panel header. */}
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-3 -mx-1">
-            <div className="px-3 first:pl-1 md:first:pl-1 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
-                5-Day Total Sales
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
-                  {loading ? "—" : fmt$(data.salesKpis.sumSales)}
-                </p>
-                {data.salesKpis.salesTrendWoW !== null && !loading && (
-                  <span className={`text-[11px] tabular-nums font-semibold ${data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                    {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="px-3 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
-                Orders Entered
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
-                  {loading ? "—" : data.salesKpis.sumOrders}
-                </p>
-                {data.salesKpis.ordersTrendWoW !== null && !loading && (
-                  <span className={`text-[11px] tabular-nums font-semibold ${data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                    {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="px-3 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
-                Avg Roller Order
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
-                  {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
-                </p>
-                <span className="text-[11px] text-ink-muted">Monthly</span>
-              </div>
-            </div>
-            <div className="px-3 last:pr-1 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
-                Top Product
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
-                  {loading ? "—" : data.salesKpis.topProductLabel}
-                </p>
-                {!loading && data.salesKpis.topProductPct > 0 && (
-                  <span className="text-[11px] text-ink-muted tabular-nums">
-                    {data.salesKpis.topProductPct}%
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* TOP ROW — Chart (2/3) + KPI cards (1/3) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 mb-4">
 
-          {/* CHART — primary, but compressed in height */}
-          <div className="border-t border-stone-200/50 pt-2 mb-2">
-            <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
-          </div>
-
-          {/* SECONDARY ROW — asymmetric: product mix narrow, comparison table wider */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-4 pt-2 border-t border-stone-200/50">
-
-            {/* Product mix bar — horizontal contribution, replaces donut.
-                TODO: when ROLLER SHADE INVOICE BY PRODUCT report ingests
-                into Supabase, swap the `breakdown` array for sub-product data
-                (Anabelle Clutch, Designer Motorized, etc.). The ProductMixBar
-                takes a generic array of {label, value, color}. */}
+            {/* Combo chart */}
             <div>
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
-                  Product Mix
-                </p>
-                <p className="text-[10.5px] text-ink-muted">5 days</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">Orders Entered</p>
+              <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
+            </div>
+
+            {/* 2×2 KPI cards — no WoW deltas, matches mockup style */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">Sales Summary</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* 5-day total sales */}
+                <div className="card p-3">
+                  <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                      <polyline points="17 6 23 6 23 12" />
+                    </svg>
+                  </span>
+                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                    {loading ? "—" : fmt$(data.salesKpis.sumSales)}
+                  </p>
+                  <p className="text-[11px] text-ink-mid mt-1">5-day total sales</p>
+                </div>
+
+                {/* Orders entered */}
+                <div className="card p-3">
+                  <span className="w-8 h-8 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    </svg>
+                  </span>
+                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                    {loading ? "—" : data.salesKpis.sumOrders}
+                  </p>
+                  <p className="text-[11px] text-ink-mid mt-1">Orders entered</p>
+                </div>
+
+                {/* Avg roller order — Monthly */}
+                <div className="card p-3">
+                  <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                  </span>
+                  <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+                    {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
+                  </p>
+                  <p className="text-[11px] text-ink-mid mt-1">Avg roller order · Monthly</p>
+                </div>
+
+                {/* Top product */}
+                <div className="card p-3">
+                  <span className="w-8 h-8 rounded-lg flex items-center justify-center mb-2"
+                        style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
+                                 color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </span>
+                  <p className="text-xl font-bold text-ink-strong leading-none">
+                    {loading ? "—" : data.salesKpis.topProductLabel}
+                  </p>
+                  <p className="text-[11px] text-ink-mid mt-1">
+                    Top product
+                    {!loading && data.salesKpis.topProductPct > 0 && (
+                      <span className="text-ink-muted"> · {data.salesKpis.topProductPct}%</span>
+                    )}
+                  </p>
+                </div>
               </div>
-              <ProductMixBar
+            </div>
+          </div>
+
+          {/* BOTTOM ROW — Sales by Product (2/3) + Insights (1/3) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 pt-4 border-t border-stone-200/50">
+
+            {/* Sales by Product · YTD — horizontal ranked bars.
+                PHASE 1 (today): wired to top-level Roller/Faux YTD totals
+                we already have. Visually meaningful for now.
+                PHASE 2 (next session): swap `breakdown` array for the 9-row
+                sub-product data from ROLLER SHADE INVOICE BY PRODUCT report
+                once that report ingests into Supabase. One-line change. */}
+            <div>
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                  Sales by Product
+                </p>
+                <p className="text-[11px] text-ink-muted">YTD</p>
+              </div>
+              <ProductRankedBars
                 breakdown={[
-                  { label: "Roller Shades",     value: data.salesKpis.sumRoller, color: "#b85d3a" },
-                  { label: "Faux Wood Blinds",  value: data.salesKpis.sumFaux,   color: "#d4a574" },
-                  { label: "Other",             value: data.salesKpis.sumOther,  color: "#8c7758" },
+                  { label: "Roller Shades",    value: data.roller?.sales_ytd || 0, color: "#b85d3a" },
+                  { label: "Faux Wood Blinds", value: data.faux?.sales_ytd   || 0, color: "#d4a574" },
                 ]}
-                total={data.salesKpis.sumSales}
+                total={(data.roller?.sales_ytd || 0) + (data.faux?.sales_ytd || 0)}
               />
             </div>
 
-            {/* Comparison table — daily this-week vs prior-avg */}
+            {/* Insights — auto-generated comparison statements */}
             <div>
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
-                  Daily Trend vs Prior Average
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                  Insights
                 </p>
-                <p className="text-[10.5px] text-ink-muted">5 days</p>
+                <p className="text-[11px] text-ink-muted">vs prior 5 days</p>
               </div>
-              <DailyComparisonTable data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
+              <InsightsList kpis={data.salesKpis} loading={loading} />
             </div>
           </div>
-
-          {/* Footer callout removed — trend info already shown inline in stat strip's ↑/↓% chip */}
         </div>
 
       </div>
