@@ -1589,22 +1589,32 @@ export default function ExecutiveHome() {
       }
       const soldWoW = wow(soldWTD, soldLastWk);
 
-      // Sales (Invoiced) WTD — orders invoiced this week.
-      // Independent of the order_status_history feed; uses the orders table
-      // directly so it's accurate even if status_history misses some events.
-      const { data: invoicedWeekRows } = await supabase
+      // Sales (Invoiced) — last-week comparison only.
+      // We query the orders table here ONLY to get LAST WEEK's invoiced
+      // totals (the product_line_sales view gives us this-week WTD but no
+      // way to look back for WoW comparison).
+      //
+      // THIS week's totals are computed below from the product_line_sales
+      // view (which is the authoritative source). The HeroCards and
+      // Business Overview both pull from the same view, so they reconcile.
+      const { data: invoicedLastWkRows } = await supabase
         .from('orders')
-        .select('order_amount, epic_status_date')
+        .select('order_amount, epic_status_date, product_line')
         .eq('status', 'invoiced')
-        .gte('epic_status_date', lastWeekStartStr2);
-      let salesInvoicedWTD = 0, salesInvoicedLastWk = 0;
-      (invoicedWeekRows ?? []).forEach(r => {
+        .gte('epic_status_date', lastWeekStartStr2)
+        .lt('epic_status_date', weekStartDate);
+      let salesInvoicedLastWk = 0;
+      let rollerWtdLastWk = 0, fauxWtdLastWk = 0;
+      (invoicedLastWkRows ?? []).forEach(r => {
         const amt = Number(r.order_amount || 0);
-        const d = r.epic_status_date;
-        if (d >= weekStartDate) salesInvoicedWTD += amt;
-        else if (d >= lastWeekStartStr2 && d <= lastWeekEndStr2) salesInvoicedLastWk += amt;
+        const line = (r.product_line || '').toLowerCase();
+        salesInvoicedLastWk += amt;
+        if (line === 'roller')      rollerWtdLastWk += amt;
+        else if (line === 'faux')   fauxWtdLastWk   += amt;
       });
-      const salesInvoicedWoW = wow(salesInvoicedWTD, salesInvoicedLastWk);
+      // salesInvoicedWTD and the WoW values are computed AFTER the
+      // product_line_sales view query lands (see the "Product line sales"
+      // section below). For now they're placeholders.
 
       // ── Roller WIP ────────────────────────────────────────────────────
       // (Previously read from legacy roller_wip snapshot. Now derived from
@@ -1758,9 +1768,23 @@ export default function ExecutiveHome() {
         .slice(0, 5);
 
       // ── Product line sales ────────────────────────────────────────────
+      // The product_line_sales view is the authoritative source for product
+      // WTD/MTD/YTD totals. Business Overview's "Sales (WTD)" is computed
+      // from this view (summed across product lines) so the numbers
+      // reconcile across the dashboard.
       const { data: productLines } = await supabase.from("product_line_sales").select("*");
       const faux   = (productLines ?? []).find(p => p.product_line === "Faux Wood Blinds") ?? {};
       const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
+
+      // Business Overview WTD = sum of WTD across ALL product lines from
+      // the view. Reconciles exactly to Roller WTD + Faux WTD + any other.
+      const salesInvoicedWTD = (productLines ?? [])
+        .reduce((s, p) => s + Number(p.sales_wtd || 0), 0);
+      const salesInvoicedWoW = wow(salesInvoicedWTD, salesInvoicedLastWk);
+      // Per-product WoW for HeroCards — view total for this week vs orders
+      // table sum for last week. Same definitional pair as the overall WoW.
+      const rollerWtdWoW = wow(Number(roller.sales_wtd || 0), rollerWtdLastWk);
+      const fauxWtdWoW   = wow(Number(faux.sales_wtd   || 0), fauxWtdLastWk);
 
       // ── Sub-product YTD breakdown — for "Sales by Product · YTD" panel ─
       // Fed by epic-report-processor.js (processRollerSalesCSV) which ingests
@@ -2096,13 +2120,15 @@ export default function ExecutiveHome() {
       const unitsWoW  = wow(unitsWTD,  unitsLastWk);
       const ordersWoW = wow(ordersWTD, ordersLastWk);
 
-      // Per-product WoW for the HeroCards (uses sparkRows we already have)
-      const rollerSalesThisWk = rollerSpark.slice(-7).reduce((s, v) => s + v, 0);
-      const rollerSalesLastWk = rollerSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
-      const fauxSalesThisWk   = fauxSpark.slice(-7).reduce((s, v) => s + v, 0);
-      const fauxSalesLastWk   = fauxSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
-      const rollerWoW = wow(rollerSalesThisWk, rollerSalesLastWk);
-      const fauxWoW   = wow(fauxSalesThisWk, fauxSalesLastWk);
+      // Per-product WoW for the HeroCards.
+      // Previously used a rolling 7-day sparkline comparison (slice(-7) vs
+      // slice(-14,-7)) which is a different definition than the WTD number
+      // shown right next to it. Now uses the same calendar-week invoiced
+      // totals we computed above (rollerWtdInvoiced vs rollerWtdLastWk),
+      // so the "↑X% vs last week" chip is internally consistent with the
+      // dollar amount next to it.
+      const rollerWoW = rollerWtdWoW;
+      const fauxWoW   = fauxWtdWoW;
 
       // ── Top customers this week ───────────────────────────────────────
       const { data: weekOrders } = await supabase
