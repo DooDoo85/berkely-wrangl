@@ -241,7 +241,9 @@ function OperationsStatusTable({
   printedRoller, printedFaux,
   inProdRoller, inProdFaux,
   totalInProduction,
-  leadTimeDays, leadTimeWindow,
+  startedToday, startedTodayUnits,
+  invoicedToday, invoicedTodayUnits,
+  netFlow,
   onCreditOkRollerClick, onCreditOkFauxClick,
   onPrintedRollerClick, onPrintedFauxClick,
   onInProdRollerClick, onInProdFauxClick,
@@ -409,10 +411,13 @@ function OperationsStatusTable({
         ))}
       </div>
 
-      {/* Footer summary row — Total in Production + Avg P→Inv */}
+      {/* Operational footer — Started Today, Invoiced Today, Net Flow, Total in Production.
+          Folds the old Production Flow widget's most actionable signals into the
+          Operations Status panel where they contextually belong. */}
       <div className="mt-4 rounded-xl bg-stone-50/60 ring-1 ring-stone-100/80 px-4 py-3">
-        <div className="grid grid-cols-2 gap-4 divide-x divide-stone-200/60">
-          <div className="flex items-center gap-3 pr-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 divide-x divide-stone-200/60">
+          {/* Total in Production */}
+          <div className="flex items-center gap-2.5 md:px-1">
             <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -422,28 +427,73 @@ function OperationsStatusTable({
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">Total in production</p>
-              <p className="text-base font-semibold text-ink-strong tabular-nums mt-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Total in production</p>
+              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
                 {loading ? "—" : totalInProduction}
-                <span className="text-xs font-normal text-ink-mid ml-1">orders</span>
+                <span className="text-[11px] font-normal text-ink-mid ml-1">orders</span>
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 pl-4">
-            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
+
+          {/* Started Today */}
+          <div className="flex items-center gap-2.5 px-4 md:px-3">
+            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-amber-700 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
+                <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">Avg P→Inv</p>
-              <p className="text-base font-semibold text-ink-strong tabular-nums mt-0.5">
-                {loading ? "—" : (leadTimeDays !== null ? `${leadTimeDays}` : "—")}
-                <span className="text-xs font-normal text-ink-mid ml-1">days</span>
-                <span className="text-[11px] font-normal text-ink-muted ml-2">
-                  {leadTimeWindow === 'wtd' ? '· this week' : '· 30-day rolling'}
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Started today</p>
+              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
+                {loading ? "—" : startedToday}
+                <span className="text-[11px] font-normal text-ink-mid ml-1">
+                  orders{startedTodayUnits > 0 ? ` · ${startedTodayUnits.toLocaleString()}u` : ''}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Invoiced Today */}
+          <div className="flex items-center gap-2.5 px-4 md:px-3">
+            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-emerald-700 flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Invoiced today</p>
+              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
+                {loading ? "—" : invoicedToday}
+                <span className="text-[11px] font-normal text-ink-mid ml-1">
+                  orders{invoicedTodayUnits > 0 ? ` · ${invoicedTodayUnits.toLocaleString()}u` : ''}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Net Flow — 5-day */}
+          <div className="flex items-center gap-2.5 px-4 md:px-3">
+            <span className={`w-9 h-9 rounded-lg ring-1 flex items-center justify-center flex-shrink-0 ${
+              netFlow >= 0 ? "bg-emerald-50 ring-emerald-200/50 text-emerald-700" : "bg-red-50 ring-red-200/50 text-red-700"
+            }`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                {netFlow >= 0
+                  ? <><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></>
+                  : <><polyline points="22 17 13.5 8.5 8.5 13.5 2 7" /><polyline points="16 17 22 17 22 11" /></>
+                }
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Net flow</p>
+              <p className="text-base font-semibold tabular-nums leading-tight mt-0.5">
+                <span className={netFlow >= 0 ? "text-emerald-700" : "text-red-700"}>
+                  {loading ? "—" : `${netFlow >= 0 ? '+' : ''}${netFlow}`}
+                </span>
+                <span className="text-[11px] font-normal text-ink-mid ml-1">
+                  {netFlow >= 0 ? "draining" : "filling"}
                 </span>
               </p>
             </div>
@@ -529,6 +579,93 @@ function DailySalesChart({ data = [] }) {
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-sm" style={{ background: SEG.other }} />Other
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Trend line chart — two-series (current vs prior) line with grid + axes ────
+//
+// Used in the Daily Sales hero panel to compare sales-per-day this week vs the
+// prior 5 business days. Hand-rolled SVG (matching the existing Sparkline
+// pattern; the project doesn't pull in a chart library). Solid line for the
+// current period, dashed line for the prior. Y-axis labeled in $k.
+//
+function TrendLineChart({ current = [], prior = [], width = 360, height = 180 }) {
+  if (!current.length || !prior.length) {
+    return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
+  }
+  const ROLLER = "#b85d3a";
+  const PRIOR_COLOR = "#a7a29a";
+  const padL = 32, padR = 12, padT = 8, padB = 24;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  // Y scale based on max of either series, with a small headroom.
+  const maxVal = Math.max(
+    Math.max(...current.map(d => d.sales || 0), 0),
+    Math.max(...prior.map(d => d.sales || 0), 0),
+    1,
+  );
+  const yMax = Math.ceil(maxVal * 1.15);
+  // Step grid lines at every 25% of yMax.
+  const gridLines = [0, 0.25, 0.5, 0.75, 1.0];
+  // Build series point arrays
+  const n = current.length;
+  const xAt = i => padL + (n > 1 ? (innerW * i) / (n - 1) : innerW / 2);
+  const yAt = v => padT + innerH - (innerH * v) / yMax;
+  const buildPath = arr => arr.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(d.sales).toFixed(1)}`).join(' ');
+  const currentPath = buildPath(current);
+  const priorPath = buildPath(prior);
+  // X-axis labels — use current series labels (Mon..Today)
+  const xLabels = current.map(d => d.label);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        {/* Grid lines + Y labels */}
+        {gridLines.map(t => {
+          const y = padT + innerH - innerH * t;
+          const val = Math.round(yMax * t);
+          return (
+            <g key={t}>
+              <line x1={padL} x2={width - padR} y1={y} y2={y}
+                    stroke="#e7e5e4" strokeWidth="1" strokeDasharray={t === 0 ? "" : "2 3"} />
+              <text x={padL - 6} y={y + 3} textAnchor="end"
+                    fontSize="9" fill="#a7a29a" fontFamily="ui-sans-serif">
+                ${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+              </text>
+            </g>
+          );
+        })}
+        {/* X-axis labels */}
+        {xLabels.map((lbl, i) => (
+          <text key={i} x={xAt(i)} y={height - padB + 14} textAnchor="middle"
+                fontSize="10" fill="#a7a29a" fontFamily="ui-sans-serif">
+            {lbl}
+          </text>
+        ))}
+        {/* Prior period — dashed muted line */}
+        <path d={priorPath} fill="none" stroke={PRIOR_COLOR} strokeWidth="1.5"
+              strokeDasharray="3 3" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Current period — solid colored line */}
+        <path d={currentPath} fill="none" stroke={ROLLER} strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+        {/* Current period dots */}
+        {current.map((d, i) => (
+          <circle key={i} cx={xAt(i)} cy={yAt(d.sales)} r="3"
+                  fill={ROLLER} stroke="white" strokeWidth="1.5" />
+        ))}
+      </svg>
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-[11px] mt-2 ml-8">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 rounded-full" style={{ background: ROLLER }} />
+          <span className="text-ink-mid">This Week</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 rounded-full border-dashed border-t-2" style={{ borderColor: PRIOR_COLOR }} />
+          <span className="text-ink-mid">Prior 5 Days</span>
         </span>
       </div>
     </div>
@@ -703,6 +840,16 @@ export default function ExecutiveHome() {
     topCustomers: [],
     dailySales: [],
     productionFlow: [],
+    priorDailySales: [],
+    salesKpis: {
+      sumSales: 0, sumOrders: 0, aov: 0,
+      priorSales: 0, priorOrders: 0, priorAov: 0,
+      salesTrendWoW: null, ordersTrendWoW: null, aovTrendWoW: null,
+      topProductLabel: '—', topProductPct: 0, topProductSales: 0,
+    },
+    startedToday: 0, startedTodayUnits: 0,
+    invoicedToday: 0, invoicedTodayUnits: 0,
+    netFlow: 0,
     todayEntered: 0, todayShipped: 0, todaySales: 0,
     salesInvoicedWTD: 0, salesInvoicedWoW: null,
     soldWTD: 0, soldWoW: null,
@@ -1048,7 +1195,10 @@ export default function ExecutiveHome() {
 
       // ── Daily sales — last 5 business days, status != quote ──────────
       // Walk back from today, skip Sat/Sun, until we have 5 weekdays.
+      // We also keep the prior 5 business days for prior-period comparisons
+      // in the Daily Sales hero KPIs (% vs prior 5 days).
       const businessDays = [];
+      const priorBusinessDays = [];
       const cur = new Date();
       cur.setHours(0, 0, 0, 0);
       while (businessDays.length < 5) {
@@ -1058,11 +1208,20 @@ export default function ExecutiveHome() {
         }
         cur.setDate(cur.getDate() - 1);
       }
+      while (priorBusinessDays.length < 5) {
+        const dow = cur.getDay();
+        if (dow !== 0 && dow !== 6) {
+          priorBusinessDays.unshift(new Date(cur));
+        }
+        cur.setDate(cur.getDate() - 1);
+      }
       const earliestBizDay = businessDays[0].toISOString().slice(0, 10);
+      const earliestPriorBizDay = priorBusinessDays[0].toISOString().slice(0, 10);
+      const latestPriorBizDay = priorBusinessDays[priorBusinessDays.length - 1].toISOString().slice(0, 10);
       const { data: dailySalesRows } = await supabase
         .from("orders")
         .select("order_date, order_amount, product_line")
-        .gte("order_date", earliestBizDay)
+        .gte("order_date", earliestPriorBizDay)
         .neq("status", "quote")
         .not("order_date", "is", null);
 
@@ -1092,6 +1251,31 @@ export default function ExecutiveHome() {
           other: bucket.other,
         };
       });
+      // Prior 5 business days — for the Sales Trend line chart's dashed comparison series.
+      const priorDailySales = priorBusinessDays.map(d => {
+        const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString("en-US", { weekday: "short" });
+        const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
+        return { label, orders: bucket.orders, sales: bucket.sales };
+      });
+
+      // 5-day rollup KPIs for the Daily Sales hero panel.
+      const sumSales   = dailySales.reduce((s, d) => s + d.sales, 0);
+      const sumOrders  = dailySales.reduce((s, d) => s + d.orders, 0);
+      const sumRoller  = dailySales.reduce((s, d) => s + d.roller, 0);
+      const sumFaux    = dailySales.reduce((s, d) => s + d.faux, 0);
+      const sumOther   = dailySales.reduce((s, d) => s + d.other, 0);
+      const priorSales = priorDailySales.reduce((s, d) => s + d.sales, 0);
+      const priorOrders = priorDailySales.reduce((s, d) => s + d.orders, 0);
+      const aov        = sumOrders > 0 ? sumSales / sumOrders : 0;
+      const priorAov   = priorOrders > 0 ? priorSales / priorOrders : 0;
+      const salesTrendWoW = wow(sumSales, priorSales);
+      const ordersTrendWoW = wow(sumOrders, priorOrders);
+      const aovTrendWoW = wow(aov, priorAov);
+      // Top product over the 5 days — roller vs faux, with % share of total sales
+      const topProductSales = Math.max(sumRoller, sumFaux);
+      const topProductLabel = sumRoller >= sumFaux ? 'Roller' : 'Faux';
+      const topProductPct   = sumSales > 0 ? Math.round((topProductSales / sumSales) * 100) : 0;
 
       // ── Production Flow — last 5 business days ────────────────────────
       // Two metrics per day:
@@ -1146,6 +1330,20 @@ export default function ExecutiveHome() {
           invoiced_units: b.invoiced_units,
         };
       });
+
+      // Today-only and 5-day net flow figures for the Operations Status footer.
+      // "Today" = the most recent business day (the last entry in businessDays).
+      const todayFlow = productionFlow[productionFlow.length - 1] || { started: 0, started_units: 0, invoiced: 0, invoiced_units: 0 };
+      const startedToday = todayFlow.started;
+      const startedTodayUnits = todayFlow.started_units;
+      const invoicedToday = todayFlow.invoiced;
+      const invoicedTodayUnits = todayFlow.invoiced_units;
+      // Net flow = invoiced − started, summed across all 5 days.
+      // Positive ("draining") = invoicing faster than starting → backlog shrinking.
+      // Negative ("filling") = starting faster than invoicing → backlog growing.
+      const sumStarted = productionFlow.reduce((s, d) => s + d.started, 0);
+      const sumInvoiced = productionFlow.reduce((s, d) => s + d.invoiced, 0);
+      const netFlow = sumInvoiced - sumStarted;
 
       // ── Sparklines (30 days, by product line) ─────────────────────────
       const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
@@ -1270,6 +1468,18 @@ export default function ExecutiveHome() {
         inProductionRoller,
         inProductionFaux,
         topCustomers, dailySales, productionFlow,
+        priorDailySales,
+        // Daily Sales hero — 5-day rollup KPIs + WoW comparisons
+        salesKpis: {
+          sumSales, sumOrders, aov,
+          priorSales, priorOrders, priorAov,
+          salesTrendWoW, ordersTrendWoW, aovTrendWoW,
+          topProductLabel, topProductPct, topProductSales,
+        },
+        // Operations Status footer — today's flow + 5-day net flow
+        startedToday, startedTodayUnits,
+        invoicedToday, invoicedTodayUnits,
+        netFlow,
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
         todaySales,
@@ -1358,7 +1568,7 @@ export default function ExecutiveHome() {
             Combined "Needs Attention" widget on the right — merges the old
             Orders on Hold + Stuck Orders into one widget with two sections,
             since both are "this needs human attention" lists. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3 lg:gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3 lg:gap-4 mb-4">
           <OperationsStatusTable
             loading={loading}
             creditOkRoller={data.creditOkRoller}
@@ -1368,8 +1578,11 @@ export default function ExecutiveHome() {
             inProdRoller={data.inProductionRoller}
             inProdFaux={data.inProductionFaux}
             totalInProduction={data.inProductionCount}
-            leadTimeDays={data.leadTimeDays}
-            leadTimeWindow={data.leadTimeWindow}
+            startedToday={data.startedToday}
+            startedTodayUnits={data.startedTodayUnits}
+            invoicedToday={data.invoicedToday}
+            invoicedTodayUnits={data.invoicedTodayUnits}
+            netFlow={data.netFlow}
             onCreditOkRollerClick={() => setCreditOkModal('roller')}
             onCreditOkFauxClick={() => setCreditOkModal('faux')}
             onPrintedRollerClick={() => setWipModal("PRINTED")}
@@ -1566,24 +1779,137 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* ── Flow Zone: Daily Sales + Production Flow ─ stacks on mobile ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Daily Sales — stacked by product line */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
-              <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
+        {/* ═══ ROW 3 — Daily Sales hero ═══════════════════════════════════
+            Full-width primary analytics section. Three columns: bar chart of
+            last 5 business days (left), KPI summary cards (middle), and a
+            trend line chart comparing this week vs prior 5 days (right). */}
+        <div className="card-priority p-5 md:p-6">
+          {/* Header */}
+          <div className="flex items-end justify-between mb-5">
+            <div>
+              <h3 className="text-base font-semibold text-ink-strong">Daily Sales · Last 5 Business Days</h3>
+              <p className="text-[12px] text-ink-muted mt-0.5">Orders entered, ex. quotes</p>
             </div>
-            <DailySalesChart data={data.dailySales} />
+            <div className="text-[11px] text-ink-muted">5-day rolling window</div>
           </div>
 
-          {/* Production Flow — started vs invoiced per day */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-ink-strong">Production Flow · Last 5 Business Days</h3>
-              <span className="text-xs text-ink-muted">started vs invoiced</span>
+          {/* 3-column grid: bar chart | KPI cards | trend line */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1.3fr] gap-5 lg:gap-6">
+
+            {/* LEFT — bar chart */}
+            <div>
+              <DailySalesChart data={data.dailySales} />
             </div>
-            <ProductionFlowChart data={data.productionFlow} />
+
+            {/* MIDDLE — KPI insights */}
+            <div className="space-y-3 lg:border-x lg:border-stone-100/80 lg:px-5">
+              {/* 5-day total sales */}
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+                    {loading ? "—" : fmt$(data.salesKpis.sumSales)}
+                  </p>
+                  <p className="text-[11px] text-ink-mid leading-tight">5-day total sales</p>
+                  {data.salesKpis.salesTrendWoW !== null && !loading && (
+                    <p className="text-[11px] mt-1 tabular-nums">
+                      <span className={data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                        {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
+                      </span>
+                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Orders entered */}
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+                    {loading ? "—" : data.salesKpis.sumOrders}
+                  </p>
+                  <p className="text-[11px] text-ink-mid leading-tight">Orders entered</p>
+                  {data.salesKpis.ordersTrendWoW !== null && !loading && (
+                    <p className="text-[11px] mt-1 tabular-nums">
+                      <span className={data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                        {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
+                      </span>
+                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Avg order value */}
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
+                    {loading ? "—" : fmt$(data.salesKpis.aov)}
+                  </p>
+                  <p className="text-[11px] text-ink-mid leading-tight">Avg order value</p>
+                  {data.salesKpis.aovTrendWoW !== null && !loading && (
+                    <p className="text-[11px] mt-1 tabular-nums">
+                      <span className={data.salesKpis.aovTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                        {data.salesKpis.aovTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.aovTrendWoW)}%
+                      </span>
+                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Top product */}
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
+                               color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold text-ink-strong leading-tight">
+                    {loading ? "—" : data.salesKpis.topProductLabel}
+                  </p>
+                  <p className="text-[11px] text-ink-mid leading-tight">Top product</p>
+                  {!loading && data.salesKpis.topProductPct > 0 && (
+                    <p className="text-[11px] text-ink-muted mt-1 tabular-nums">
+                      {data.salesKpis.topProductPct}% of sales
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT — trend line chart */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-[12px] font-medium text-ink-strong">Sales Trend</h4>
+                <span className="text-[11px] text-ink-muted">5 days</span>
+              </div>
+              <TrendLineChart current={data.dailySales} prior={data.priorDailySales} />
+            </div>
           </div>
         </div>
 
