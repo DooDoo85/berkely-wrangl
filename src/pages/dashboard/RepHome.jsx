@@ -1,1808 +1,604 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../components/AuthProvider";
 import { supabase } from "../../lib/supabase";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function daysSince(dateStr) {
-  if (!dateStr) return 0;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
-}
-function startOfWeek() {
-  const d = new Date(); d.setHours(0,0,0,0);
+function startOfWeekISO() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
   return d.toISOString();
 }
-function startOfMonth() {
-  const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.toISOString();
-}
-function fmt$(n) {
-  if (!n) return "$0";
-  if (n >= 1000000) return `$${(n/1000000).toFixed(1)}M`;
-  if (n >= 1000) return `$${(n/1000).toFixed(0)}k`;
-  return `$${n.toFixed(0)}`;
-}
-function fmt$Full(n) {
-  if (!n) return "$0";
-  return `$${Math.round(n).toLocaleString()}`;
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-// Week-over-week % change: returns null if prior period has no data.
-// Otherwise returns a positive or negative number (e.g. 12 for +12%, -5 for -5%).
-function wow(current, prior) {
-  if (!prior) return null;
-  return Math.round(((current - prior) / prior) * 100);
+// Compact money: $145K, $12.3K, $850 — keeps KPI subtext short
+function fmtMoneyCompact(n) {
+  const v = Number(n) || 0
+  if (v >= 1000) {
+    const k = v / 1000
+    return '$' + (k >= 10 ? Math.round(k) : k.toFixed(1)) + 'K'
+  }
+  return '$' + Math.round(v)
 }
 
-// ─── Sparkline ──────────────────────────────────────────────────────────────
+// ─── KPI Tile (goal-aware) ──────────────────────────────────────────────────
 
-function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
-  if (!data.length) return <div className="h-10" />;
-  // Sqrt scaling — compresses outliers and expands small variations.
-  // A $100 day shows at sqrt(100)/sqrt(20000) ≈ 7%, vs raw ratio of 0.5% — much more visible.
-  const sqrtData = data.map(v => Math.sqrt(Math.max(0, v)));
-  const max = Math.max(...sqrtData, 1);
-  const w = 280, h = 40;
-  const step = data.length > 1 ? w / (data.length - 1) : 0;
-  const points = sqrtData.map((sv, i) => {
-    const x = i * step;
-    const y = h - (sv / max) * (h - 4) - 2;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const linePath = points.join(" ");
-  const fillPath = `${linePath} ${w},${h} 0,${h}`;
+function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon, valueSubtext, onClick }) {
+  const v = Number(value || 0)
+  const g = Number(goal || 0)
+  const pct = g > 0 ? Math.min((v / g) * 100, 100) : 0
+  const hit = g > 0 && v >= g
+  const onTrack = g > 0 && v >= g * 0.5
+  // Color logic: healthy when goal hit, warning when 50%+, muted otherwise
+  const barColor = hit ? 'bg-status-healthy' : onTrack ? 'bg-status-warning' : 'bg-[var(--surface-border)]'
+  const valueColor = hit ? 'text-status-healthy' : 'text-ink-strong'
+
+  const clickable = !!onClick
+  const tileClass = `card p-4 md:p-5 transition-shadow duration-200 ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-10">
-      <polyline points={fillPath} fill={fillColor} stroke="none" opacity="0.85" />
-      <polyline points={linePath} fill="none" stroke={color} strokeWidth="1.25" />
-    </svg>
-  );
-}
-
-// ─── Hero card (Roller / Faux with sparkline) ───────────────────────────────
-//
-// Revenue-focused card. Shows WTD sales, units, WoW% change, and a 30-day
-// sparkline. Credit OK / Printed counts intentionally removed — those now
-// live in the Operations Status table below, so we don't duplicate the info.
-//
-function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onClick }) {
-  const wowPositive = wowPct !== null && wowPct >= 0;
-  return (
-    <div onClick={onClick}
-      className="card card-hover p-4 md:p-5 cursor-pointer h-full">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
-          <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
+    <div className={tileClass} onClick={onClick}>
+      <div className="flex items-start gap-2 md:gap-3">
+        <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+          <span className={iconColor}>{icon}</span>
         </div>
-        <span className="text-xs text-ink-muted flex-shrink-0 ml-2">View →</span>
-      </div>
-
-      {/* WTD dollar amount */}
-      <div className="mb-1">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
-            {loading ? "—" : fmt$Full(data.sales_wtd)}
-          </span>
-          <span className="text-xs text-ink-muted">WTD</span>
-        </div>
-      </div>
-
-      {/* Units + WoW% — one compact line */}
-      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3">
-        <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
-        {wowPct !== null && !loading && (
-          <>
-            <span className="text-ink-muted">·</span>
-            <span className={wowPositive ? "text-emerald-700" : "text-red-700"}>
-              {wowPositive ? "↑" : "↓"} {Math.abs(wowPct)}% vs last week
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] md:text-[11px] font-semibold text-ink-muted uppercase tracking-wider">{label}</div>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className={`text-2xl md:text-3xl font-bold tabular-nums leading-none ${valueColor}`}>
+              {loading ? "—" : v}
             </span>
-          </>
-        )}
-      </div>
-
-      {/* 30-day sparkline */}
-      <Sparkline data={sparkData} color={accent} fillColor={fill} />
-    </div>
-  );
-}
-
-// ─── Pipeline tile ──────────────────────────────────────────────────────────
-
-function PipelineTile({ label, value, sub, accent, onClick }) {
-  const clickable = !!onClick;
-  const accentStyle = accent ? { borderTop: `2px solid ${accent}` } : {};
-  return (
-    <div onClick={onClick} style={accentStyle}
-      className={`card px-3 py-3 md:px-4 md:py-3.5 ${clickable ? "cursor-pointer card-hover" : ""}`}>
-      <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{label}</p>
-      <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">{value}</p>
-      {sub && <p className="text-xs text-ink-mid mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
-// ─── Business Overview card ────────────────────────────────────────────────
-//
-// Top-left executive panel. Three KPIs each capture a distinct slice of the
-// week:
-//
-//   Sales (WTD)  — revenue invoiced this week (orders that shipped/closed).
-//   Sold (WTD)   — revenue on orders that newly hit credit_ok this week
-//                  (committed sales — approved & ready, but not yet shipped).
-//   Lead Time    — avg days printed→invoiced for orders invoiced this week
-//                  (falls back to 30-day rolling if too few WTD samples).
-//
-// Together: Sales = "what closed", Sold = "what we sold", Lead Time = "how
-// fast the floor is moving." Plays well as a CEO morning glance.
-//
-function BusinessOverviewCard({
-  loading, todayEntered, todaySales,
-  salesInvoicedWTD, salesInvoicedWoW,
-  soldWTD, soldWoW,
-  leadTimeDays, leadTimeWindow,
-}) {
-  const kpis = [
-    {
-      label: "Sales (WTD)",
-      hint: "Invoiced this week",
-      value: loading ? "—" : fmt$(salesInvoicedWTD),
-      sub: salesInvoicedWoW === null ? null : { wow: salesInvoicedWoW, label: "vs last week" },
-      icon: "💰",
-    },
-    {
-      label: "Sold (WTD)",
-      hint: "Credit OK this week",
-      value: loading ? "—" : fmt$(soldWTD),
-      sub: soldWoW === null ? null : { wow: soldWoW, label: "vs last week" },
-      icon: "✍️",
-    },
-    {
-      label: "Lead Time",
-      hint: "Printed → Invoiced",
-      value: loading ? "—" : (leadTimeDays !== null ? `${leadTimeDays}` : "—"),
-      valueSuffix: leadTimeDays !== null ? "days" : null,
-      sub: leadTimeDays === null
-        ? { text: "Not enough data yet" }
-        : { text: leadTimeWindow === 'wtd' ? "Invoiced this week" : "Last 30 days (low WTD volume)" },
-      icon: "🕐",
-    },
-  ];
-
-  return (
-    <div className="card p-4 md:p-6 h-full">
-      <div className="mb-4">
-        <h2 className="font-display font-bold text-ink-strong text-2xl">Business Overview</h2>
-        <div className="text-xs text-ink-muted mt-1">
-          {loading ? "Loading…" :
-            <>
-              {todayEntered} order{todayEntered !== 1 ? 's' : ''} entered today
-              {todaySales > 0 && <> · {fmt$(todaySales)} in sales</>}
-            </>
-          }
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {kpis.map(k => (
-          <div key={k.label} className="bg-surface-page/40 rounded-xl p-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-2">
-              {k.icon}
-            </div>
-            <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{k.label}</p>
-            {k.hint && <p className="text-[10px] text-ink-muted mt-0.5">{k.hint}</p>}
-            <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">
-              {k.value}
-              {k.valueSuffix && <span className="text-sm font-normal text-ink-muted ml-1">{k.valueSuffix}</span>}
-            </p>
-            {k.sub && (
-              <div className="mt-1.5 text-[11px] tabular-nums">
-                {k.sub.wow !== undefined ? (
-                  <>
-                    <span className={k.sub.wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
-                      {k.sub.wow >= 0 ? "↑" : "↓"} {Math.abs(k.sub.wow)}%
-                    </span>
-                    <span className="text-ink-muted ml-1">{k.sub.label}</span>
-                  </>
-                ) : (
-                  <span className="text-ink-muted">{k.sub.text}</span>
-                )}
-              </div>
+            {g > 0 && !loading && (
+              <span className="text-sm font-medium text-ink-muted tabular-nums">/ {g}</span>
             )}
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Operations Status table ───────────────────────────────────────────────
-//
-// 3-row × (label + 2 product columns) compact pipeline view.
-// Replaces the two horizontal product-line rows. Reads like a table:
-// rows = stages, columns = product line. Eye scans diagonally.
-//
-function OperationsStatusTable({
-  loading,
-  creditOkRoller, creditOkFaux,
-  printedRoller, printedFaux,
-  inProdRoller, inProdFaux,
-  onCreditOkRollerClick, onCreditOkFauxClick,
-  onPrintedRollerClick, onPrintedFauxClick,
-  onInProdRollerClick, onInProdFauxClick,
-}) {
-  const ROLLER = "#b85d3a";
-  const FAUX   = "#d4a574";
-
-  const stages = [
-    {
-      key: "credit_ok",
-      icon: "✓",
-      iconBg: "bg-emerald-50 text-emerald-700",
-      label: "Credit OK",
-      sub: "Ready to print",
-      roller: {
-        value: loading ? "—" : creditOkRoller.count,
-        sub: creditOkRoller.total > 0 ? `${fmt$(creditOkRoller.total)} pending` : null,
-        onClick: onCreditOkRollerClick,
-      },
-      faux: {
-        value: loading ? "—" : creditOkFaux.count,
-        sub: creditOkFaux.total > 0 ? `${fmt$(creditOkFaux.total)} pending` : null,
-        onClick: onCreditOkFauxClick,
-      },
-    },
-    {
-      key: "printed",
-      icon: "🖨",
-      iconBg: "bg-amber-50 text-amber-700",
-      label: "Printed",
-      sub: "Ready for production",
-      roller: {
-        value: loading ? "—" : printedRoller.count,
-        sub: printedRoller.units > 0 ? `${printedRoller.units.toLocaleString()} units` : null,
-        onClick: onPrintedRollerClick,
-      },
-      faux: {
-        value: loading ? "—" : printedFaux.count,
-        sub: printedFaux.units > 0 ? `${printedFaux.units.toLocaleString()} units` : null,
-        onClick: onPrintedFauxClick,
-      },
-    },
-    {
-      key: "in_production",
-      icon: "⚙",
-      iconBg: "bg-stone-100 text-stone-700",
-      label: "In Production",
-      sub: "On the floor",
-      roller: {
-        value: loading ? "—" : inProdRoller.count,
-        sub: inProdRoller.units > 0 ? `${inProdRoller.units.toLocaleString()} units` : null,
-        onClick: onInProdRollerClick,
-      },
-      faux: {
-        value: loading ? "—" : inProdFaux.count,
-        sub: inProdFaux.units > 0 ? `${inProdFaux.units.toLocaleString()} units` : null,
-        onClick: onInProdFauxClick,
-      },
-    },
-  ];
-
-  return (
-    <div className="card p-4 md:p-6 h-full">
-      <h3 className="text-sm font-medium text-ink-strong mb-4">Operations Status</h3>
-
-      {/* Column headers */}
-      <div className="grid grid-cols-[1fr_1fr_1fr] gap-3 pb-2 border-b border-stone-100 mb-2">
-        <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-[0.1em]">Stage</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
-             style={{ color: ROLLER }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
-          Roller Shades
-        </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
-             style={{ color: FAUX }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
-          Faux Wood Blinds
-        </div>
-      </div>
-
-      {/* Rows */}
-      <div className="divide-y divide-stone-100">
-        {stages.map(s => (
-          <div key={s.key} className="grid grid-cols-[1fr_1fr_1fr] gap-3 py-3 items-center">
-            {/* Stage label cell */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${s.iconBg}`}>
-                {s.icon}
+          {g > 0 ? (
+            <div className="mt-2.5">
+              <div className="w-full h-1.5 bg-[var(--surface-border)] rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${barColor} transition-all duration-500`}
+                  style={{ width: `${pct}%` }}
+                />
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-strong leading-tight">{s.label}</p>
-                <p className="text-[11px] text-ink-muted leading-tight">{s.sub}</p>
+              <div className="text-[10px] text-ink-muted mt-1">
+                {hit ? '✓ Goal hit' : `${Math.round(pct)}% to goal`}
               </div>
             </div>
-
-            {/* Roller cell */}
-            <button onClick={s.roller.onClick}
-              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
-              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.roller.value}</p>
-              {s.roller.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.roller.sub}</p>}
-            </button>
-
-            {/* Faux cell */}
-            <button onClick={s.faux.onClick}
-              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
-              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.faux.value}</p>
-              {s.faux.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.faux.sub}</p>}
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Daily Sales chart ──────────────────────────────────────────────────────
-
-function DailySalesChart({ data = [] }) {
-  if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
-  // Sqrt scaling — compresses outliers, expands small days
-  const sqrtSales = data.map(d => Math.sqrt(Math.max(0, d.sales)));
-  const maxSqrt = Math.max(...sqrtSales, 1);
-  const SEG = {
-    roller: '#b85d3a',  // accent clay (matches roller tile)
-    faux:   '#c2913a',  // accent gold (matches faux tile)
-    other:  '#8c7758',  // muted brown
-  };
-  return (
-    <div className="px-1">
-      <div className="flex items-end gap-3 h-36 mb-2">
-        {data.map((d, i) => {
-          const pct = maxSqrt > 0 ? (sqrtSales[i] / maxSqrt) * 100 : 0;
-          const isToday = i === data.length - 1;
-          const hasData = d.sales > 0;
-          // Within the bar, split into three segments proportional to product line
-          const segs = hasData ? [
-            { key: 'roller', amt: d.roller, color: SEG.roller },
-            { key: 'faux',   amt: d.faux,   color: SEG.faux },
-            { key: 'other',  amt: d.other,  color: SEG.other },
-          ].filter(s => s.amt > 0) : [];
-          return (
-            <div key={i} className="flex-1 group relative flex flex-col items-stretch justify-end"
-              style={{ height: `${Math.max(pct, hasData ? 6 : 0)}%`, minHeight: hasData ? '4px' : '0' }}>
-              {hasData && (
-                <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-ink-strong text-ink-inverse text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                  <div>{fmt$(d.sales)} · {d.orders} orders</div>
-                  {d.roller > 0 && <div>Roller: {fmt$(d.roller)}</div>}
-                  {d.faux   > 0 && <div>Faux: {fmt$(d.faux)}</div>}
-                  {d.other  > 0 && <div>Other: {fmt$(d.other)}</div>}
-                </div>
-              )}
-              <div className="flex flex-col-reverse w-full h-full rounded-t overflow-hidden transition-all"
-                style={{ opacity: isToday ? 1 : 0.9 }}>
-                {segs.map(s => {
-                  const segPct = (s.amt / d.sales) * 100;
-                  return (
-                    <div key={s.key}
-                      style={{ height: `${segPct}%`, background: s.color }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-3 mb-1">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[11px] text-ink-strong font-semibold tabular-nums">
-            {d.sales > 0 ? fmt$(d.sales) : '—'}
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-3 mb-3">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[10px] text-ink-mid font-medium">
-            {i === data.length - 1 ? "Today" : d.label}
-          </div>
-        ))}
-      </div>
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-4 text-[10px] text-ink-mid">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.roller }} />Roller
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.faux }} />Faux
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm" style={{ background: SEG.other }} />Other
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Production Flow — Started vs Invoiced per day (grid readout) ──────────────────
-
-function ProductionFlowChart({ data = [] }) {
-  if (!data.length) return <div className="h-32 flex items-center justify-center text-sm text-ink-muted">No data</div>;
-
-  // Week totals
-  const totalStartedOrders   = data.reduce((s, d) => s + (d.started || 0), 0);
-  const totalStartedUnits    = data.reduce((s, d) => s + (d.started_units || 0), 0);
-  const totalInvoicedOrders  = data.reduce((s, d) => s + (d.invoiced || 0), 0);
-  const totalInvoicedUnits   = data.reduce((s, d) => s + (d.invoiced_units || 0), 0);
-
-  // Net WIP delta: positive = invoicing faster than starting (queue draining)
-  const netDelta = totalInvoicedOrders - totalStartedOrders;
-
-  return (
-    <div className="space-y-4">
-      {/* Week totals — two pills */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(194,145,58,0.10)' }}>
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#c2913a' }} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Started</div>
-            <div className="text-base font-bold text-ink-strong tabular-nums leading-tight">{totalStartedOrders} <span className="text-xs text-ink-muted font-medium">orders</span></div>
-            <div className="text-[10px] text-ink-mid tabular-nums">{totalStartedUnits.toLocaleString()} units</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(91,140,90,0.10)' }}>
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#5b8c5a' }} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wider">Invoiced</div>
-            <div className="text-base font-bold text-ink-strong tabular-nums leading-tight">{totalInvoicedOrders} <span className="text-xs text-ink-muted font-medium">orders</span></div>
-            <div className="text-[10px] text-ink-mid tabular-nums">{totalInvoicedUnits.toLocaleString()} units</div>
-          </div>
+          ) : valueSubtext ? (
+            <div className="text-xs text-ink-mid mt-2 tabular-nums truncate">{valueSubtext}</div>
+          ) : (
+            <div className="text-xs text-ink-muted mt-2">This week</div>
+          )}
         </div>
       </div>
-
-      {/* Per-day grid */}
-      <div className="border-t pt-3" style={{ borderColor: 'var(--surface-border)' }}>
-        <table className="w-full text-xs tabular-nums">
-          <thead>
-            <tr className="text-ink-muted">
-              <th className="text-left font-medium text-[10px] uppercase tracking-wider pb-1.5">Day</th>
-              {data.map((d, i) => (
-                <th key={i} className="text-right font-medium text-[10px] uppercase tracking-wider pb-1.5">
-                  {i === data.length - 1 ? 'Today' : d.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="text-ink-mid py-1.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c2913a' }} />
-                Started
-              </td>
-              {data.map((d, i) => (
-                <td key={i} className="text-right py-1.5 text-ink-strong">
-                  {d.started > 0 ? (
-                    <span><span className="font-semibold">{d.started}</span> <span className="text-ink-muted">· {d.started_units.toLocaleString()}u</span></span>
-                  ) : (
-                    <span className="text-ink-muted">—</span>
-                  )}
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td className="text-ink-mid py-1.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#5b8c5a' }} />
-                Invoiced
-              </td>
-              {data.map((d, i) => (
-                <td key={i} className="text-right py-1.5 text-ink-strong">
-                  {d.invoiced > 0 ? (
-                    <span><span className="font-semibold">{d.invoiced}</span> <span className="text-ink-muted">· {d.invoiced_units.toLocaleString()}u</span></span>
-                  ) : (
-                    <span className="text-ink-muted">—</span>
-                  )}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Net flow indicator */}
-      <div className="border-t pt-3 text-[11px] text-ink-mid" style={{ borderColor: 'var(--surface-border)' }}>
-        {netDelta > 0 ? (
-          <span>Net flow: <span className="text-status-healthy font-semibold">+{netDelta} draining</span> · invoicing faster than starting</span>
-        ) : netDelta < 0 ? (
-          <span>Net flow: <span className="text-status-warning font-semibold">{netDelta} building</span> · starting faster than invoicing</span>
-        ) : (
-          <span>Net flow: <span className="font-semibold">balanced</span></span>
-        )}
-      </div>
     </div>
   );
 }
 
-// ─── Top Customers list ─────────────────────────────────────────────────────
+// ─── Quick Action ───────────────────────────────────────────────────────────
 
-function TopCustomersList({ customers = [], loading, onCustomerClick }) {
-  if (loading) {
-    return <div className="text-sm text-ink-muted text-center py-6">Loading…</div>;
+function QuickAction({ icon, label, primary, onClick }) {
+  if (primary) {
+    return (
+      <button
+        onClick={onClick}
+        className="flex items-center justify-center gap-2 md:gap-2.5 rounded-xl px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 font-medium text-xs md:text-sm"
+        style={{ background: '#2a1d10', color: '#f7f0e0' }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#1a0f08')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#2a1d10')}
+      >
+        {icon}
+        <span>{label}</span>
+      </button>
+    )
   }
-  if (!customers.length) {
-    return <div className="text-sm text-ink-muted text-center py-6">No customer activity this week</div>;
-  }
-  const maxSales = Math.max(...customers.map(c => c.sales), 1);
   return (
-    <div className="space-y-3">
-      {customers.map((c) => {
-        const pct = Math.round((c.sales / maxSales) * 100);
-        return (
-          <div key={c.name} onClick={() => onCustomerClick?.(c.name)}
-            className="cursor-pointer group">
-            <div className="flex justify-between items-baseline mb-1.5">
-              <span className="text-sm text-ink-strong group-hover:text-ink-strong truncate pr-2">
-                {c.name}
-              </span>
-              <span className="text-sm font-medium text-ink-strong tabular-nums whitespace-nowrap">
-                {fmt$Full(c.sales)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1 bg-[#e6dcc8] rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#b85d3a' }} />
-              </div>
-              <span className="text-[10px] text-ink-muted tabular-nums whitespace-nowrap w-16 text-right">
-                {c.orders} order{c.orders !== 1 ? 's' : ''}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <button
+      onClick={onClick}
+      className="card flex items-center justify-center gap-2 md:gap-2.5 px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 text-ink-mid font-medium text-xs md:text-sm hover:text-ink-strong"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
+}
+
+// ─── Pipeline Card ──────────────────────────────────────────────────────────
+
+function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotStyle, icon, onClick, loading }) {
+  return (
+    <button
+      onClick={onClick}
+      className="card p-4 md:p-5 text-left transition-all duration-200 hover:-translate-y-px w-full"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-2 h-2 rounded-full ${dotColor || ''}`} style={dotStyle} />
+        <span className="text-sm font-medium text-ink-mid">{label}</span>
+      </div>
+
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="text-2xl md:text-3xl font-bold text-ink-strong tabular-nums leading-none">
+            {loading ? "—" : count}
+          </div>
+          <div className="text-xs font-medium mt-2 text-accent-clay">View all →</div>
+        </div>
+        <div className="opacity-60">{icon}</div>
+      </div>
+    </button>
+  );
+}
+
+// ─── Icons (inline SVG for crisp display) ───────────────────────────────────
+
+const Icon = {
+  users: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  ),
+  calendar: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+  ),
+  message: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
+  package: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  ),
+  plus: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  ),
+  fileText: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    </svg>
+  ),
+  edit: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  ),
+  userPlus: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
+    </svg>
+  ),
+  check: (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  ),
+  send: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  ),
+  settings: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  ),
+  cal: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+  ),
+  phone: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  ),
+  checkSmall: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  ),
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-export default function ExecutiveHome() {
+export default function RepHome() {
+  const { profile } = useAuth();
   const navigate = useNavigate();
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = profile?.full_name?.split(" ")[0]
+    || profile?.email?.split("@")[0]
+    || "there";
+
   const [loading, setLoading] = useState(true);
-  const [refreshedAt, setRefreshedAt] = useState(new Date());
-  const [wipModal, setWipModal] = useState(null);
-  const [creditOkModal, setCreditOkModal] = useState(false);    // false|true|'roller'|'faux'
-  const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
-  const [inProductionModal, setInProductionModal] = useState(false);  // false|true|'roller'|'faux'
-  const [onHoldModal, setOnHoldModal] = useState(false);
-  const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
-    stuckOrders: [], heldOrdersAll: [], avgDays: null, repOrders: [],
-    overdueOrders: [],
-    faux: {}, roller: {},
-    fauxSpark: [], rollerSpark: [],
-    wip: { creditOK: [], printed: [] },
-    creditOk: { count: 0, total: 0 },
-    creditOkRoller: { count: 0, total: 0 },
-    creditOkFaux: { count: 0, total: 0 },
-    printedTotal: { count: 0, units: 0 },
-    fauxPrintedTotal: { count: 0, units: 0 },
-    inProductionCount: 0,
-    inProductionUnits: 0,
-    inProductionRoller: { count: 0, units: 0 },
-    inProductionFaux: { count: 0, units: 0 },
-    topCustomers: [],
-    dailySales: [],
-    productionFlow: [],
-    todayEntered: 0, todayShipped: 0, todaySales: 0,
-    salesInvoicedWTD: 0, salesInvoicedWoW: null,
-    soldWTD: 0, soldWoW: null,
-    leadTimeDays: null, leadTimeWindow: null,
-    salesWTD: 0, unitsWTD: 0, ordersWTD: 0,
-    salesWoW: null, unitsWoW: null, ordersWoW: null,
-    rollerWoW: null, fauxWoW: null,
+    kpis:     {
+      scheduledMeetings: 0,
+      newAccounts:       0,
+      sampleBooks:       0,
+      coldCalls:         0,
+    },
+    goals: {
+      scheduled_meetings: 15,
+      new_accounts:       2,
+      sample_books:       3,
+      cold_calls:         0,
+    },
+    pipeline: { printed: 0, inProduction: 0, onHold: 0, invoicedWtd: 0 },
+    openQuotes: { count: 0, value: 0 },
+    followUps: [],
+    upcomingTasks: [],
   });
 
   const load = useCallback(async () => {
+    if (!profile) return;
     setLoading(true);
     try {
-      const weekStart  = startOfWeek();
+      const weekStart = startOfWeekISO();
       const weekStartDate = weekStart.slice(0, 10);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
 
-      // ── In Production count + units (split by product line) ───────────
-      // PIC's flow is Printed → Invoiced (no in-between). Rene's "Start Production"
-      // button in Wrangl creates this middle stage by setting wrangl_status only.
-      // So wrangl_status is the sole source of truth here.
-      const { data: inProductionRows } = await supabase.from("orders")
-        .select("total_units, product_line")
-        .eq("wrangl_status", "in_production");
-      const inProdAll = inProductionRows ?? [];
-      const inProductionCount = inProdAll.length;
-      const inProductionUnits = inProdAll.reduce((s, r) => s + (r.total_units || 0), 0);
-      const inProdRollerRows = inProdAll.filter(r => r.product_line === 'roller');
-      const inProdFauxRows   = inProdAll.filter(r => r.product_line === 'faux');
-      const inProductionRoller = {
-        count: inProdRollerRows.length,
-        units: inProdRollerRows.reduce((s, r) => s + (r.total_units || 0), 0),
-      };
-      const inProductionFaux = {
-        count: inProdFauxRows.length,
-        units: inProdFauxRows.reduce((s, r) => s + (r.total_units || 0), 0),
-      };
+      const { data: repRow } = await supabase
+        .from("rep_email_map")
+        .select("rep_name")
+        .eq("email", profile.email)
+        .single();
+      const repName = repRow?.rep_name;
 
-      // ── Lead Time, Sales Invoiced WTD, Sold (Credit OK) WTD ───────────
-      //
-      // Three executive KPIs powered by order_status_history.
-      //
-      //   Sales (WTD)    — order_amount where status='invoiced' and the
-      //                    invoicing happened this week (epic_status_date).
-      //                    "What we actually shipped/closed this week."
-      //
-      //   Sold (WTD)     — order_amount for orders that entered credit_ok
-      //                    this week (newly approved/cleared credit hold).
-      //                    "What we sold this week — committed but not yet shipped."
-      //
-      //   Lead Time      — avg days from printed → invoiced for orders
-      //                    invoiced this week. Falls back to last 30 days
-      //                    if fewer than 3 invoicings this week (low-volume
-      //                    early in the week). Subtitle reflects which.
-      //
-      // We pull 30 days of status_history so the fallback has data, then
-      // filter client-side for the this-week subset.
-      const leadTimeWindowStart = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const lastWeekStartShifted = new Date(weekStart);
-      lastWeekStartShifted.setDate(lastWeekStartShifted.getDate() - 7);
-      const lastWeekStartStr2 = lastWeekStartShifted.toISOString().slice(0, 10);
-      const lastWeekEndShifted = new Date(weekStart);
-      lastWeekEndShifted.setDate(lastWeekEndShifted.getDate() - 1);
-      const lastWeekEndStr2 = lastWeekEndShifted.toISOString().slice(0, 10);
+      const [
+        goalsRes,
+        newAccountsRes,
+        scheduledMeetingsRes,
+        coldCallsRes,
+        sampleBooksRes,
+        printedRes,
+        inProdRes,
+        onHoldRes,
+        invoicedWtdRes,
+        openQuotesRes,
+        followUpsRes,
+        upcomingTasksRes,
+      ] = await Promise.all([
+        supabase.from("weekly_goals").select("metric_key, target_value"),
 
-      const { data: printedHistory } = await supabase
-        .from('order_status_history')
-        .select('order_number, status_date')
-        .eq('to_status', 'printed')
-        .gte('status_date', leadTimeWindowStart);
-      const { data: invoicedHistory } = await supabase
-        .from('order_status_history')
-        .select('order_number, status_date')
-        .eq('to_status', 'invoiced')
-        .gte('status_date', leadTimeWindowStart);
-      const { data: creditOkHistory } = await supabase
-        .from('order_status_history')
-        .select('order_number, status_date')
-        .eq('to_status', 'credit_ok')
-        .gte('status_date', lastWeekStartStr2);
+        repName
+          ? supabase.from("customers").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName).gte("created_at", weekStart)
+          : Promise.resolve({ count: 0 }),
 
-      // Build printed-date lookup (earliest printed event per order)
-      const printedMap = {};
-      (printedHistory ?? []).forEach(r => {
-        if (!printedMap[r.order_number] || r.status_date < printedMap[r.order_number]) {
-          printedMap[r.order_number] = r.status_date;
-        }
-      });
+        supabase.from("activities").select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id).eq("activity_type", "scheduled_meeting").gte("activity_date", weekStartDate),
 
-      // Compute lead-time deltas for orders invoiced this week and last 30d
-      const deltasWTD = [];
-      const deltas30d = [];
-      (invoicedHistory ?? []).forEach(r => {
-        const printedDate = printedMap[r.order_number];
-        if (!printedDate || r.status_date < printedDate) return;
-        const days = Math.round((new Date(r.status_date) - new Date(printedDate)) / 86400000);
-        if (days < 0 || days > 60) return;
-        if (r.status_date >= weekStartDate) deltasWTD.push(days);
-        deltas30d.push(days);
-      });
+        supabase.from("activities").select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id).eq("activity_type", "cold_call").gte("activity_date", weekStartDate),
 
-      const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
-      let leadTimeDays = null;
-      let leadTimeWindow = null;  // 'wtd' | '30d'
-      if (deltasWTD.length >= 3) {
-        leadTimeDays = Number(avg(deltasWTD).toFixed(1));
-        leadTimeWindow = 'wtd';
-      } else if (deltas30d.length >= 3) {
-        leadTimeDays = Number(avg(deltas30d).toFixed(1));
-        leadTimeWindow = '30d';
-      }
-      // avgDays kept for back-compat — same as the new leadTime value
-      const avgDays = leadTimeDays;
+        supabase.from("activities").select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id).eq("activity_type", "sample_book").gte("activity_date", weekStartDate),
 
-      // Sold (Credit OK) WTD — orders that newly hit credit_ok this week.
-      // We have order_number from history; need to join to orders.order_amount.
-      // Pull the matching order rows in a single query.
-      const creditOkThisWk = (creditOkHistory ?? []).filter(r => r.status_date >= weekStartDate);
-      const creditOkLastWk = (creditOkHistory ?? []).filter(r =>
-        r.status_date >= lastWeekStartStr2 && r.status_date <= lastWeekEndStr2
-      );
-      const allCreditOkOrderNos = [
-        ...new Set([
-          ...creditOkThisWk.map(r => r.order_number),
-          ...creditOkLastWk.map(r => r.order_number),
-        ]),
-      ];
-      let soldWTD = 0, soldLastWk = 0;
-      if (allCreditOkOrderNos.length) {
-        const { data: creditOkOrderAmts } = await supabase.from('orders')
-          .select('order_number, order_amount')
-          .in('order_number', allCreditOkOrderNos);
-        const amtByOrder = {};
-        (creditOkOrderAmts ?? []).forEach(r => {
-          amtByOrder[r.order_number] = Number(r.order_amount || 0);
-        });
-        soldWTD = creditOkThisWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
-        soldLastWk = creditOkLastWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
-      }
-      const soldWoW = wow(soldWTD, soldLastWk);
+        // PRINTED — orders in printed status (excluding wrangl-overridden in_production)
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName).eq("status", "printed")
+          : Promise.resolve({ count: 0 }),
 
-      // Sales (Invoiced) WTD — orders invoiced this week.
-      // Independent of the order_status_history feed; uses the orders table
-      // directly so it's accurate even if status_history misses some events.
-      const { data: invoicedWeekRows } = await supabase
-        .from('orders')
-        .select('order_amount, epic_status_date')
-        .eq('status', 'invoiced')
-        .gte('epic_status_date', lastWeekStartStr2);
-      let salesInvoicedWTD = 0, salesInvoicedLastWk = 0;
-      (invoicedWeekRows ?? []).forEach(r => {
-        const amt = Number(r.order_amount || 0);
-        const d = r.epic_status_date;
-        if (d >= weekStartDate) salesInvoicedWTD += amt;
-        else if (d >= lastWeekStartStr2 && d <= lastWeekEndStr2) salesInvoicedLastWk += amt;
-      });
-      const salesInvoicedWoW = wow(salesInvoicedWTD, salesInvoicedLastWk);
+        // IN PRODUCTION — wrangl-tracked production OR ePIC-tracked in_production
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .or("wrangl_status.eq.in_production,status.eq.in_production")
+          : Promise.resolve({ count: 0 }),
 
-      // ── Roller WIP ────────────────────────────────────────────────────
-      // (Previously read from legacy roller_wip snapshot. Now derived from
-      // the orders table via `trulyIdleOrders` further down — see line ~494.
-      // The dead `wipData` query was removed during the May 18 master_sales_report
-      // cutover. roller_wip table is scheduled for DROP after 7 days clean.)
-      //
-      // creditOK is kept as an empty array for back-compat with the legacy WIP
-      // modal (data.wip.creditOK). The modal still opens but shows no rows —
-      // that flow has been superseded by creditOkModal (separate state).
-      const creditOK = [];
+        // ORDERS ON HOLD — status='on_hold' OR wrangl_status='on_hold'
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName)
+              .or("status.eq.on_hold,wrangl_status.eq.on_hold")
+          : Promise.resolve({ count: 0 }),
 
-      // ── Orders on Hold ──────────────────────────────────────────────────
-      // Filters by hold_reason (not status) to capture both flavors:
-      //   • status='on_hold' + reason set → full hold (e.g., Pete)
-      //   • status=printed/in_production + reason set → operational hold (e.g., Rene waiting on parts)
-      // Exclude invoiced/cancelled — once shipped/closed, the hold is historical.
-      const { data: heldOrders } = await supabase.from("orders")
-        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at, sales_rep, order_amount")
-        .not("hold_reason", "is", null)
-        .not("status", "in", "(invoiced,cancelled)");
-      const heldOrdersAll = (heldOrders ?? []).map(o => {
-        const holdDate = o.wrangl_status_set_at || o.updated_at;
-        const days = holdDate ? daysSince(holdDate) : 0;
-        return {
-          key: `held-${o.id}`,
-          order_id: o.id,
-          order_no: o.order_number,
-          customer: o.customer_name,
-          status_label: o.status,
-          days,
-          hold_reason: o.hold_reason,
-          hold_note: o.hold_note,
-          sales_rep: o.sales_rep,
-          order_amount: o.order_amount,
-        };
-      }).sort((a, b) => b.days - a.days);
-      // stuckOrders = top 5 for the inline list. heldOrdersAll = full list for the modal.
-      const stuckOrders = heldOrdersAll.slice(0, 5);
+        // INVOICED WTD — invoiced this week (uses epic_status_date for actual invoice date)
+        repName
+          ? supabase.from("orders").select("id", { count: "exact", head: true })
+              .eq("sales_rep", repName).eq("status", "invoiced")
+              .gte("epic_status_date", weekStartDate)
+          : Promise.resolve({ count: 0 }),
 
-      // ── Overdue / Stuck Orders calculated after trulyIdleOrders loads below ──
+        // OPEN QUOTES — aggregate from v_rep_attention_quotes (last 30 days, customer-grouped)
+        repName
+          ? supabase.from("v_rep_attention_quotes")
+              .select("aging_quote_count, aging_quote_total_value, oldest_quote_age_days")
+              .ilike("rep_name", repName)
+          : Promise.resolve({ data: [] }),
 
-      // ── Credit OK / HOLD ──────────────────────────────────────────────
-      // Reads from `orders` (populated by MASTER SALES REPORT) instead of
-      // the legacy `credit_ok_orders` snapshot. The legacy table is preserved
-      // for rep-attribution fallback below until we confirm a week clean,
-      // then DROP.
-      const { data: creditOkOrdersFromOrders } = await supabase
-        .from("orders")
-        .select("order_number, sales_rep, customer_name, order_amount, order_date, product_line")
-        .eq("status", "credit_ok")
-        .order("order_date", { ascending: false });
-      const creditAll = creditOkOrdersFromOrders ?? [];
-      const creditOk = {
-        count: creditAll.length,
-        total: creditAll.reduce((s, r) => s + Number(r.order_amount || 0), 0),
-      };
-      const creditOkRollerRows = creditAll.filter(r => r.product_line === 'roller');
-      const creditOkFauxRows   = creditAll.filter(r => r.product_line === 'faux');
-      const creditOkRoller = {
-        count: creditOkRollerRows.length,
-        total: creditOkRollerRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
-      };
-      const creditOkFaux = {
-        count: creditOkFauxRows.length,
-        total: creditOkFauxRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
-      };
+        supabase.from("activities")
+          .select("id, subject, body, follow_up_date, customer_id, customers(account_name)")
+          .eq("user_id", profile.id).eq("completed", false)
+          .lte("follow_up_date", today)
+          .order("follow_up_date", { ascending: true }).limit(8),
 
-      // For the Credit OK modal table — map to the legacy shape so the modal
-      // doesn't need to change. (order_no, salesperson, etc. match what the
-      // modal expects to render today.)
-      const creditOkRowsData = creditAll.map(r => ({
-        order_no:      r.order_number,
-        salesperson:   r.sales_rep,
-        customer_name: r.customer_name,
-        order_amount:  r.order_amount,
-        entered_date:  r.order_date,
-        order_status:  'CREDIT OK',
-        product_line:  r.product_line,
-      }));
-      setCreditOkRows(creditOkRowsData);
-
-      // ── Truly Printed (idle, ready for Rene to start) ─────────────────
-      // Source of truth for both PRINTED tiles + Stuck Orders. Uses Wrangl's
-      // status column (not epic_status) so we filter out:
-      //   • orders Rene has flipped to in_production (status='in_production')
-      //   • orders Wrangl knows are shipped but PIC hasn't caught up (status='invoiced')
-      //   • orders with any hold_reason (handled by Orders on Hold widget)
-      const { data: trulyIdleOrders } = await supabase
-        .from("orders")
-        .select("id, order_number, customer_name, sidemark, total_units, order_amount, product_line, epic_status_date")
-        .eq("status", "printed")
-        .is("wrangl_status", null)
-        .is("hold_reason", null)
-        .order("epic_status_date", { ascending: false });
-      const idleRoller = (trulyIdleOrders ?? []).filter(r => r.product_line === 'roller');
-      const idleFaux   = (trulyIdleOrders ?? []).filter(r => r.product_line === 'faux');
-
-      const printedTotal = {
-        count: idleRoller.length,
-        units: idleRoller.reduce((s, r) => s + (r.total_units || 0), 0),
-      };
-      const fauxPrintedTotal = {
-        count: idleFaux.length,
-        units: idleFaux.reduce((s, r) => s + (r.total_units || 0), 0),
-      };
-
-      // ── Overdue / Stuck Orders (truly idle roller, past SLA) ──────────
-      // Now derived from idleRoller (orders table) instead of roller_wip.
-      // Only flags orders that are TRULY waiting on Rene — excludes:
-      //   • in_production (Rene's already cutting)
-      //   • on_hold (blocked by parts, tracked separately)
-      //   • status='invoiced' (Wrangl knows shipped but PIC stale)
-      // Per-customer SLA overrides: Blindster=2d, others default to 5d.
-      const { data: slaRows } = await supabase
-        .from("customers")
-        .select("account_name, sla_print_to_ship_days")
-        .not("sla_print_to_ship_days", "is", null);
-      const slaMap = {};
-      (slaRows ?? []).forEach(r => {
-        if (r.account_name) slaMap[r.account_name.toUpperCase()] = Number(r.sla_print_to_ship_days);
-      });
-      const DEFAULT_PRINT_SLA = 5;
-      const calcCalendarDays = (dateStr) => {
-        if (!dateStr) return 0;
-        const start = new Date(dateStr);
-        const end = new Date();
-        return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
-      };
-      const overdueOrders = idleRoller
-        .map(r => {
-          const customerKey = (r.customer_name || '').toUpperCase();
-          const slaDays = slaMap[customerKey] ?? DEFAULT_PRINT_SLA;
-          const daysInStatus = calcCalendarDays(r.epic_status_date);
-          const daysOver = daysInStatus - slaDays;
-          return {
-            key: `overdue-${r.id || r.order_number}`,
-            order_id: r.id,
-            order_no: r.order_number,
-            customer: r.customer_name,
-            sidemark: r.sidemark,
-            days_in_status: daysInStatus,
-            sla_days: slaDays,
-            days_over: daysOver,
-            total_units: r.total_units,
-            total_sales: r.order_amount,
-          };
-        })
-        .filter(r => r.days_over > 0)
-        .sort((a, b) => b.days_over - a.days_over)
-        .slice(0, 5);
-
-      // ── Product line sales ────────────────────────────────────────────
-      const { data: productLines } = await supabase.from("product_line_sales").select("*");
-      const faux   = (productLines ?? []).find(p => p.product_line === "Faux Wood Blinds") ?? {};
-      const roller = (productLines ?? []).find(p => p.product_line === "Roller Shades") ?? {};
-
-      // ── Team — orders invoiced this week ──────────────────────────────
-      // Fallback chain (simplified post master_sales_report cutover):
-      //   orders.sales_rep → customers.sales_rep
-      // The legacy credit_ok_orders.salesperson middle fallback was removed
-      // since orders.sales_rep is now reliably populated by MASTER SALES REPORT.
-      const { data: invoicedRows } = await supabase.from("orders")
-        .select("order_number, customer_name, sales_rep")
-        .eq("status", "invoiced").gte("epic_status_date", weekStartDate);
-
-      // Build rep lookup from customers table (most reliable)
-      const customerNames = [...new Set((invoicedRows ?? []).map(r => r.customer_name).filter(Boolean))];
-      const repByCustomer = {};
-      if (customerNames.length) {
-        const { data: customerRows } = await supabase.from("customers")
-          .select("account_name, sales_rep")
-          .in("account_name", customerNames);
-        (customerRows ?? []).forEach(c => {
-          if (c.account_name && c.sales_rep) repByCustomer[c.account_name] = c.sales_rep;
-        });
-      }
-
-      const repMap = {};
-      (invoicedRows ?? []).forEach(r => {
-        const name = (r.sales_rep || repByCustomer[r.customer_name] || "").trim();
-        if (name) repMap[name] = (repMap[name] ?? 0) + 1;
-      });
-      const repOrders = Object.entries(repMap)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-
-      // ── Daily sales — last 5 business days, status != quote ──────────
-      // Walk back from today, skip Sat/Sun, until we have 5 weekdays.
-      const businessDays = [];
-      const cur = new Date();
-      cur.setHours(0, 0, 0, 0);
-      while (businessDays.length < 5) {
-        const dow = cur.getDay();
-        if (dow !== 0 && dow !== 6) {
-          businessDays.unshift(new Date(cur)); // prepend so oldest is first
-        }
-        cur.setDate(cur.getDate() - 1);
-      }
-      const earliestBizDay = businessDays[0].toISOString().slice(0, 10);
-      const { data: dailySalesRows } = await supabase
-        .from("orders")
-        .select("order_date, order_amount, product_line")
-        .gte("order_date", earliestBizDay)
-        .neq("status", "quote")
-        .not("order_date", "is", null);
-
-      // Bucket by day + product line so the chart can render stacked bars.
-      // product_line normalized into roller/faux/other (anything else lumped).
-      const salesByDay = {};
-      (dailySalesRows ?? []).forEach(r => {
-        const d = r.order_date;
-        const amt = Number(r.order_amount || 0);
-        const line = (r.product_line || '').toLowerCase();
-        const seg = line === 'roller' ? 'roller' : line === 'faux' ? 'faux' : 'other';
-        salesByDay[d] = salesByDay[d] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
-        salesByDay[d].orders++;
-        salesByDay[d].sales += amt;
-        salesByDay[d][seg] += amt;
-      });
-      const dailySales = businessDays.map(d => {
-        const key = d.toISOString().slice(0, 10);
-        const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        const bucket = salesByDay[key] || { orders: 0, sales: 0, roller: 0, faux: 0, other: 0 };
-        return {
-          label,
-          orders: bucket.orders,
-          sales: bucket.sales,
-          roller: bucket.roller,
-          faux: bucket.faux,
-          other: bucket.other,
-        };
-      });
-
-      // ── Production Flow — last 5 business days ────────────────────────
-      // Two metrics per day:
-      //   • Started: orders Rene flipped to in_production that day (wrangl_status_set_at)
-      //     We count by timestamp regardless of current wrangl_status — once
-      //     an order moves out of in_production (to invoiced, etc.) the status
-      //     clears to NULL but wrangl_status_set_at is preserved, so it stays
-      //     attributable to the day it was started.
-      //   • Invoiced: orders PIC marked invoiced that day (epic_status_date + status='invoiced')
-      // Units summed for each, surfaced under the bars.
-      const [startedRowsRes, invoicedFlowRes] = await Promise.all([
-        supabase.from("orders")
-          .select("wrangl_status_set_at, total_units")
-          .not("wrangl_status_set_at", "is", null)
-          .gte("wrangl_status_set_at", earliestBizDay),
-        supabase.from("orders")
-          .select("epic_status_date, total_units")
-          .eq("status", "invoiced")
-          .gte("epic_status_date", earliestBizDay),
+        supabase.from("tasks")
+          .select("id, title, due_date, category, customers(account_name)")
+          .eq("user_id", profile.id).eq("completed", false)
+          .gt("due_date", today)
+          .order("due_date", { ascending: true }).limit(5),
       ]);
 
-      const flowByDay = {};
-      businessDays.forEach(d => {
-        const key = d.toISOString().slice(0, 10);
-        flowByDay[key] = { started: 0, started_units: 0, invoiced: 0, invoiced_units: 0 };
-      });
-      (startedRowsRes.data ?? []).forEach(r => {
-        if (!r.wrangl_status_set_at) return;
-        const key = r.wrangl_status_set_at.slice(0, 10);
-        if (flowByDay[key]) {
-          flowByDay[key].started++;
-          flowByDay[key].started_units += Number(r.total_units || 0);
-        }
-      });
-      (invoicedFlowRes.data ?? []).forEach(r => {
-        if (!r.epic_status_date) return;
-        const key = r.epic_status_date;
-        if (flowByDay[key]) {
-          flowByDay[key].invoiced++;
-          flowByDay[key].invoiced_units += Number(r.total_units || 0);
-        }
-      });
-      const productionFlow = businessDays.map(d => {
-        const key = d.toISOString().slice(0, 10);
-        const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        const b = flowByDay[key];
-        return {
-          label,
-          started: b.started,
-          started_units: b.started_units,
-          invoiced: b.invoiced,
-          invoiced_units: b.invoiced_units,
-        };
-      });
+      // Build goals map (defaults if not in DB yet)
+      const goalsMap = { scheduled_meetings: 15, new_accounts: 2, sample_books: 3, cold_calls: 0 }
+      ;(goalsRes?.data || []).forEach(g => { goalsMap[g.metric_key] = g.target_value })
 
-      // ── Sparklines (30 days, by product line) ─────────────────────────
-      const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-      const { data: sparkRows } = await supabase
-        .from("orders")
-        .select("order_date, order_amount, product_line")
-        .gte("order_date", thirtyDaysAgo)
-        .neq("status", "quote")
-        .not("order_date", "is", null);
-      const fauxSparkMap = {};
-      const rollerSparkMap = {};
-      (sparkRows ?? []).forEach(r => {
-        const amt = Number(r.order_amount || 0);
-        if (r.product_line === 'faux') fauxSparkMap[r.order_date] = (fauxSparkMap[r.order_date] || 0) + amt;
-        if (r.product_line === 'roller') rollerSparkMap[r.order_date] = (rollerSparkMap[r.order_date] || 0) + amt;
-      });
-      const fauxSpark = Array.from({ length: 30 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (29 - i));
-        return fauxSparkMap[d.toISOString().slice(0, 10)] || 0;
-      });
-      const rollerSpark = Array.from({ length: 30 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (29 - i));
-        return rollerSparkMap[d.toISOString().slice(0, 10)] || 0;
-      });
-
-      // ── Business Overview totals + WoW comparison ─────────────────────
-      // Compute weekly totals (sales/units/orders) from the same orders we
-      // already pulled for sparklines, plus a separate pass for prior-week
-      // baselines so we can show "↑ 12% vs last week" deltas.
-      //
-      // Current week = Mon..now. Prior week = Mon-7d..Sun-7d (full 7 days).
-      const lastWeekStart = new Date(weekStart);
-      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-      const lastWeekEnd = new Date(weekStart);
-      lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-      const lastWeekStartStr = lastWeekStart.toISOString().slice(0, 10);
-      const lastWeekEndStr   = lastWeekEnd.toISOString().slice(0, 10);
-
-      const { data: wowOrders } = await supabase
-        .from("orders")
-        .select("order_date, order_amount, total_units")
-        .gte("order_date", lastWeekStartStr)
-        .neq("status", "quote")
-        .not("order_date", "is", null);
-
-      let salesWTD = 0, unitsWTD = 0, ordersWTD = 0;
-      let salesLastWk = 0, unitsLastWk = 0, ordersLastWk = 0;
-      (wowOrders ?? []).forEach(r => {
-        const d = r.order_date;
-        const amt = Number(r.order_amount || 0);
-        const u = Number(r.total_units || 0);
-        if (d >= weekStartDate) {
-          salesWTD += amt; unitsWTD += u; ordersWTD += 1;
-        } else if (d >= lastWeekStartStr && d <= lastWeekEndStr) {
-          salesLastWk += amt; unitsLastWk += u; ordersLastWk += 1;
-        }
-      });
-      const salesWoW  = wow(salesWTD,  salesLastWk);
-      const unitsWoW  = wow(unitsWTD,  unitsLastWk);
-      const ordersWoW = wow(ordersWTD, ordersLastWk);
-
-      // Per-product WoW for the HeroCards (uses sparkRows we already have)
-      const rollerSalesThisWk = rollerSpark.slice(-7).reduce((s, v) => s + v, 0);
-      const rollerSalesLastWk = rollerSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
-      const fauxSalesThisWk   = fauxSpark.slice(-7).reduce((s, v) => s + v, 0);
-      const fauxSalesLastWk   = fauxSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
-      const rollerWoW = wow(rollerSalesThisWk, rollerSalesLastWk);
-      const fauxWoW   = wow(fauxSalesThisWk, fauxSalesLastWk);
-
-      // ── Top customers this week ───────────────────────────────────────
-      const { data: weekOrders } = await supabase
-        .from("orders")
-        .select("customer_name, order_amount")
-        .gte("order_date", weekStartDate)
-        .neq("status", "quote")
-        .not("customer_name", "is", null);
-      const customerMap = {};
-      (weekOrders ?? []).forEach(r => {
-        const name = r.customer_name?.trim();
-        if (!name) return;
-        customerMap[name] = customerMap[name] || { name, sales: 0, orders: 0 };
-        customerMap[name].orders++;
-        customerMap[name].sales += Number(r.order_amount || 0);
-      });
-      const topCustomers = Object.values(customerMap)
-        .sort((a, b) => b.sales - a.sales || b.orders - a.orders)
-        .slice(0, 5);
-
-      // ── Today snapshot ────────────────────────────────────────────────
-      const { count: todayEntered } = await supabase.from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("order_date", today)
-        .neq("status", "quote");
-      const { count: todayShipped } = await supabase.from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "invoiced")
-        .gte("epic_status_date", today);
-      const todaySales = (salesByDay[today]?.sales) || 0;
-
-      // Map idleRoller into roller_wip modal column shape (order_no, customer, etc.)
-      // so the existing PRINTED modal renders the same 7 truly-idle rows the tile shows.
-      const printedForModal = idleRoller.map(r => ({
-        id: r.id,
-        order_no: r.order_number,
-        customer: r.customer_name,
-        sidemark: r.sidemark,
-        days_in_status: calcCalendarDays(r.epic_status_date),
-        total_units: r.total_units,
-        total_sales: r.order_amount,
-        order_status: 'PRINTED',
-      }));
+      // Aggregate open quotes — filter to customers with quotes in the last 30 days
+      const recentQuotes = (openQuotesRes.data || []).filter(c => (c.oldest_quote_age_days ?? 999) <= 30)
+      const openQuoteCount = recentQuotes.reduce((s, c) => s + (Number(c.aging_quote_count) || 0), 0)
+      const openQuoteValue = recentQuotes.reduce((s, c) => s + (Number(c.aging_quote_total_value) || 0), 0)
 
       setData({
-        stuckOrders, heldOrdersAll, avgDays, repOrders, faux, roller,
-        overdueOrders,
-        fauxSpark, rollerSpark,
-        wip: { creditOK, printed: printedForModal },
-        creditOk, creditOkRoller, creditOkFaux,
-        printedTotal, fauxPrintedTotal,
-        inProductionCount: inProductionCount ?? 0,
-        inProductionUnits: inProductionUnits ?? 0,
-        inProductionRoller,
-        inProductionFaux,
-        topCustomers, dailySales, productionFlow,
-        todayEntered: todayEntered ?? 0,
-        todayShipped: todayShipped ?? 0,
-        todaySales,
-        // Business Overview KPIs — three executive metrics
-        salesInvoicedWTD, salesInvoicedWoW,
-        soldWTD, soldWoW,
-        leadTimeDays, leadTimeWindow,
-        // (Legacy WTD fields kept for back-compat in case anything else reads them)
-        salesWTD, unitsWTD, ordersWTD,
-        salesWoW, unitsWoW, ordersWoW,
-        rollerWoW, fauxWoW,
+        kpis: {
+          scheduledMeetings: scheduledMeetingsRes.count ?? 0,
+          newAccounts:       newAccountsRes.count ?? 0,
+          sampleBooks:       sampleBooksRes.count ?? 0,
+          coldCalls:         coldCallsRes.count ?? 0,
+        },
+        goals: goalsMap,
+        pipeline: {
+          printed:      printedRes.count ?? 0,
+          inProduction: inProdRes.count ?? 0,
+          onHold:       onHoldRes.count ?? 0,
+          invoicedWtd:  invoicedWtdRes.count ?? 0,
+        },
+        openQuotes: {
+          count: openQuoteCount,
+          value: openQuoteValue,
+        },
+        followUps:     followUpsRes.data ?? [],
+        upcomingTasks: upcomingTasksRes.data ?? [],
       });
-      setRefreshedAt(new Date());
-    } catch(err) { console.error("ExecutiveHome:", err); }
-    finally { setLoading(false); }
-  }, []);
+    } catch (err) {
+      console.error("RepHome load:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile]);
 
   useEffect(() => { load(); }, [load]);
 
-  const stuckTotal = data.heldOrdersAll?.length ?? 0;
-  const overdueTotal = data.overdueOrders?.length ?? 0;
-  const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
+  const completeFollowUp = async (id) => {
+    await supabase.from("activities").update({ completed: true }).eq("id", id);
+    load();
+  };
 
-  const ROLLER_ACCENT = "#b85d3a";  // accent-clay
-  const ROLLER_FILL   = "#f0d8c8";  // accent-clay-soft
-  const FAUX_ACCENT   = "#d4a574";  // accent-gold
-  const FAUX_FILL     = "#f5e8d4";  // accent-gold-soft
+  const today = todayISO();
+  const todayLabel = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const todayShort = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const fullDate   = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   return (
-    <div className="min-h-full">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-6">
+    <div className="min-h-screen">
+      <div className="p-3 md:p-8 max-w-screen-xl mx-auto">
+      {/* Header — stacks on mobile, hides full date (already in top bar) */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between mb-5 md:mb-8">
+        <div>
+          <h1 className="text-2xl md:text-3xl tracking-tight">
+            {greeting}, {firstName}
+          </h1>
+          <p className="text-sm text-ink-muted mt-1.5">{todayShort}</p>
+        </div>
+        <div className="hidden md:flex items-center gap-2 text-xs text-ink-muted">
+          <span className="text-ink-muted">{Icon.cal}</span>
+          <span>{fullDate}</span>
+        </div>
+      </div>
 
-        {/* ── Compact top bar — refresh + timestamp only (page header is in sidebar) ── */}
-        <div className="flex items-center justify-end mb-3 md:mb-4">
-          <div className="flex items-center gap-3">
-            <div className="text-xs text-ink-muted">
-              Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </div>
-            <button onClick={load} disabled={loading}
-              className="btn-ghost text-xs px-3 py-1.5">
-              {loading ? "Refreshing…" : "↻ Refresh"}
+      {/* Weekly KPI Strip — 5 tiles including Open Quotes */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
+        <KpiTile
+          label="Scheduled Meetings"
+          value={data.kpis.scheduledMeetings}
+          goal={data.goals.scheduled_meetings}
+          loading={loading}
+          iconBg="bg-status-info-soft"     iconColor="text-status-info"    icon={Icon.calendar}
+        />
+        <KpiTile
+          label="New Accounts"
+          value={data.kpis.newAccounts}
+          goal={data.goals.new_accounts}
+          loading={loading}
+          iconBg="bg-status-healthy-soft"  iconColor="text-status-healthy" icon={Icon.users}
+        />
+        <KpiTile
+          label="Sample Books"
+          value={data.kpis.sampleBooks}
+          goal={data.goals.sample_books}
+          loading={loading}
+          iconBg="bg-accent-gold-soft"     iconColor="text-accent-clay"    icon={Icon.package}
+        />
+        <KpiTile
+          label="Cold Calls"
+          value={data.kpis.coldCalls}
+          goal={0}
+          loading={loading}
+          iconBg="bg-status-warning-soft"  iconColor="text-status-warning" icon={Icon.message}
+        />
+        <KpiTile
+          label="Open Quotes"
+          value={data.openQuotes.count}
+          goal={0}
+          loading={loading}
+          iconBg="bg-accent-clay-soft"     iconColor="text-accent-clay"    icon={Icon.fileText}
+          valueSubtext={data.openQuotes.value > 0 ? `${fmtMoneyCompact(data.openQuotes.value)} · 30d` : 'last 30 days'}
+          onClick={() => navigate("/my-quotes")}
+        />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-5 md:mb-6">
+        <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
+          <QuickAction primary icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
+          <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/log")} />
+          <QuickAction         icon={Icon.userPlus}  label="New Customer" onClick={() => navigate("/customers/new")} />
+        </div>
+      </div>
+
+      {/* 2-column row: Follow-ups (left) + Upcoming Activities (right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-5 md:mb-6">
+        {/* Follow-ups */}
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <h2 className="text-sm font-semibold text-ink-strong">Follow-ups</h2>
+            <button onClick={() => navigate("/activities")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
+              View all →
             </button>
           </div>
-        </div>
 
-        {/* ═══ ROW 1 — Revenue & sales view ═══════════════════════════════
-            Business Overview KPIs on the left, product revenue cards on the right.
-            BO spans wider so the 4 KPIs have room; the two product cards share equal
-            remaining width. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-3 lg:gap-4 mb-4">
-          <BusinessOverviewCard
-            loading={loading}
-            todayEntered={data.todayEntered}
-            todaySales={data.todaySales}
-            salesInvoicedWTD={data.salesInvoicedWTD}
-            salesInvoicedWoW={data.salesInvoicedWoW}
-            soldWTD={data.soldWTD}
-            soldWoW={data.soldWoW}
-            leadTimeDays={data.leadTimeDays}
-            leadTimeWindow={data.leadTimeWindow}
-          />
-          <HeroCard
-            label="Roller Shades"
-            accent={ROLLER_ACCENT}
-            fill={ROLLER_FILL}
-            data={data.roller}
-            sparkData={data.rollerSpark}
-            wowPct={data.rollerWoW}
-            loading={loading}
-            onClick={() => navigate("/orders?product=roller")}
-          />
-          <HeroCard
-            label="Faux Wood Blinds"
-            accent={FAUX_ACCENT}
-            fill={FAUX_FILL}
-            data={data.faux}
-            sparkData={data.fauxSpark}
-            wowPct={data.fauxWoW}
-            loading={loading}
-            onClick={() => navigate("/orders?product=faux")}
-          />
-        </div>
+          {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
 
-        {/* ═══ ROW 2 — Operational view ═══════════════════════════════════
-            Operations Status table on the left (pipeline by product line).
-            Combined "Needs Attention" widget on the right — merges the old
-            Orders on Hold + Stuck Orders into one widget with two sections,
-            since both are "this needs human attention" lists. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3 lg:gap-4 mb-4">
-          <OperationsStatusTable
-            loading={loading}
-            creditOkRoller={data.creditOkRoller}
-            creditOkFaux={data.creditOkFaux}
-            printedRoller={data.printedTotal}
-            printedFaux={data.fauxPrintedTotal}
-            inProdRoller={data.inProductionRoller}
-            inProdFaux={data.inProductionFaux}
-            onCreditOkRollerClick={() => setCreditOkModal('roller')}
-            onCreditOkFauxClick={() => setCreditOkModal('faux')}
-            onPrintedRollerClick={() => setWipModal("PRINTED")}
-            onPrintedFauxClick={() => setFauxPrintedModal(true)}
-            onInProdRollerClick={() => setInProductionModal('roller')}
-            onInProdFauxClick={() => setInProductionModal('faux')}
-          />
-
-          {/* Needs Attention — combined Hold + SLA widget */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-ink-strong">Needs Attention</h3>
-              <div className="flex items-center gap-2">
-                {stuckTotal > 0 && (
-                  <button onClick={() => setOnHoldModal(true)}
-                    className="pill-warning hover:opacity-80 transition-opacity cursor-pointer">
-                    {stuckTotal} on hold
-                  </button>
-                )}
-                {overdueTotal > 0 && (
-                  <button onClick={() => setWipModal("PRINTED")}
-                    className="pill-critical hover:opacity-80 transition-opacity cursor-pointer">
-                    {overdueTotal} past SLA
-                  </button>
-                )}
+          {!loading && data.followUps.length === 0 && (
+            <div className="px-5 pb-6 pt-2 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+                {Icon.check}
               </div>
-            </div>
-
-            {/* Empty state — only when both lists are empty */}
-            {stuckTotal === 0 && overdueTotal === 0 && (
-              <p className="text-sm text-ink-muted text-center py-6">No issues — all clear ✓</p>
-            )}
-
-            {/* On Hold section */}
-            {stuckTotal > 0 && (
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    On Hold
-                  </span>
-                  <button onClick={() => setOnHoldModal(true)}
-                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
-                </div>
-                <div className="space-y-0.5">
-                  {data.stuckOrders.slice(0, 4).map(o => {
-                    const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
-                    return (
-                      <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                        className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                            {statusDisplay && (
-                              <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                                {statusDisplay}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-ink-mid mt-0.5 truncate">
-                            {o.customer ?? "—"}
-                            {o.hold_reason && <span className="text-ink-muted"> · {o.hold_reason}</span>}
-                          </p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                          o.days >= 8 ? "bg-status-critical-soft text-status-critical" :
-                          o.days >= 3 ? "bg-status-warning-soft text-status-warning" :
-                                        "bg-surface-page text-ink-mid"
-                        }`}>
-                          {o.days}d
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Past SLA section */}
-            {overdueTotal > 0 && (
-              <div className={stuckTotal > 0 ? "pt-3 border-t border-stone-100" : ""}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                    Past SLA
-                  </span>
-                  <button onClick={() => setWipModal("PRINTED")}
-                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
-                </div>
-                <div className="space-y-0.5">
-                  {data.overdueOrders.slice(0, 4).map(o => (
-                    <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                      className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                          <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                            PRINTED
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-ink-mid mt-0.5 truncate">
-                          {o.customer ?? "—"}
-                          {o.sidemark && <span className="text-ink-muted"> · {o.sidemark}</span>}
-                        </p>
-                      </div>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                        o.days_over >= 5 ? "bg-status-critical-soft text-status-critical" :
-                                          "bg-status-warning-soft text-status-warning"
-                      }`}>
-                        +{o.days_over}d
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Flow Zone: Daily Sales + Production Flow ─ stacks on mobile ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Daily Sales — stacked by product line */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-ink-strong">Daily Sales · Last 5 Business Days</h3>
-              <span className="text-xs text-ink-muted">orders entered, ex. quotes</span>
-            </div>
-            <DailySalesChart data={data.dailySales} />
-          </div>
-
-          {/* Production Flow — started vs invoiced per day */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-baseline justify-between mb-4">
-              <h3 className="text-sm font-medium text-ink-strong">Production Flow · Last 5 Business Days</h3>
-              <span className="text-xs text-ink-muted">started vs invoiced</span>
-            </div>
-            <ProductionFlowChart data={data.productionFlow} />
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── WIP Modal ─────────────────────────────────────────────────── */}
-      {wipModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
-                <h3 className="font-bold text-gray-900">Roller Shades — {wipModal}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {(data.wip?.[wipKey(wipModal)] ?? []).length} orders ·{" "}
-                  {(data.wip?.[wipKey(wipModal)] ?? []).reduce((s, r) => s + (r.total_units || 0), 0).toLocaleString()} units
-                </p>
+                <div className="text-base font-semibold text-ink-strong">You're all caught up!</div>
+                <div className="text-sm text-ink-muted mt-0.5">No follow-ups due. Nice work.</div>
               </div>
-              <button onClick={() => setWipModal(null)}
-                className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
-                ✕
-              </button>
             </div>
-            <div className="overflow-y-auto flex-1">
-              <table className="w-full">
-                <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    {["Order","Customer","Sidemark","Days","Units","Value"].map(h => (
-                      <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order","Customer","Sidemark"].includes(h) ? "text-left" : "text-right"}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.wip?.[wipKey(wipModal)] ?? []).map((r, i) => (
-                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_no}</td>
-                      <td className="px-5 py-3 text-sm text-gray-700">{r.customer}</td>
-                      <td className="px-5 py-3 text-xs text-gray-500">{r.sidemark}</td>
-                      <td className="px-5 py-3 text-right">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          r.days_in_status > 5 ? "bg-red-100 text-red-600" :
-                          r.days_in_status > 2 ? "bg-amber-100 text-amber-700" :
-                          "bg-gray-100 text-gray-600"}`}>
-                          {r.days_in_status}d
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units}</td>
-                      <td className="px-5 py-3 text-right text-sm text-gray-500">
-                        ${Number(r.total_sales).toLocaleString("en-US",{maximumFractionDigits:0})}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Credit OK Modal ─────────────────────────────────────────────── */}
-      {creditOkModal && (() => {
-        const filtered = creditOkRows.filter(r =>
-          r.order_status === 'CREDIT OK' &&
-          (creditOkModal === true || r.product_line === creditOkModal)
-        );
-        const lineLabel = creditOkModal === 'faux' ? 'Faux' : creditOkModal === 'roller' ? 'Roller' : 'All';
-        const totalAmt = filtered.reduce((s, r) => s + Number(r.order_amount || 0), 0);
-        return (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="font-bold text-gray-900">Credit OK Orders · {lineLabel}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {filtered.length} orders · ${totalAmt.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
-                </p>
-              </div>
-              <button onClick={() => setCreditOkModal(false)}
-                className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              <table className="w-full">
-                <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
-                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
-                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Salesperson</th>
-                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Date</th>
-                    <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No orders</td></tr>
-                  ) : filtered.map((r, i) => (
-                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_no}</td>
-                      <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
-                      <td className="px-5 py-3 text-sm text-gray-500">{r.salesperson}</td>
-                      <td className="px-5 py-3 text-right text-xs text-gray-500">
-                        {r.entered_date ? new Date(r.entered_date + "T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—"}
-                      </td>
-                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
-                        ${Number(r.order_amount).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )})()}
-
-      {/* ── Faux Printed Modal ──────────────────────────────────────────── */}
-      {fauxPrintedModal && <FauxPrintedModal onClose={() => setFauxPrintedModal(false)} />}
-      {inProductionModal && (
-        <InProductionModal
-          productFilter={inProductionModal === true ? 'all' : inProductionModal}
-          onClose={() => setInProductionModal(false)}
-        />
-      )}
-      {onHoldModal && (
-        <OnHoldModal
-          orders={data.heldOrdersAll}
-          onClose={() => setOnHoldModal(false)}
-          onOrderClick={(id) => { setOnHoldModal(false); navigate(`/orders/${id}`); }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── On Hold Modal ──────────────────────────────────────────────────────────
-//
-// Shows the full list of held orders (anything with hold_reason set, excluding
-// invoiced/cancelled). Sorted by days held desc, so the most-overdue are at the top.
-// Click a row to navigate to the order detail page.
-//
-function OnHoldModal({ orders = [], onClose, onOrderClick }) {
-  const total = orders.length;
-  const totalAmt = orders.reduce((s, o) => s + Number(o.order_amount || 0), 0);
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="font-bold text-gray-900">Orders on Hold</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {total} order{total !== 1 ? 's' : ''}
-              {totalAmt > 0 && (
-                <> · ${totalAmt.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</>
-              )}
-            </p>
-          </div>
-          <button onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
-            ✕
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Order</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Customer</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Status</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Reason</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Rep</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Days</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">No orders on hold</td></tr>
-              ) : orders.map(o => {
-                const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
+          {!loading && data.followUps.length > 0 && (
+            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
+              {data.followUps.map(f => {
+                const overdue = f.follow_up_date < today;
+                const phone = f.customers?.phone;
                 return (
-                  <tr key={o.key}
-                    onClick={() => onOrderClick?.(o.order_id)}
-                    className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{o.order_no}</td>
-                    <td className="px-5 py-3 text-sm text-gray-700">{o.customer ?? "—"}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500 uppercase tracking-wide">{statusDisplay}</td>
-                    <td className="px-5 py-3 text-sm text-gray-700">
-                      {o.hold_reason ?? "—"}
-                      {o.hold_note && (
-                        <span className="text-xs text-gray-400 block mt-0.5">{o.hold_note}</span>
+                  <div key={f.id} className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
+                    <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${overdue ? "bg-status-critical" : "bg-status-healthy"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-ink-strong truncate">{f.customers?.account_name || "—"}</p>
+                        {overdue && <span className="pill-critical">Overdue</span>}
+                      </div>
+                      <p className="text-xs text-ink-muted truncate mt-0.5">{f.subject || f.body?.slice(0, 80) || "Follow up"}</p>
+                      <p className={`text-xs mt-0.5 ${overdue ? "text-status-critical font-medium" : "text-ink-muted"}`}>
+                        Due {new Date(f.follow_up_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {phone && (
+                        <a href={`tel:${phone.replace(/\D/g, "")}`}
+                          className="btn-ghost text-xs px-3 py-1.5">
+                          {Icon.phone} Call
+                        </a>
                       )}
-                    </td>
-                    <td className="px-5 py-3 text-sm text-gray-500">{o.sales_rep ?? "—"}</td>
-                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900 tabular-nums">
-                      {o.order_amount > 0
-                        ? `$${Number(o.order_amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        o.days >= 8 ? "bg-red-100 text-red-600" :
-                        o.days >= 3 ? "bg-amber-100 text-amber-700" :
-                                      "bg-gray-100 text-gray-600"}`}>
-                        {o.days}d
-                      </span>
-                    </td>
-                  </tr>
+                      <button onClick={() => completeFollowUp(f.id)}
+                        className="btn-primary text-xs px-3 py-1.5">
+                        {Icon.checkSmall} Done
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
+
+        {/* Upcoming activities */}
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <h2 className="text-sm font-semibold text-ink-strong">Upcoming activities</h2>
+            <button onClick={() => navigate("/calendar")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
+              View calendar →
+            </button>
+          </div>
+
+          {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
+
+          {!loading && data.upcomingTasks.length === 0 && (
+            <div className="px-5 pb-6 pt-2 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+                {Icon.cal}
+              </div>
+              <div>
+                <div className="text-base font-semibold text-ink-strong">No upcoming activities</div>
+                <div className="text-sm text-ink-muted mt-0.5">You're all set for now.</div>
+              </div>
+            </div>
+          )}
+
+          {!loading && data.upcomingTasks.length > 0 && (
+            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
+              {data.upcomingTasks.map(t => (
+                <div key={t.id} onClick={() => navigate("/calendar")}
+                  className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 cursor-pointer flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="w-10 h-10 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+                    {Icon.cal}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-ink-strong truncate">{t.title}</p>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      {t.customers?.account_name && <span>{t.customers.account_name} · </span>}
+                      <span>{t.category}</span>
+                    </p>
+                  </div>
+                  <div className="text-xs text-ink-muted font-medium">
+                    {new Date(t.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* My Pipeline — full width strip at the bottom */}
+      <div className="mb-5 md:mb-6">
+        <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <PipelineCard
+            label="Printed"
+            count={data.pipeline.printed}
+            dotStyle={{ backgroundColor: '#b85d3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=printed")}
+          />
+          <PipelineCard
+            label="In Production"
+            count={data.pipeline.inProduction}
+            dotStyle={{ backgroundColor: '#c2913a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=in_production")}
+          />
+          <PipelineCard
+            label="On Hold"
+            count={data.pipeline.onHold}
+            dotStyle={{ backgroundColor: '#b54a3a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders/on-hold")}
+          />
+          <PipelineCard
+            label="Invoiced WTD"
+            count={data.pipeline.invoicedWtd}
+            dotStyle={{ backgroundColor: '#5b8c5a' }}
+            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
+            loading={loading}
+            onClick={() => navigate("/orders?status=invoiced")}
+          />
+        </div>
+      </div>
       </div>
     </div>
   );
-}
-
-// ─── Faux Printed Modal ─────────────────────────────────────────────────────
-
-function FauxPrintedModal({ onClose }) {
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('order_number, customer_name, sidemark, total_units, order_amount, epic_status_date')
-        .eq('status', 'printed')
-        .eq('product_line', 'faux')
-        .order('epic_status_date', { ascending: false })
-      setRows(data || [])
-      setLoading(false)
-    })()
-  }, [])
-
-  const totalUnits = rows.reduce((s, r) => s + (r.total_units || 0), 0)
-
-  const daysSinceFn = (dateStr) => {
-    if (!dateStr) return null
-    const start = new Date(dateStr)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date()
-    end.setHours(0, 0, 0, 0)
-    let days = 0
-    const cur = new Date(start)
-    cur.setDate(cur.getDate() + 1)
-    while (cur <= end) {
-      const dow = cur.getDay()
-      if (dow !== 0 && dow !== 6) days++
-      cur.setDate(cur.getDate() + 1)
-    }
-    return days
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="font-bold text-gray-900">Printed · Faux Wood</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits.toLocaleString()} units</p>
-          </div>
-          <button onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-              <tr>
-                {["Order","Customer","Sidemark","Days","Units","Value"].map(h => (
-                  <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order","Customer","Sidemark"].includes(h) ? "text-left" : "text-right"}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No printed faux orders</td></tr>
-              ) : rows.map((r, i) => {
-                const days = daysSinceFn(r.epic_status_date)
-                return (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
-                    <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500">{r.sidemark || '—'}</td>
-                    <td className="px-5 py-3 text-right">
-                      {days !== null ? (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          days > 5 ? "bg-red-100 text-red-600" :
-                          days > 2 ? "bg-amber-100 text-amber-700" :
-                          "bg-gray-100 text-gray-600"}`}>
-                          {days}d
-                        </span>
-                      ) : <span className="text-xs text-gray-400">—</span>}
-                    </td>
-                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units || 0}</td>
-                    <td className="px-5 py-3 text-right text-sm text-gray-500">
-                      ${Number(r.order_amount || 0).toLocaleString("en-US",{maximumFractionDigits:0})}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function InProductionModal({ onClose, productFilter }) {
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    (async () => {
-      // PIC has no in_production state — Rene's "Start Production" flips wrangl_status only.
-      // wrangl_status_set_at is when Rene started; this is the timer for days-in-production.
-      const { data } = await supabase
-        .from('orders')
-        .select('order_number, customer_name, sidemark, total_units, order_amount, product_line, wrangl_status_set_at')
-        .eq('wrangl_status', 'in_production')
-        .order('wrangl_status_set_at', { ascending: false })
-      setRows(data || [])
-      setLoading(false)
-    })()
-  }, [])
-
-  // productFilter: 'roller' | 'faux' | 'all' (or anything truthy that isn't roller/faux means all)
-  const filteredRows = (productFilter === 'roller' || productFilter === 'faux')
-    ? rows.filter(r => r.product_line === productFilter)
-    : rows;
-  const totalUnits = filteredRows.reduce((s, r) => s + (r.total_units || 0), 0)
-  const lineLabel = productFilter === 'roller' ? 'Roller' : productFilter === 'faux' ? 'Faux' : 'All';
-
-  // Business-day calculation (skips weekends)
-  const daysSinceFn = (dateStr) => {
-    if (!dateStr) return null
-    const start = new Date(dateStr)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date()
-    end.setHours(0, 0, 0, 0)
-    let days = 0
-    const cur = new Date(start)
-    cur.setDate(cur.getDate() + 1)
-    while (cur <= end) {
-      const dow = cur.getDay()
-      if (dow !== 0 && dow !== 6) days++
-      cur.setDate(cur.getDate() + 1)
-    }
-    return days
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="font-bold text-gray-900">In Production · {lineLabel}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} orders · {totalUnits.toLocaleString()} units</p>
-          </div>
-          <button onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-              <tr>
-                {["Order","Customer","Sidemark","Line","Days","Units","Value"].map(h => (
-                  <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order","Customer","Sidemark","Line"].includes(h) ? "text-left" : "text-right"}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
-              ) : filteredRows.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">No orders in production</td></tr>
-              ) : filteredRows.map((r, i) => {
-                const days = daysSinceFn(r.wrangl_status_set_at)
-                return (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{r.order_number}</td>
-                    <td className="px-5 py-3 text-sm text-gray-700">{r.customer_name}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500">{r.sidemark || '—'}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500 uppercase">{r.product_line || '—'}</td>
-                    <td className="px-5 py-3 text-right">
-                      {days !== null ? (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          days > 10 ? "bg-red-100 text-red-600" :
-                          days > 5  ? "bg-amber-100 text-amber-700" :
-                          "bg-gray-100 text-gray-600"}`}>
-                          {days}d
-                        </span>
-                      ) : <span className="text-xs text-gray-400">—</span>}
-                    </td>
-                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-700">{r.total_units || 0}</td>
-                    <td className="px-5 py-3 text-right text-sm text-gray-500">
-                      ${Number(r.order_amount || 0).toLocaleString("en-US",{maximumFractionDigits:0})}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
 }
