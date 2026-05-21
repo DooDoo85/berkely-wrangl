@@ -709,7 +709,10 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 })
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
-  // Y scale based on max of bar totals + prior average
+  // Y scale based on max of bar totals + prior average.
+  // Use 1.4× headroom (was 1.1×) so bars don't visually dominate — they take
+  // up less of the vertical space at any given value, making the whole chart
+  // feel more compact and "trend summary"-like rather than a full report chart.
   const maxVal = Math.max(
     ...data.map(d => d.sales || 0),
     priorDailyAvg,
@@ -717,12 +720,13 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 })
   );
   const niceMax = (() => {
     const pow = Math.pow(10, Math.floor(Math.log10(maxVal)));
-    return Math.ceil(maxVal / pow) * pow * 1.1;
+    return Math.ceil(maxVal / pow) * pow * 1.4;
   })();
 
   const n = data.length;
   const barSlotW = innerW / n;
-  const barW = Math.min(barSlotW * 0.5, 48);  // thinner bars for compact density
+  // Narrower bars (38% of slot, max 36px) with more horizontal breathing room
+  const barW = Math.min(barSlotW * 0.38, 36);
 
   const xCenter = i => padL + barSlotW * (i + 0.5);
   const yAt = v => padT + innerH - (innerH * v) / niceMax;
@@ -801,15 +805,15 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 150 })
         {/* Area fill under the line — gradient, very subtle */}
         <path d={areaPath} fill={`url(#${gradientId})`} />
 
-        {/* Solid line — thicker, more presence */}
-        <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="3"
+        {/* Solid line — thinner for compact chart */}
+        <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="2.25"
               strokeLinecap="round" strokeLinejoin="round" />
 
         {/* Smaller circle markers for compact chart */}
         {data.map((d, i) => (
           <g key={i}>
-            <circle cx={xCenter(i)} cy={yAt(d.sales)} r="3.5"
-                    fill={LINE_COLOR} stroke="white" strokeWidth="2" />
+            <circle cx={xCenter(i)} cy={yAt(d.sales)} r="2.75"
+                    fill={LINE_COLOR} stroke="white" strokeWidth="1.5" />
           </g>
         ))}
 
@@ -874,15 +878,15 @@ function ProductMixBar({ breakdown = [], total = 0 }) {
   const withPct = filtered.map(b => ({ ...b, pct: (b.value / grandTotal) * 100 }));
 
   return (
-    <div className="space-y-2">
-      {/* Thinner stacked bar */}
-      <div className="flex h-6 rounded-md overflow-hidden ring-1 ring-stone-200/40 bg-stone-100/30">
+    <div className="space-y-2.5">
+      {/* Slightly taller stacked bar for stronger presence */}
+      <div className="flex h-7 rounded-md overflow-hidden ring-1 ring-stone-200/40 bg-stone-100/30">
         {withPct.map((b, i) => (
           <div key={i}
                className="relative group transition-opacity hover:opacity-90"
                style={{ width: `${b.pct}%`, background: b.color }}>
             {b.pct >= 12 && (
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white tabular-nums"
+              <span className="absolute inset-0 flex items-center justify-center text-[10.5px] font-semibold text-white tabular-nums"
                     style={{ textShadow: '0 1px 1px rgba(0,0,0,0.15)' }}>
                 {Math.round(b.pct)}%
               </span>
@@ -891,10 +895,10 @@ function ProductMixBar({ breakdown = [], total = 0 }) {
         ))}
       </div>
 
-      {/* Tighter legend rows */}
-      <div className="space-y-1">
+      {/* Legend rows with slightly more presence */}
+      <div className="space-y-1.5">
         {withPct.map((b, i) => (
-          <div key={i} className="flex items-center justify-between gap-2 text-[11.5px]">
+          <div key={i} className="flex items-center justify-between gap-2 text-[12px]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: b.color }} />
               <span className="text-ink-strong font-medium truncate">{b.label}</span>
@@ -903,7 +907,7 @@ function ProductMixBar({ breakdown = [], total = 0 }) {
               <span className="text-ink-strong font-semibold">
                 {`$${b.value >= 1000 ? `${(b.value / 1000).toFixed(1)}k` : Math.round(b.value)}`}
               </span>
-              <span className="text-ink-muted text-[10.5px] w-8 text-right">{Math.round(b.pct)}%</span>
+              <span className="text-ink-muted text-[11px] w-8 text-right">{Math.round(b.pct)}%</span>
             </div>
           </div>
         ))}
@@ -1001,13 +1005,13 @@ function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
 function DailyComparisonTable({ data = [], priorDailyAvg = 0 }) {
   if (!data.length) return null;
   return (
-    <table className="w-full text-[11.5px]">
+    <table className="w-full text-[12px]">
       <thead>
         <tr className="border-b border-stone-200/60">
-          <th className="text-left py-1 font-semibold text-ink-muted text-[9.5px] uppercase tracking-[0.1em]">Day</th>
-          <th className="text-right py-1 font-semibold text-ink-muted text-[9.5px] uppercase tracking-[0.1em]">This Week</th>
-          <th className="text-right py-1 font-semibold text-ink-muted text-[9.5px] uppercase tracking-[0.1em]">Prior Avg</th>
-          <th className="text-right py-1 font-semibold text-ink-muted text-[9.5px] uppercase tracking-[0.1em] pl-2">Δ</th>
+          <th className="text-left py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">Day</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">This Week</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">Prior Avg</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em] pl-2">Δ</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-stone-100">
@@ -1016,19 +1020,19 @@ function DailyComparisonTable({ data = [], priorDailyAvg = 0 }) {
           const positive = delta !== null && delta >= 0;
           return (
             <tr key={i} className="hover:bg-stone-50/40 transition-colors">
-              <td className="py-1">
+              <td className="py-1.5">
                 <div className="flex items-baseline gap-1.5">
                   <span className="font-semibold text-ink-strong">{d.label}</span>
-                  <span className="text-[10px] text-ink-muted">{d.dateLabel}</span>
+                  <span className="text-[10.5px] text-ink-muted">{d.dateLabel}</span>
                 </div>
               </td>
-              <td className="py-1 text-right tabular-nums font-semibold text-ink-strong">
+              <td className="py-1.5 text-right tabular-nums font-semibold text-ink-strong">
                 {d.sales > 0 ? fmt$(d.sales) : <span className="text-ink-muted">—</span>}
               </td>
-              <td className="py-1 text-right tabular-nums text-ink-mid">
+              <td className="py-1.5 text-right tabular-nums text-ink-mid">
                 {priorDailyAvg > 0 ? fmt$(priorDailyAvg) : "—"}
               </td>
-              <td className="py-1 text-right tabular-nums pl-2">
+              <td className="py-1.5 text-right tabular-nums pl-2">
                 {delta !== null && d.sales > 0 ? (
                   <span className={`font-semibold ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
                     {positive ? '↑' : '↓'} {Math.abs(delta)}%
@@ -2250,59 +2254,59 @@ export default function ExecutiveHome() {
             </p>
           </div>
 
-          {/* STAT STRIP — denser, smaller numbers */}
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-2.5 -mx-1">
-            <div className="px-3 first:pl-1 md:first:pl-1">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+          {/* STAT STRIP — larger, more prominent. Acts as the panel header. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-3 -mx-1">
+            <div className="px-3 first:pl-1 md:first:pl-1 py-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 5-Day Total Sales
               </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
                   {loading ? "—" : fmt$(data.salesKpis.sumSales)}
                 </p>
                 {data.salesKpis.salesTrendWoW !== null && !loading && (
-                  <span className={`text-[10px] tabular-nums font-semibold ${data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  <span className={`text-[11px] tabular-nums font-semibold ${data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
                     {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
                   </span>
                 )}
               </div>
             </div>
-            <div className="px-3">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+            <div className="px-3 py-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Orders Entered
               </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
                   {loading ? "—" : data.salesKpis.sumOrders}
                 </p>
                 {data.salesKpis.ordersTrendWoW !== null && !loading && (
-                  <span className={`text-[10px] tabular-nums font-semibold ${data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  <span className={`text-[11px] tabular-nums font-semibold ${data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700" : "text-red-700"}`}>
                     {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
                   </span>
                 )}
               </div>
             </div>
-            <div className="px-3">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+            <div className="px-3 py-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Avg Roller Order
               </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
                   {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
                 </p>
-                <span className="text-[10px] text-ink-muted">Monthly</span>
+                <span className="text-[11px] text-ink-muted">Monthly</span>
               </div>
             </div>
-            <div className="px-3 last:pr-1">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+            <div className="px-3 last:pr-1 py-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Top Product
               </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <p className="text-xl font-bold text-ink-strong tabular-nums leading-none">
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-[26px] font-bold text-ink-strong tabular-nums leading-none">
                   {loading ? "—" : data.salesKpis.topProductLabel}
                 </p>
                 {!loading && data.salesKpis.topProductPct > 0 && (
-                  <span className="text-[10px] text-ink-muted tabular-nums">
+                  <span className="text-[11px] text-ink-muted tabular-nums">
                     {data.salesKpis.topProductPct}%
                   </span>
                 )}
