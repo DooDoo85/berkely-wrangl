@@ -243,7 +243,6 @@ function OperationsStatusTable({
   totalInProduction,
   startedToday, startedTodayUnits,
   invoicedToday, invoicedTodayUnits,
-  netFlow,
   onCreditOkRollerClick, onCreditOkFauxClick,
   onPrintedRollerClick, onPrintedFauxClick,
   onInProdRollerClick, onInProdFauxClick,
@@ -411,11 +410,11 @@ function OperationsStatusTable({
         ))}
       </div>
 
-      {/* Operational footer — Started Today, Invoiced Today, Net Flow, Total in Production.
+      {/* Operational footer — Total in Production, Started Today, Invoiced Today.
           Folds the old Production Flow widget's most actionable signals into the
           Operations Status panel where they contextually belong. */}
       <div className="mt-4 rounded-xl bg-stone-50/60 ring-1 ring-stone-100/80 px-4 py-3">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 divide-x divide-stone-200/60">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 divide-x divide-stone-200/60">
           {/* Total in Production */}
           <div className="flex items-center gap-2.5 md:px-1">
             <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
@@ -468,32 +467,6 @@ function OperationsStatusTable({
                 {loading ? "—" : invoicedToday}
                 <span className="text-[11px] font-normal text-ink-mid ml-1">
                   orders{invoicedTodayUnits > 0 ? ` · ${invoicedTodayUnits.toLocaleString()}u` : ''}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Net Flow — 5-day */}
-          <div className="flex items-center gap-2.5 px-4 md:px-3">
-            <span className={`w-9 h-9 rounded-lg ring-1 flex items-center justify-center flex-shrink-0 ${
-              netFlow >= 0 ? "bg-emerald-50 ring-emerald-200/50 text-emerald-700" : "bg-red-50 ring-red-200/50 text-red-700"
-            }`}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                {netFlow >= 0
-                  ? <><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></>
-                  : <><polyline points="22 17 13.5 8.5 8.5 13.5 2 7" /><polyline points="16 17 22 17 22 11" /></>
-                }
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Net flow</p>
-              <p className="text-base font-semibold tabular-nums leading-tight mt-0.5">
-                <span className={netFlow >= 0 ? "text-emerald-700" : "text-red-700"}>
-                  {loading ? "—" : `${netFlow >= 0 ? '+' : ''}${netFlow}`}
-                </span>
-                <span className="text-[11px] font-normal text-ink-mid ml-1">
-                  {netFlow >= 0 ? "draining" : "filling"}
                 </span>
               </p>
             </div>
@@ -846,6 +819,7 @@ export default function ExecutiveHome() {
       priorSales: 0, priorOrders: 0, priorAov: 0,
       salesTrendWoW: null, ordersTrendWoW: null, aovTrendWoW: null,
       topProductLabel: '—', topProductPct: 0, topProductSales: 0,
+      rollerAovMonthly: 0, rollerOrdersMonthly: 0,
     },
     startedToday: 0, startedTodayUnits: 0,
     invoicedToday: 0, invoicedTodayUnits: 0,
@@ -1369,6 +1343,18 @@ export default function ExecutiveHome() {
         return rollerSparkMap[d.toISOString().slice(0, 10)] || 0;
       });
 
+      // Monthly avg roller-shade order value — pulled from same sparkRows
+      // (30 days, all products with order_amount + product_line). Sum roller
+      // amounts, divide by count of roller orders.
+      let rollerSalesMonthly = 0;
+      let rollerOrdersMonthly = 0;
+      (sparkRows ?? []).forEach(r => {
+        if (r.product_line !== 'roller') return;
+        rollerSalesMonthly += Number(r.order_amount || 0);
+        rollerOrdersMonthly += 1;
+      });
+      const rollerAovMonthly = rollerOrdersMonthly > 0 ? rollerSalesMonthly / rollerOrdersMonthly : 0;
+
       // ── Business Overview totals + WoW comparison ─────────────────────
       // Compute weekly totals (sales/units/orders) from the same orders we
       // already pulled for sparklines, plus a separate pass for prior-week
@@ -1475,6 +1461,7 @@ export default function ExecutiveHome() {
           priorSales, priorOrders, priorAov,
           salesTrendWoW, ordersTrendWoW, aovTrendWoW,
           topProductLabel, topProductPct, topProductSales,
+          rollerAovMonthly, rollerOrdersMonthly,
         },
         // Operations Status footer — today's flow + 5-day net flow
         startedToday, startedTodayUnits,
@@ -1510,7 +1497,7 @@ export default function ExecutiveHome() {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-6">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-6 pb-10 md:pb-14">
 
         {/* ── Compact top bar — refresh + timestamp only (page header is in sidebar) ── */}
         <div className="flex items-center justify-end mb-3 md:mb-4">
@@ -1582,7 +1569,6 @@ export default function ExecutiveHome() {
             startedTodayUnits={data.startedTodayUnits}
             invoicedToday={data.invoicedToday}
             invoicedTodayUnits={data.invoicedTodayUnits}
-            netFlow={data.netFlow}
             onCreditOkRollerClick={() => setCreditOkModal('roller')}
             onCreditOkFauxClick={() => setCreditOkModal('faux')}
             onPrintedRollerClick={() => setWipModal("PRINTED")}
@@ -1817,18 +1803,10 @@ export default function ExecutiveHome() {
                     {loading ? "—" : fmt$(data.salesKpis.sumSales)}
                   </p>
                   <p className="text-[11px] text-ink-mid leading-tight">5-day total sales</p>
-                  {data.salesKpis.salesTrendWoW !== null && !loading && (
-                    <p className="text-[11px] mt-1 tabular-nums">
-                      <span className={data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
-                        {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
-                      </span>
-                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
-                    </p>
-                  )}
                 </div>
               </div>
 
-              {/* Orders entered */}
+              {/* Orders entered (5-day) */}
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -1841,19 +1819,11 @@ export default function ExecutiveHome() {
                   <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
                     {loading ? "—" : data.salesKpis.sumOrders}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">Orders entered</p>
-                  {data.salesKpis.ordersTrendWoW !== null && !loading && (
-                    <p className="text-[11px] mt-1 tabular-nums">
-                      <span className={data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
-                        {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
-                      </span>
-                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
-                    </p>
-                  )}
+                  <p className="text-[11px] text-ink-mid leading-tight">Orders entered · 5 days</p>
                 </div>
               </div>
 
-              {/* Avg order value */}
+              {/* Avg Roller Shade order value — Monthly (30-day window) */}
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -1864,21 +1834,13 @@ export default function ExecutiveHome() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-xl font-semibold text-ink-strong tabular-nums leading-tight">
-                    {loading ? "—" : fmt$(data.salesKpis.aov)}
+                    {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
                   </p>
-                  <p className="text-[11px] text-ink-mid leading-tight">Avg order value</p>
-                  {data.salesKpis.aovTrendWoW !== null && !loading && (
-                    <p className="text-[11px] mt-1 tabular-nums">
-                      <span className={data.salesKpis.aovTrendWoW >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
-                        {data.salesKpis.aovTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.aovTrendWoW)}%
-                      </span>
-                      <span className="text-ink-muted ml-1">vs prior 5 days</span>
-                    </p>
-                  )}
+                  <p className="text-[11px] text-ink-mid leading-tight">Avg roller order value · Monthly</p>
                 </div>
               </div>
 
-              {/* Top product */}
+              {/* Top product (5-day) */}
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
@@ -1894,7 +1856,7 @@ export default function ExecutiveHome() {
                   </p>
                   <p className="text-[11px] text-ink-mid leading-tight">Top product</p>
                   {!loading && data.salesKpis.topProductPct > 0 && (
-                    <p className="text-[11px] text-ink-muted mt-1 tabular-nums">
+                    <p className="text-[11px] text-ink-muted mt-0.5 tabular-nums">
                       {data.salesKpis.topProductPct}% of sales
                     </p>
                   )}
