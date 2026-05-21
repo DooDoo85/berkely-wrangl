@@ -694,7 +694,7 @@ function TrendLineChart({ current = [], prior = [], width = 360, height = 180 })
 // makes values readable from either edge of the chart, common in financial
 // dashboards. The right axis tracks the line series specifically.
 //
-function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 }) {
+function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 300 }) {
   if (!data.length) return <div className="h-64 flex items-center justify-center text-sm text-ink-muted">No data</div>;
 
   const SEG = {
@@ -702,20 +702,19 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
     faux:   '#c2913a',
     other:  '#8c7758',
   };
-  const LINE_COLOR = '#b85d3a';
+  const LINE_COLOR = '#9d4f30';  // deeper clay — more visual punch than the bar color
   const PRIOR_COLOR = '#a7a29a';
 
-  const padL = 56, padR = 56, padT = 16, padB = 60;
+  const padL = 52, padR = 52, padT = 14, padB = 58;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
-  // Y scale based on max of bar totals (and the prior average, in case it's higher than any bar)
+  // Y scale based on max of bar totals + prior average
   const maxVal = Math.max(
     ...data.map(d => d.sales || 0),
     priorDailyAvg,
     1,
   );
-  // Round up to a nice number for the y axis
   const niceMax = (() => {
     const pow = Math.pow(10, Math.floor(Math.log10(maxVal)));
     return Math.ceil(maxVal / pow) * pow * 1.1;
@@ -723,23 +722,31 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
 
   const n = data.length;
   const barSlotW = innerW / n;
-  const barW = Math.min(barSlotW * 0.55, 56);
+  const barW = Math.min(barSlotW * 0.68, 72);  // wider bars — more presence
 
   const xCenter = i => padL + barSlotW * (i + 0.5);
   const yAt = v => padT + innerH - (innerH * v) / niceMax;
 
-  // Y-axis grid lines (5 ticks: 0, 25%, 50%, 75%, 100%)
   const ticks = [0, 0.25, 0.5, 0.75, 1.0];
 
-  // Line path through bar tops
+  // Line path — through bar tops
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xCenter(i).toFixed(1)} ${yAt(d.sales).toFixed(1)}`).join(' ');
+  // Area-fill path — same line, closed to the X axis
+  const areaPath = `${linePath} L ${xCenter(n - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L ${xCenter(0).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
 
-  // Dashed prior-average baseline — flat horizontal line
   const priorY = yAt(priorDailyAvg);
+  const gradientId = `combo-line-fill-${Math.random().toString(36).slice(2, 8)}`;
 
   return (
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stopColor={LINE_COLOR} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={LINE_COLOR} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {/* Y axis grid */}
         {ticks.map(t => {
           const y = padT + innerH - innerH * t;
@@ -749,10 +756,10 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
             <g key={t}>
               <line x1={padL} x2={width - padR} y1={y} y2={y}
                     stroke="#e7e5e4" strokeWidth="1" strokeDasharray={t === 0 ? '' : '2 3'} />
-              <text x={padL - 10} y={y + 4} textAnchor="end"
-                    fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
-              <text x={width - padR + 10} y={y + 4} textAnchor="start"
-                    fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
+              <text x={padL - 8} y={y + 4} textAnchor="end"
+                    fontSize="10.5" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
+              <text x={width - padR + 8} y={y + 4} textAnchor="start"
+                    fontSize="10.5" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
             </g>
           );
         })}
@@ -768,7 +775,6 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
             { key: 'faux',   amt: d.faux,   color: SEG.faux },
             { key: 'other',  amt: d.other,  color: SEG.other },
           ].filter(s => s.amt > 0);
-          // Stack from bottom up — roller first, then faux, then other on top
           let yCursor = padT + innerH;
           return (
             <g key={i} transform={`translate(${xCenter(i) - barW / 2}, 0)`}>
@@ -778,11 +784,10 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
                 return (
                   <rect key={s.key}
                         x="0" y={yCursor} width={barW} height={segH}
-                        fill={s.color} opacity="0.92" />
+                        fill={s.color} opacity="0.94" rx="1" />
                 );
               })}
-              {/* Round the top corners of the topmost segment with a subtle highlight */}
-              <rect x="0" y={yTop} width={barW} height="2" fill="white" opacity="0.15" />
+              <rect x="0" y={yTop} width={barW} height="1.5" fill="white" opacity="0.18" />
             </g>
           );
         })}
@@ -793,43 +798,50 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
                 stroke={PRIOR_COLOR} strokeWidth="1.5" strokeDasharray="6 4" opacity="0.7" />
         )}
 
-        {/* Solid line through bar tops with dots */}
-        <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="2.5"
+        {/* Area fill under the line — gradient, very subtle */}
+        <path d={areaPath} fill={`url(#${gradientId})`} />
+
+        {/* Solid line — thicker, more presence */}
+        <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="3"
               strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Larger circle markers */}
         {data.map((d, i) => (
-          <circle key={i} cx={xCenter(i)} cy={yAt(d.sales)} r="4"
-                  fill={LINE_COLOR} stroke="white" strokeWidth="2" />
+          <g key={i}>
+            <circle cx={xCenter(i)} cy={yAt(d.sales)} r="5"
+                    fill={LINE_COLOR} stroke="white" strokeWidth="2.5" />
+          </g>
         ))}
 
-        {/* X-axis labels — day name + date stacked */}
+        {/* X-axis labels */}
         {data.map((d, i) => (
           <g key={i}>
             <text x={xCenter(i)} y={height - padB + 22} textAnchor="middle"
                   fontSize="12" fontWeight="600" fill="#3b2c1f" fontFamily="ui-sans-serif">{d.label}</text>
             <text x={xCenter(i)} y={height - padB + 38} textAnchor="middle"
-                  fontSize="11" fill="#a7a29a" fontFamily="ui-sans-serif">{d.dateLabel}</text>
+                  fontSize="10.5" fill="#a7a29a" fontFamily="ui-sans-serif">{d.dateLabel}</text>
           </g>
         ))}
       </svg>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-5 text-[11px] mt-3">
+      {/* Compact legend — smaller, tighter */}
+      <div className="flex items-center justify-center gap-4 text-[10.5px] mt-2">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.roller }} />
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: SEG.roller }} />
           <span className="text-ink-mid">Roller</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.faux }} />
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: SEG.faux }} />
           <span className="text-ink-mid">Faux</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm" style={{ background: SEG.other }} />
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ background: SEG.other }} />
           <span className="text-ink-mid">Other</span>
         </span>
         {priorDailyAvg > 0 && (
           <span className="flex items-center gap-1.5">
             <span className="w-4 border-t-2 border-dashed" style={{ borderColor: PRIOR_COLOR }} />
-            <span className="text-ink-mid">Prior 5 Days (avg)</span>
+            <span className="text-ink-mid">Prior 5-Day Avg</span>
           </span>
         )}
       </div>
@@ -845,6 +857,63 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 320 })
 // designed to later receive the sub-product breakdown (ANABELLE CLUTCH,
 // DESIGNER MOTORIZED, etc.) once that data lands in Supabase.
 //
+// ─── Product breakdown — horizontal stacked contribution bar ──────────────
+//
+// Single segmented bar showing product-mix distribution. Each segment is
+// proportional to its share of total sales. Labels on the right show $ and %.
+// Replaces the donut — denser, cleaner, fills horizontal space better.
+//
+// Generic `breakdown` array means data source is swappable when sub-product
+// data (ROLLER SHADE INVOICE BY PRODUCT) gets ingested.
+//
+function ProductMixBar({ breakdown = [], total = 0 }) {
+  const filtered = breakdown.filter(b => b.value > 0);
+  if (!filtered.length || total === 0) {
+    return <div className="text-sm text-ink-muted py-4">No data</div>;
+  }
+  const grandTotal = filtered.reduce((s, b) => s + b.value, 0);
+  const withPct = filtered.map(b => ({ ...b, pct: (b.value / grandTotal) * 100 }));
+
+  return (
+    <div className="space-y-3">
+      {/* The stacked bar itself */}
+      <div className="flex h-9 rounded-lg overflow-hidden ring-1 ring-stone-200/40 bg-stone-100/30">
+        {withPct.map((b, i) => (
+          <div key={i}
+               className="relative group transition-opacity hover:opacity-90"
+               style={{ width: `${b.pct}%`, background: b.color }}>
+            {/* Inline % label if segment is big enough */}
+            {b.pct >= 12 && (
+              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white tabular-nums"
+                    style={{ textShadow: '0 1px 1px rgba(0,0,0,0.15)' }}>
+                {Math.round(b.pct)}%
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend rows — tighter than donut version */}
+      <div className="space-y-1.5">
+        {withPct.map((b, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 text-[12px]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: b.color }} />
+              <span className="text-ink-strong font-medium truncate">{b.label}</span>
+            </div>
+            <div className="flex items-center gap-3 tabular-nums flex-shrink-0">
+              <span className="text-ink-strong font-semibold">
+                {`$${b.value >= 1000 ? `${(b.value / 1000).toFixed(1)}k` : Math.round(b.value)}`}
+              </span>
+              <span className="text-ink-muted text-[11px] w-8 text-right">{Math.round(b.pct)}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
   if (!breakdown.length || total === 0) {
     return <div className="h-40 flex items-center justify-center text-sm text-ink-muted">No data</div>;
@@ -884,13 +953,11 @@ function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
 
   return (
     <div className="flex items-center gap-5">
-      {/* SVG donut */}
       <svg viewBox={`0 0 ${size} ${size}`} className="w-32 h-32 flex-shrink-0">
         {segments.map((s, i) => (
           <path key={i} d={s.path} fill={s.color} opacity="0.92"
                 stroke="white" strokeWidth="1.5" />
         ))}
-        {/* Center label */}
         <text x={cx} y={cy - 4} textAnchor="middle"
               fontSize="18" fontWeight="700" fill="#3b2c1f" fontFamily="ui-sans-serif">
           {`$${total >= 1000 ? `${Math.round(total / 1000)}k` : Math.round(total)}`}
@@ -899,7 +966,6 @@ function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
               fontSize="10" fill="#a7a29a" fontFamily="ui-sans-serif">{centerLabel}</text>
       </svg>
 
-      {/* Legend rows */}
       <div className="flex-1 min-w-0 space-y-1.5">
         {segments.map((s, i) => (
           <div key={i} className="flex items-center justify-between gap-3 text-[12px]">
@@ -927,13 +993,64 @@ function ProductDonut({ breakdown = [], total = 0, centerLabel = "Total" }) {
 //   - Today's $ + ↑/↓% delta vs the prior 5-day daily average
 //   - Two small bars side-by-side: this week's actual (solid) vs prior avg (dashed outline)
 //
+// ─── Daily comparison table — compact table replacing mini bar cards ──────
+//
+// Tight 5-row table with columns: Day · This Week · Prior Avg · Δ%.
+// Aligned vertically so the eye scans down each column. Color-coded deltas
+// inline (no pills). Replaces the mini bar grid — fewer floating elements,
+// more information density, matches the Ramp/Stripe table style.
+//
+function DailyComparisonTable({ data = [], priorDailyAvg = 0 }) {
+  if (!data.length) return null;
+  return (
+    <table className="w-full text-[12px]">
+      <thead>
+        <tr className="border-b border-stone-200/60">
+          <th className="text-left py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">Day</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">This Week</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em]">Prior Avg</th>
+          <th className="text-right py-1.5 font-semibold text-ink-muted text-[10px] uppercase tracking-[0.1em] pl-2">Δ</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-stone-100">
+        {data.map((d, i) => {
+          const delta = priorDailyAvg > 0 ? Math.round(((d.sales - priorDailyAvg) / priorDailyAvg) * 100) : null;
+          const positive = delta !== null && delta >= 0;
+          return (
+            <tr key={i} className="hover:bg-stone-50/40 transition-colors">
+              <td className="py-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-semibold text-ink-strong">{d.label}</span>
+                  <span className="text-[10.5px] text-ink-muted">{d.dateLabel}</span>
+                </div>
+              </td>
+              <td className="py-2 text-right tabular-nums font-semibold text-ink-strong">
+                {d.sales > 0 ? fmt$(d.sales) : <span className="text-ink-muted">—</span>}
+              </td>
+              <td className="py-2 text-right tabular-nums text-ink-mid">
+                {priorDailyAvg > 0 ? fmt$(priorDailyAvg) : "—"}
+              </td>
+              <td className="py-2 text-right tabular-nums pl-2">
+                {delta !== null && d.sales > 0 ? (
+                  <span className={`font-semibold ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {positive ? '↑' : '↓'} {Math.abs(delta)}%
+                  </span>
+                ) : <span className="text-ink-muted">—</span>}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function DailyTrendBars({ data = [], priorDailyAvg = 0 }) {
   if (!data.length) return null;
   const ROLLER = '#b85d3a';
   const PRIOR_COLOR = '#a7a29a';
-  // Bar heights: scale so the larger of (max bar, priorDailyAvg) sets the top.
   const maxVal = Math.max(...data.map(d => d.sales || 0), priorDailyAvg, 1);
-  const barAreaH = 60;
+  const barAreaH = 40;
   return (
     <div>
       <div className="grid grid-cols-5 gap-2">
@@ -954,7 +1071,6 @@ function DailyTrendBars({ data = [], priorDailyAvg = 0 }) {
                   {positive ? '↑' : '↓'} {Math.abs(delta)}%
                 </div>
               )}
-              {/* Bar pair */}
               <div className="flex items-end justify-center gap-1 w-full" style={{ height: `${barAreaH}px` }}>
                 <div className="w-3 rounded-t" style={{ background: ROLLER, height: `${Math.max(currentH, d.sales > 0 ? 3 : 0)}px`, opacity: d.sales > 0 ? 1 : 0 }} />
                 <div className="w-3 rounded-t border-2 border-dashed"
@@ -968,7 +1084,6 @@ function DailyTrendBars({ data = [], priorDailyAvg = 0 }) {
           );
         })}
       </div>
-      {/* Legend */}
       <div className="flex items-center justify-center gap-4 text-[11px] mt-3">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm" style={{ background: ROLLER }} />
@@ -2117,161 +2232,130 @@ export default function ExecutiveHome() {
         </div>
 
         {/* ═══ ROW 3 — Daily Sales hero ═══════════════════════════════════
-            Full-width primary analytics. Mockup-driven layout:
-              Top-left:  combo bar+line chart with dual Y-axis
-              Top-right: 2x2 KPI grid (Sales / Orders / AOV / Top Product)
-              Bottom-left:  product breakdown donut (Roller / Faux / Other)
-              Bottom-right: daily trend mini bars vs prior 5-day average
-              Footer: callout banner with trend interpretation
-            Architected so the donut data source is swappable — currently
-            top-level product line, will switch to sub-product when that data
-            (ROLLER SHADE INVOICE BY PRODUCT report) is ingested. */}
-        <div className="card-priority bg-surface-page/40 p-5 md:p-7">
+            Stripe/Linear/Ramp-inspired premium analytics panel. Structure:
+              Header — title + subtitle, no over-decoration
+              Stat strip — horizontal, borderless, divider-separated KPIs
+              Chart — the hero element, full width, taller, bolder line
+              Secondary row — product mix bar (compact) + comparison table (wider)
+              Callout — trend interpretation banner at the bottom
+            Architected so the donut/mix data source is swappable when
+            ROLLER SHADE INVOICE BY PRODUCT data lands in Supabase. */}
+        <div className="card-priority bg-surface-page/40 p-5 md:p-6">
 
-          {/* Header */}
-          <div className="flex items-start justify-between mb-5 pb-5 border-b border-stone-200/50">
-            <div className="flex items-start gap-3">
-              <span className="w-10 h-10 rounded-xl bg-stone-100 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                     strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                  <line x1="18" y1="20" x2="18" y2="10" />
-                  <line x1="12" y1="20" x2="12" y2="4" />
-                  <line x1="6" y1="20" x2="6" y2="14" />
-                </svg>
-              </span>
-              <div>
-                <h3 className="font-display font-bold text-ink-strong text-xl md:text-2xl leading-tight">
-                  Daily Sales · Last 5 Business Days
-                </h3>
-                <p className="text-[12px] text-ink-muted mt-0.5">Orders entered, ex. quotes</p>
-              </div>
+          {/* HEADER — minimal, no big icon block, just title + subtitle */}
+          <div className="mb-5">
+            <h3 className="font-display font-bold text-ink-strong text-xl md:text-2xl leading-tight">
+              Daily Sales
+            </h3>
+            <p className="text-[12px] text-ink-muted mt-0.5">
+              Last 5 business days · Orders entered, ex. quotes
+            </p>
+          </div>
+
+          {/* STAT STRIP — borderless horizontal KPIs with thin dividers.
+              No card backgrounds. Each stat is just label + big number. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-5 -mx-1">
+            <div className="px-4 first:pl-1 last:pr-1 md:first:pl-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+                5-Day Total Sales
+              </p>
+              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+                {loading ? "—" : fmt$(data.salesKpis.sumSales)}
+              </p>
+              {data.salesKpis.salesTrendWoW !== null && !loading && (
+                <p className="text-[11px] tabular-nums mt-1.5">
+                  <span className={data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"}>
+                    {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
+                  </span>
+                  <span className="text-ink-muted ml-1.5">vs prior</span>
+                </p>
+              )}
+            </div>
+            <div className="px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+                Orders Entered
+              </p>
+              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+                {loading ? "—" : data.salesKpis.sumOrders}
+              </p>
+              {data.salesKpis.ordersTrendWoW !== null && !loading && (
+                <p className="text-[11px] tabular-nums mt-1.5">
+                  <span className={data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"}>
+                    {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
+                  </span>
+                  <span className="text-ink-muted ml-1.5">vs prior</span>
+                </p>
+              )}
+            </div>
+            <div className="px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+                Avg Roller Order
+              </p>
+              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+                {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
+              </p>
+              <p className="text-[11px] text-ink-muted mt-1.5">Monthly avg</p>
+            </div>
+            <div className="px-4 last:pr-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+                Top Product
+              </p>
+              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+                {loading ? "—" : data.salesKpis.topProductLabel}
+              </p>
+              {!loading && data.salesKpis.topProductPct > 0 && (
+                <p className="text-[11px] text-ink-muted mt-1.5 tabular-nums">
+                  {data.salesKpis.topProductPct}% of sales
+                </p>
+              )}
             </div>
           </div>
 
-          {/* TOP ROW — Combo chart + KPI grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 lg:gap-8 mb-6">
-
-            {/* Combo chart */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Orders entered</p>
-              <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
-            </div>
-
-            {/* 2x2 KPI grid */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Sales Summary</p>
-              <div className="grid grid-cols-2 gap-3">
-                {/* 5-day total sales */}
-                <div className="card p-3.5">
-                  <div className="flex items-start gap-2.5 mb-1">
-                    <span className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-                        <polyline points="17 6 23 6 23 12" />
-                      </svg>
-                    </span>
-                  </div>
-                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : fmt$(data.salesKpis.sumSales)}
-                  </p>
-                  <p className="text-[11px] text-ink-mid mt-1">5-day total sales</p>
-                </div>
-
-                {/* Orders entered */}
-                <div className="card p-3.5">
-                  <div className="flex items-start gap-2.5 mb-1">
-                    <span className="w-9 h-9 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <circle cx="9" cy="21" r="1" />
-                        <circle cx="20" cy="21" r="1" />
-                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                      </svg>
-                    </span>
-                  </div>
-                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : data.salesKpis.sumOrders}
-                  </p>
-                  <p className="text-[11px] text-ink-mid mt-1">Orders entered</p>
-                </div>
-
-                {/* Avg roller order value · Monthly */}
-                <div className="card p-3.5">
-                  <div className="flex items-start gap-2.5 mb-1">
-                    <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                        <path d="M2 17l10 5 10-5" />
-                        <path d="M2 12l10 5 10-5" />
-                      </svg>
-                    </span>
-                  </div>
-                  <p className="text-2xl font-semibold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
-                  </p>
-                  <p className="text-[11px] text-ink-mid mt-1">Avg roller order · Monthly</p>
-                </div>
-
-                {/* Top product */}
-                <div className="card p-3.5">
-                  <div className="flex items-start gap-2.5 mb-1">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
-                                   color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                           strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    </span>
-                  </div>
-                  <p className="text-2xl font-semibold text-ink-strong leading-none">
-                    {loading ? "—" : data.salesKpis.topProductLabel}
-                  </p>
-                  <p className="text-[11px] text-ink-mid mt-1">
-                    Top product
-                    {!loading && data.salesKpis.topProductPct > 0 && (
-                      <span className="text-ink-muted ml-1">· {data.salesKpis.topProductPct}% of sales</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
+          {/* CHART — the hero. Full width, tall, breathing room above */}
+          <div className="border-t border-stone-200/50 pt-5 mb-5">
+            <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
           </div>
 
-          {/* BOTTOM ROW — Donut + Daily Trend bars */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-6 lg:gap-8 pt-5 border-t border-stone-200/50">
+          {/* SECONDARY ROW — asymmetric: product mix narrow, comparison table wider */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 pt-5 border-t border-stone-200/50">
 
-            {/* Donut — sales by product breakdown.
-                TODO: when "ROLLER SHADE INVOICE BY PRODUCT" report is ingested
-                into Supabase, swap the `breakdown` array for the finer-grained
-                roller sub-products (Anabelle Clutch, Designer Motorized, etc).
-                The ProductDonut component takes a generic array of {label, value, color}. */}
+            {/* Product mix bar — horizontal contribution, replaces donut.
+                TODO: when ROLLER SHADE INVOICE BY PRODUCT report ingests
+                into Supabase, swap the `breakdown` array for sub-product data
+                (Anabelle Clutch, Designer Motorized, etc.). The ProductMixBar
+                takes a generic array of {label, value, color}. */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Sales by Product (5 Days)</p>
-              <ProductDonut
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
+                  Product Mix
+                </p>
+                <p className="text-[11px] text-ink-muted">5 days</p>
+              </div>
+              <ProductMixBar
                 breakdown={[
                   { label: "Roller Shades",     value: data.salesKpis.sumRoller, color: "#b85d3a" },
                   { label: "Faux Wood Blinds",  value: data.salesKpis.sumFaux,   color: "#d4a574" },
                   { label: "Other",             value: data.salesKpis.sumOther,  color: "#8c7758" },
                 ]}
                 total={data.salesKpis.sumSales}
-                centerLabel="Total"
               />
             </div>
 
-            {/* Daily trend mini bars vs prior 5-day average */}
+            {/* Comparison table — daily this-week vs prior-avg */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-3">Daily Trend vs Prior 5-Day Average</p>
-              <DailyTrendBars data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
+                  Daily Trend vs Prior Average
+                </p>
+                <p className="text-[11px] text-ink-muted">5 days</p>
+              </div>
+              <DailyComparisonTable data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
             </div>
           </div>
 
           {/* Footer callout — trend interpretation */}
           {!loading && data.salesKpis.salesTrendWoW !== null && (() => {
             const delta = data.salesKpis.salesTrendWoW;
-            // Tinting thresholds: green if up >5%, red if down >5%, amber if within ±5%
             let tone, copy;
             if (delta >= 5) {
               tone = { bg: 'bg-emerald-50/60', ring: 'ring-emerald-100/70', iconBg: 'bg-emerald-100 text-emerald-700', textColor: 'text-emerald-900' };
@@ -2284,7 +2368,7 @@ export default function ExecutiveHome() {
               copy = `Sales are ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta)}% compared to the prior 5 business days. Trending stable.`;
             }
             return (
-              <div className={`mt-5 rounded-xl ${tone.bg} ring-1 ${tone.ring} px-4 py-3 flex items-center gap-3`}>
+              <div className={`mt-5 rounded-xl ${tone.bg} ring-1 ${tone.ring} px-4 py-2.5 flex items-center gap-3`}>
                 <span className={`w-9 h-9 rounded-lg ${tone.iconBg} flex items-center justify-center flex-shrink-0`}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                        strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
