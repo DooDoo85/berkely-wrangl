@@ -694,7 +694,7 @@ function TrendLineChart({ current = [], prior = [], width = 360, height = 180 })
 // makes values readable from either edge of the chart, common in financial
 // dashboards. The right axis tracks the line series specifically.
 //
-function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 300 }) {
+function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 200 }) {
   if (!data.length) return <div className="h-64 flex items-center justify-center text-sm text-ink-muted">No data</div>;
 
   const SEG = {
@@ -825,7 +825,7 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 300 })
       </svg>
 
       {/* Compact legend — smaller, tighter */}
-      <div className="flex items-center justify-center gap-4 text-[10.5px] mt-2">
+      <div className="flex items-center justify-center gap-4 text-[10.5px] mt-1">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm" style={{ background: SEG.roller }} />
           <span className="text-ink-mid">Roller</span>
@@ -1018,19 +1018,19 @@ function DailyComparisonTable({ data = [], priorDailyAvg = 0 }) {
           const positive = delta !== null && delta >= 0;
           return (
             <tr key={i} className="hover:bg-stone-50/40 transition-colors">
-              <td className="py-2">
+              <td className="py-1.5">
                 <div className="flex items-baseline gap-1.5">
                   <span className="font-semibold text-ink-strong">{d.label}</span>
                   <span className="text-[10.5px] text-ink-muted">{d.dateLabel}</span>
                 </div>
               </td>
-              <td className="py-2 text-right tabular-nums font-semibold text-ink-strong">
+              <td className="py-1.5 text-right tabular-nums font-semibold text-ink-strong">
                 {d.sales > 0 ? fmt$(d.sales) : <span className="text-ink-muted">—</span>}
               </td>
-              <td className="py-2 text-right tabular-nums text-ink-mid">
+              <td className="py-1.5 text-right tabular-nums text-ink-mid">
                 {priorDailyAvg > 0 ? fmt$(priorDailyAvg) : "—"}
               </td>
-              <td className="py-2 text-right tabular-nums pl-2">
+              <td className="py-1.5 text-right tabular-nums pl-2">
                 {delta !== null && d.sales > 0 ? (
                   <span className={`font-semibold ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
                     {positive ? '↑' : '↓'} {Math.abs(delta)}%
@@ -2240,84 +2240,83 @@ export default function ExecutiveHome() {
               Callout — trend interpretation banner at the bottom
             Architected so the donut/mix data source is swappable when
             ROLLER SHADE INVOICE BY PRODUCT data lands in Supabase. */}
-        <div className="card-priority bg-surface-page/40 p-5 md:p-6">
+        <div className="card-priority bg-surface-page/40 p-4 md:p-5">
 
-          {/* HEADER — minimal, no big icon block, just title + subtitle */}
-          <div className="mb-5">
-            <h3 className="font-display font-bold text-ink-strong text-xl md:text-2xl leading-tight">
+          {/* HEADER — tightened */}
+          <div className="mb-3">
+            <h3 className="font-display font-bold text-ink-strong text-lg md:text-xl leading-tight">
               Daily Sales
             </h3>
-            <p className="text-[12px] text-ink-muted mt-0.5">
+            <p className="text-[11px] text-ink-muted mt-0.5">
               Last 5 business days · Orders entered, ex. quotes
             </p>
           </div>
 
-          {/* STAT STRIP — borderless horizontal KPIs with thin dividers.
-              No card backgrounds. Each stat is just label + big number. */}
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-5 -mx-1">
-            <div className="px-4 first:pl-1 last:pr-1 md:first:pl-1">
+          {/* STAT STRIP — compact horizontal KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-200/60 mb-3 -mx-1">
+            <div className="px-3 first:pl-1 md:first:pl-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 5-Day Total Sales
               </p>
-              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+              <p className="text-2xl font-bold text-ink-strong tabular-nums mt-1 leading-none">
                 {loading ? "—" : fmt$(data.salesKpis.sumSales)}
               </p>
               {data.salesKpis.salesTrendWoW !== null && !loading && (
-                <p className="text-[11px] tabular-nums mt-1.5">
+                <p className="text-[10.5px] tabular-nums mt-1">
                   <span className={data.salesKpis.salesTrendWoW >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"}>
                     {data.salesKpis.salesTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.salesTrendWoW)}%
                   </span>
-                  <span className="text-ink-muted ml-1.5">vs prior</span>
+                  <span className="text-ink-muted ml-1">vs prior</span>
                 </p>
               )}
             </div>
-            <div className="px-4">
+            <div className="px-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Orders Entered
               </p>
-              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+              <p className="text-2xl font-bold text-ink-strong tabular-nums mt-1 leading-none">
                 {loading ? "—" : data.salesKpis.sumOrders}
               </p>
               {data.salesKpis.ordersTrendWoW !== null && !loading && (
-                <p className="text-[11px] tabular-nums mt-1.5">
+                <p className="text-[10.5px] tabular-nums mt-1">
                   <span className={data.salesKpis.ordersTrendWoW >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"}>
                     {data.salesKpis.ordersTrendWoW >= 0 ? "↑" : "↓"} {Math.abs(data.salesKpis.ordersTrendWoW)}%
                   </span>
-                  <span className="text-ink-muted ml-1.5">vs prior</span>
+                  <span className="text-ink-muted ml-1">vs prior</span>
                 </p>
               )}
             </div>
-            <div className="px-4">
+            <div className="px-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Avg Roller Order
               </p>
-              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+              <p className="text-2xl font-bold text-ink-strong tabular-nums mt-1 leading-none">
                 {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
               </p>
-              <p className="text-[11px] text-ink-muted mt-1.5">Monthly avg</p>
+              <p className="text-[10.5px] text-ink-muted mt-1">Monthly avg</p>
             </div>
-            <div className="px-4 last:pr-1">
+            <div className="px-3 last:pr-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
                 Top Product
               </p>
-              <p className="text-3xl font-bold text-ink-strong tabular-nums mt-1.5 leading-none">
+              <p className="text-2xl font-bold text-ink-strong tabular-nums mt-1 leading-none">
                 {loading ? "—" : data.salesKpis.topProductLabel}
               </p>
               {!loading && data.salesKpis.topProductPct > 0 && (
-                <p className="text-[11px] text-ink-muted mt-1.5 tabular-nums">
+                <p className="text-[10.5px] text-ink-muted mt-1 tabular-nums">
                   {data.salesKpis.topProductPct}% of sales
                 </p>
               )}
             </div>
           </div>
 
-          {/* CHART — the hero. Full width, tall, breathing room above */}
-          <div className="border-t border-stone-200/50 pt-5 mb-5">
+          {/* CHART — primary, but height-trimmed to match panel scale */}
+          <div className="border-t border-stone-200/50 pt-3 mb-3">
             <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
           </div>
 
           {/* SECONDARY ROW — asymmetric: product mix narrow, comparison table wider */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 pt-5 border-t border-stone-200/50">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-5 pt-3 border-t border-stone-200/50">
 
             {/* Product mix bar — horizontal contribution, replaces donut.
                 TODO: when ROLLER SHADE INVOICE BY PRODUCT report ingests
@@ -2325,11 +2324,11 @@ export default function ExecutiveHome() {
                 (Anabelle Clutch, Designer Motorized, etc.). The ProductMixBar
                 takes a generic array of {label, value, color}. */}
             <div>
-              <div className="flex items-baseline justify-between mb-3">
+              <div className="flex items-baseline justify-between mb-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
                   Product Mix
                 </p>
-                <p className="text-[11px] text-ink-muted">5 days</p>
+                <p className="text-[10.5px] text-ink-muted">5 days</p>
               </div>
               <ProductMixBar
                 breakdown={[
@@ -2343,11 +2342,11 @@ export default function ExecutiveHome() {
 
             {/* Comparison table — daily this-week vs prior-avg */}
             <div>
-              <div className="flex items-baseline justify-between mb-3">
+              <div className="flex items-baseline justify-between mb-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid">
                   Daily Trend vs Prior Average
                 </p>
-                <p className="text-[11px] text-ink-muted">5 days</p>
+                <p className="text-[10.5px] text-ink-muted">5 days</p>
               </div>
               <DailyComparisonTable data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
             </div>
@@ -2368,16 +2367,16 @@ export default function ExecutiveHome() {
               copy = `Sales are ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta)}% compared to the prior 5 business days. Trending stable.`;
             }
             return (
-              <div className={`mt-5 rounded-xl ${tone.bg} ring-1 ${tone.ring} px-4 py-2.5 flex items-center gap-3`}>
-                <span className={`w-9 h-9 rounded-lg ${tone.iconBg} flex items-center justify-center flex-shrink-0`}>
+              <div className={`mt-3 rounded-lg ${tone.bg} ring-1 ${tone.ring} px-3 py-2 flex items-center gap-2.5`}>
+                <span className={`w-7 h-7 rounded-md ${tone.iconBg} flex items-center justify-center flex-shrink-0`}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                       strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                     {delta >= 0
                       ? <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>
                       : <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></>}
                   </svg>
                 </span>
-                <p className={`text-[13px] ${tone.textColor} flex-1`}>{copy}</p>
+                <p className={`text-[12px] ${tone.textColor} flex-1`}>{copy}</p>
               </div>
             );
           })()}
