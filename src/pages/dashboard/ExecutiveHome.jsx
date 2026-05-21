@@ -35,9 +35,14 @@ function wow(current, prior) {
 }
 
 // ─── Sparkline ──────────────────────────────────────────────────────────────
-
-function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
-  if (!data.length) return <div className="h-10" />;
+//
+// Hand-rolled SVG sparkline. Uses sqrt scaling so small values stay visible
+// alongside spikes. By default renders at 40px tall (compact contexts), but
+// callers can pass `tall` to make it fill its parent's height — useful for
+// hero cards where there's vertical real estate to use.
+//
+function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall = false }) {
+  if (!data.length) return <div className={tall ? "flex-1 min-h-[80px]" : "h-10"} />;
   // Sqrt scaling — compresses outliers and expands small variations.
   // A $100 day shows at sqrt(100)/sqrt(20000) ≈ 7%, vs raw ratio of 0.5% — much more visible.
   const sqrtData = data.map(v => Math.sqrt(Math.max(0, v)));
@@ -52,7 +57,8 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
   const linePath = points.join(" ");
   const fillPath = `${linePath} ${w},${h} 0,${h}`;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-10">
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
+         className={tall ? "w-full flex-1 min-h-[100px]" : "w-full h-10"}>
       <polyline points={fillPath} fill={fillColor} stroke="none" opacity="0.85" />
       <polyline points={linePath} fill="none" stroke={color} strokeWidth="1.25" />
     </svg>
@@ -69,8 +75,8 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
   const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
-      className="card card-hover p-4 md:p-5 cursor-pointer h-full">
-      <div className="flex items-center justify-between mb-2">
+      className="card card-hover p-4 md:p-5 cursor-pointer h-full flex flex-col">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
           <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
@@ -79,7 +85,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* WTD dollar amount */}
-      <div className="mb-1">
+      <div className="mb-1 flex-shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
             {loading ? "—" : fmt$Full(data.sales_wtd)}
@@ -89,7 +95,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* Units + WoW% — one compact line */}
-      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3">
+      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3 flex-shrink-0">
         <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
         {wowPct !== null && !loading && (
           <>
@@ -101,8 +107,8 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
         )}
       </div>
 
-      {/* 30-day sparkline */}
-      <Sparkline data={sparkData} color={accent} fillColor={fill} />
+      {/* 30-day sparkline — fills remaining vertical space in the card */}
+      <Sparkline data={sparkData} color={accent} fillColor={fill} tall />
     </div>
   );
 }
@@ -912,14 +918,18 @@ export default function ExecutiveHome() {
         }
       });
 
-      // Compute lead-time deltas for orders invoiced this week and last 30d
+      // Compute lead-time deltas for orders invoiced this week and last 30d.
+      // 0-day deltas (printed & invoiced recorded on the same date) are almost
+      // always data artifacts — same-day batch imports or duplicate events —
+      // not real same-day production. Filter them out to avoid the dashboard
+      // showing a misleading "0 days" lead time. Real lead times are 1+ days.
       const deltasWTD = [];
       const deltas30d = [];
       (invoicedHistory ?? []).forEach(r => {
         const printedDate = printedMap[r.order_number];
         if (!printedDate || r.status_date < printedDate) return;
         const days = Math.round((new Date(r.status_date) - new Date(printedDate)) / 86400000);
-        if (days < 0 || days > 60) return;
+        if (days < 1 || days > 60) return;  // filter out 0-day artifacts + extreme outliers
         if (r.status_date >= weekStartDate) deltasWTD.push(days);
         deltas30d.push(days);
       });
