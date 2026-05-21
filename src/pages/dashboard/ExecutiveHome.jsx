@@ -36,19 +36,35 @@ function wow(current, prior) {
 
 // ─── Sparkline ──────────────────────────────────────────────────────────────
 //
-// Hand-rolled SVG sparkline. Uses sqrt scaling so small values stay visible
-// alongside spikes. By default renders at 40px tall (compact contexts), but
-// callers can pass `tall` to make it fill its parent's height — useful for
-// hero cards where there's vertical real estate to use.
+// Hand-rolled SVG sparkline. By default renders at 40px tall (compact contexts);
+// pass `tall` to make it fill its parent's height — useful for hero cards
+// where there's vertical real estate to use.
+//
+// When `tall`, we apply a 5-day centered rolling average to smooth the line.
+// At full height, raw daily values produce jagged spikes (most days are $0,
+// some have a single sale) that don't read well. The rolling average shows
+// the underlying trend without the noise. Compact mode uses raw values since
+// the small height naturally compresses spikes.
 //
 function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall = false }) {
   if (!data.length) return <div className={tall ? "flex-1 min-h-[80px]" : "h-10"} />;
+  // Apply rolling-average smoothing for the tall variant.
+  let series = data;
+  if (tall) {
+    const window = 5;
+    const half = Math.floor(window / 2);
+    series = data.map((_, i) => {
+      const start = Math.max(0, i - half);
+      const end = Math.min(data.length, i + half + 1);
+      const slice = data.slice(start, end);
+      return slice.reduce((s, v) => s + v, 0) / slice.length;
+    });
+  }
   // Sqrt scaling — compresses outliers and expands small variations.
-  // A $100 day shows at sqrt(100)/sqrt(20000) ≈ 7%, vs raw ratio of 0.5% — much more visible.
-  const sqrtData = data.map(v => Math.sqrt(Math.max(0, v)));
+  const sqrtData = series.map(v => Math.sqrt(Math.max(0, v)));
   const max = Math.max(...sqrtData, 1);
   const w = 280, h = 40;
-  const step = data.length > 1 ? w / (data.length - 1) : 0;
+  const step = series.length > 1 ? w / (series.length - 1) : 0;
   const points = sqrtData.map((sv, i) => {
     const x = i * step;
     const y = h - (sv / max) * (h - 4) - 2;
@@ -919,17 +935,17 @@ export default function ExecutiveHome() {
       });
 
       // Compute lead-time deltas for orders invoiced this week and last 30d.
-      // 0-day deltas (printed & invoiced recorded on the same date) are almost
-      // always data artifacts — same-day batch imports or duplicate events —
-      // not real same-day production. Filter them out to avoid the dashboard
-      // showing a misleading "0 days" lead time. Real lead times are 1+ days.
+      // We accept 0-day deltas (printed and invoiced recorded on the same date —
+      // common because the master sales report often imports both events in
+      // one batch). The number may be lower than "true" lead time because of
+      // this, but it's directionally honest given the data we have.
       const deltasWTD = [];
       const deltas30d = [];
       (invoicedHistory ?? []).forEach(r => {
         const printedDate = printedMap[r.order_number];
         if (!printedDate || r.status_date < printedDate) return;
         const days = Math.round((new Date(r.status_date) - new Date(printedDate)) / 86400000);
-        if (days < 1 || days > 60) return;  // filter out 0-day artifacts + extreme outliers
+        if (days < 0 || days > 60) return;
         if (r.status_date >= weekStartDate) deltasWTD.push(days);
         deltas30d.push(days);
       });
@@ -937,10 +953,12 @@ export default function ExecutiveHome() {
       const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
       let leadTimeDays = null;
       let leadTimeWindow = null;  // 'wtd' | '30d'
-      if (deltasWTD.length >= 3) {
+      // Threshold is 1+ samples — we'd rather show an imperfect number than
+      // a blank tile. If even the 30-day window has no data, fall through to null.
+      if (deltasWTD.length >= 1) {
         leadTimeDays = Number(avg(deltasWTD).toFixed(1));
         leadTimeWindow = 'wtd';
-      } else if (deltas30d.length >= 3) {
+      } else if (deltas30d.length >= 1) {
         leadTimeDays = Number(avg(deltas30d).toFixed(1));
         leadTimeWindow = '30d';
       }
