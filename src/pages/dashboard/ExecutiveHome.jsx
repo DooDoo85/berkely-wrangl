@@ -96,7 +96,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
   const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
-      className="card card-hover p-4 md:p-5 cursor-pointer h-full">
+      className="card card-hover p-4 md:p-5 cursor-pointer h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
@@ -213,7 +213,7 @@ function BusinessOverviewCard({
   ];
 
   return (
-    <div className="card p-4 md:p-6 h-full">
+    <div className="card p-4 md:p-6 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
       <div className="mb-4">
         <h2 className="font-display font-bold text-ink-strong text-2xl">Business Overview</h2>
         <div className="text-xs text-ink-muted mt-1">
@@ -364,10 +364,10 @@ function OperationsStatusTable({
   ];
 
   return (
-    <div className="card p-4 md:p-5 h-full">
+    <div className="card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
 
       {/* Panel header — matches Daily Sales hero treatment */}
-      <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200">
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-200">
         <div className="flex items-center gap-2.5">
           <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -384,12 +384,12 @@ function OperationsStatusTable({
       {/* Column headers row */}
       <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-2">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Stage</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center gap-1.5"
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-end gap-1.5"
              style={{ color: ROLLER }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
           Roller Shades
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center gap-1.5"
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-end gap-1.5"
              style={{ color: FAUX }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
           Faux Wood Blinds
@@ -397,10 +397,10 @@ function OperationsStatusTable({
       </div>
 
       {/* Stacked stage bands — tightened padding and smaller iconography */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {stages.map(s => (
           <div key={s.key}
-            className={`${s.bandBg} ring-1 ring-stone-200/50 rounded-xl overflow-hidden`}>
+            className={`${s.bandBg} ring-1 ring-stone-200 rounded-md overflow-hidden`}>
             <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
 
               {/* Stage chip — icon + label + sub-label */}
@@ -414,9 +414,9 @@ function OperationsStatusTable({
                 </div>
               </div>
 
-              {/* Roller cell — dashed left divider */}
+              {/* Roller cell — right-aligned numbers, dashed left divider */}
               <button onClick={s.roller.onClick}
-                className="group relative text-left py-3 px-3.5 self-stretch
+                className="group relative text-right py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
                 <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
@@ -428,9 +428,9 @@ function OperationsStatusTable({
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
 
-              {/* Faux cell — dashed left divider */}
+              {/* Faux cell — right-aligned numbers, dashed left divider */}
               <button onClick={s.faux.onClick}
-                className="group relative text-left py-3 px-3.5 self-stretch
+                className="group relative text-right py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
                 <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
@@ -447,11 +447,11 @@ function OperationsStatusTable({
       </div>
 
       {/* Operational footer — Total in Production, Started Today, Invoiced Today */}
-      <div className="mt-3 rounded-xl bg-stone-50/60 ring-1 ring-stone-100/80 px-3 py-2.5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-x divide-stone-200/60">
+      <div className="mt-3 rounded-md bg-stone-50/80 ring-1 ring-stone-200 px-3 py-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-x divide-stone-200">
           {/* Total in Production */}
           <div className="flex items-center gap-2 md:px-1">
-            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
+            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-stone-600 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <line x1="18" y1="20" x2="18" y2="10" />
@@ -470,7 +470,7 @@ function OperationsStatusTable({
 
           {/* Started Today */}
           <div className="flex items-center gap-2 px-3 md:px-3">
-            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-amber-700 flex items-center justify-center flex-shrink-0">
+            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-amber-700 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <polygon points="5 3 19 12 5 21 5 3" />
@@ -489,7 +489,7 @@ function OperationsStatusTable({
 
           {/* Invoiced Today */}
           <div className="flex items-center gap-2 px-3 md:px-3">
-            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-emerald-700 flex items-center justify-center flex-shrink-0">
+            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-emerald-700 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                    strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <polyline points="20 6 9 17 4 12" />
@@ -733,22 +733,12 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 })
 
   // Line path — through bar tops
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xCenter(i).toFixed(1)} ${yAt(d.sales).toFixed(1)}`).join(' ');
-  // Area-fill path — same line, closed to the X axis
-  const areaPath = `${linePath} L ${xCenter(n - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L ${xCenter(0).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
 
   const priorY = yAt(priorDailyAvg);
-  const gradientId = `combo-line-fill-${Math.random().toString(36).slice(2, 8)}`;
 
   return (
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"  stopColor={LINE_COLOR} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={LINE_COLOR} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
         {/* Y axis grid */}
         {ticks.map(t => {
           const y = padT + innerH - innerH * t;
@@ -757,7 +747,8 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 })
           return (
             <g key={t}>
               <line x1={padL} x2={width - padR} y1={y} y2={y}
-                    stroke="#e7e5e4" strokeWidth="1" strokeDasharray={t === 0 ? '' : '2 3'} />
+                    stroke={t === 0 ? "#d6d3d1" : "#e7e5e4"} strokeWidth="1"
+                    strokeDasharray={t === 0 ? '' : '2 3'} />
               <text x={padL - 6} y={y + 3} textAnchor="end"
                     fontSize="9.5" fill="#a7a29a" fontFamily="ui-sans-serif">{label}</text>
               <text x={width - padR + 6} y={y + 3} textAnchor="start"
@@ -799,9 +790,6 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 })
           <line x1={padL} x2={width - padR} y1={priorY} y2={priorY}
                 stroke={PRIOR_COLOR} strokeWidth="1.5" strokeDasharray="6 4" opacity="0.7" />
         )}
-
-        {/* Area fill under the line — gradient, very subtle */}
-        <path d={areaPath} fill={`url(#${gradientId})`} />
 
         {/* Solid line — thinner for compact chart */}
         <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="2.25"
@@ -902,15 +890,15 @@ function ProductRankedBars({ breakdown = [], total = 0, maxRows = 9 }) {
   const maxValue = displayed[0]?.value || 1;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {displayed.map((b, i) => {
         const pct = (b.value / grandTotal) * 100;
         const barPct = (b.value / maxValue) * 100;
         return (
           <div key={i} className="flex items-center gap-3 text-[11.5px]">
             <span className="w-32 truncate text-ink-strong font-medium flex-shrink-0">{b.label}</span>
-            <div className="flex-1 h-3 bg-stone-100/50 rounded-sm overflow-hidden">
-              <div className="h-full rounded-sm transition-all"
+            <div className="flex-1 h-2.5 bg-stone-100 rounded-sm overflow-hidden">
+              <div className="h-full transition-all"
                    style={{ width: `${barPct}%`, background: b.color }} />
             </div>
             <span className="tabular-nums text-ink-strong font-semibold w-14 text-right flex-shrink-0">
@@ -2317,8 +2305,8 @@ export default function ExecutiveHome() {
               substantial card: issue-type icon → order# + status pill (top
               line) + customer · reason (bottom line) → prominent aging
               badge → chevron. Group headers are colored per severity. */}
-          <div className="card-priority p-4 md:p-5 h-full">
-            <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200">
+          <div className="card-priority p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-200">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -2508,7 +2496,7 @@ export default function ExecutiveHome() {
               BR: Insights (auto-generated comparison statements)
             Card height stays. Internal proportions balanced so chart doesn't
             dominate and KPIs/secondary row have real presence. */}
-        <div className="card-priority bg-surface-page/40 p-4 md:p-5">
+        <div className="card-priority p-4 md:p-5 !rounded-lg ring-1 ring-stone-200 shadow-none">
 
           {/* HEADER — title + subtitle, stronger divider below */}
           <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-stone-200">
@@ -2524,8 +2512,8 @@ export default function ExecutiveHome() {
           <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6 mb-4 pb-4 border-b border-stone-200">
 
             {/* Combo chart */}
-            <div className="lg:pr-2 lg:border-r lg:border-stone-100">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+            <div className="lg:pr-3 lg:border-r lg:border-stone-200">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Orders Entered</p>
                 <p className="text-[10.5px] text-ink-muted">Last 5 business days</p>
               </div>
@@ -2533,15 +2521,15 @@ export default function ExecutiveHome() {
             </div>
 
             {/* 2×2 KPI cards */}
-            <div className="lg:pl-2">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+            <div className="lg:pl-3">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Sales Summary</p>
                 <p className="text-[10.5px] text-ink-muted">5-day totals</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {/* 5-day total sales */}
-                <div className="card p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-1.5">
+                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                          strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
@@ -2555,8 +2543,8 @@ export default function ExecutiveHome() {
                 </div>
 
                 {/* Orders entered */}
-                <div className="card p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-1.5">
+                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-md bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                          strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <circle cx="9" cy="21" r="1" />
@@ -2571,8 +2559,8 @@ export default function ExecutiveHome() {
                 </div>
 
                 {/* Avg roller order — Monthly */}
-                <div className="card p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-1.5">
+                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-md bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                          strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                       <circle cx="12" cy="12" r="10" />
@@ -2586,8 +2574,8 @@ export default function ExecutiveHome() {
                 </div>
 
                 {/* Top product */}
-                <div className="card p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center mb-1.5"
+                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
+                  <span className="w-7 h-7 rounded-md flex items-center justify-center mb-1.5"
                         style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
                                  color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -2613,8 +2601,8 @@ export default function ExecutiveHome() {
           <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6">
 
             {/* Sales by Product · YTD — horizontal ranked bars */}
-            <div className="lg:pr-2 lg:border-r lg:border-stone-100">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+            <div className="lg:pr-3 lg:border-r lg:border-stone-200">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
                   Sales by Product
                 </p>
@@ -2637,8 +2625,8 @@ export default function ExecutiveHome() {
             </div>
 
             {/* Insights — auto-generated comparison statements */}
-            <div className="lg:pl-2">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+            <div className="lg:pl-3">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
                   Insights
                 </p>
