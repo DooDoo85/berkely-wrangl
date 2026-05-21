@@ -364,26 +364,26 @@ function OperationsStatusTable({
   ];
 
   return (
-    <div className="card p-5 md:p-6 h-full">
+    <div className="card p-4 md:p-5 h-full">
 
-      {/* Panel header */}
-      <div className="mb-5">
-        <div className="flex items-center gap-2.5 mb-1">
-          <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center">
+      {/* Panel header — matches Daily Sales hero treatment */}
+      <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200">
+        <div className="flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                  strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
               <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4" />
               <rect x="9" y="2" width="6" height="9" rx="1" />
             </svg>
           </span>
-          <h3 className="text-base font-semibold text-ink-strong">Operations Status</h3>
+          <h3 className="font-display font-bold text-ink-strong text-lg leading-none">Operations Status</h3>
         </div>
-        <p className="text-[12px] text-ink-muted">Live overview of order flow by stage and product.</p>
+        <p className="text-[11px] text-ink-muted">Live order flow by stage</p>
       </div>
 
       {/* Column headers row */}
       <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">Stage</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Stage</div>
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center gap-1.5"
              style={{ color: ROLLER }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
@@ -396,93 +396,91 @@ function OperationsStatusTable({
         </div>
       </div>
 
-      {/* Stacked stage bands */}
-      <div className="space-y-2.5">
+      {/* Stacked stage bands — tightened padding and smaller iconography */}
+      <div className="space-y-2">
         {stages.map(s => (
           <div key={s.key}
             className={`${s.bandBg} ring-1 ring-stone-200/50 rounded-xl overflow-hidden`}>
             <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
 
-              {/* Stage chip — circular icon + label + sub-label */}
-              <div className="flex items-center gap-3 p-4">
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
+              {/* Stage chip — icon + label + sub-label */}
+              <div className="flex items-center gap-2.5 py-3 px-3.5">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
                   {s.iconSvg}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[15px] font-semibold text-ink-strong leading-tight">{s.label}</p>
-                  <p className="text-[11px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
+                  <p className="text-[14px] font-semibold text-ink-strong leading-tight">{s.label}</p>
+                  <p className="text-[10.5px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
                 </div>
               </div>
 
               {/* Roller cell — dashed left divider */}
               <button onClick={s.roller.onClick}
-                className="group relative text-left px-4 py-4 self-stretch
+                className="group relative text-left py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
-                <p className="text-3xl font-medium text-ink-strong tabular-nums leading-none">
+                <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
                   {s.roller.value}
                 </p>
                 {s.roller.sub && (
-                  <p className="text-[11px] text-ink-muted mt-2">{s.roller.sub}</p>
+                  <p className="text-[10.5px] text-ink-muted mt-1.5">{s.roller.sub}</p>
                 )}
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
 
               {/* Faux cell — dashed left divider */}
               <button onClick={s.faux.onClick}
-                className="group relative text-left px-4 py-4 self-stretch
+                className="group relative text-left py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
-                <p className="text-3xl font-medium text-ink-strong tabular-nums leading-none">
+                <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
                   {s.faux.value}
                 </p>
                 {s.faux.sub && (
-                  <p className="text-[11px] text-ink-muted mt-2">{s.faux.sub}</p>
+                  <p className="text-[10.5px] text-ink-muted mt-1.5">{s.faux.sub}</p>
                 )}
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Operational footer — Total in Production, Started Today, Invoiced Today.
-          Folds the old Production Flow widget's most actionable signals into the
-          Operations Status panel where they contextually belong. */}
-      <div className="mt-4 rounded-xl bg-stone-50/60 ring-1 ring-stone-100/80 px-4 py-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 divide-x divide-stone-200/60">
+      {/* Operational footer — Total in Production, Started Today, Invoiced Today */}
+      <div className="mt-3 rounded-xl bg-stone-50/60 ring-1 ring-stone-100/80 px-3 py-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-x divide-stone-200/60">
           {/* Total in Production */}
-          <div className="flex items-center gap-2.5 md:px-1">
-            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-2 md:px-1">
+            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-stone-600 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <line x1="18" y1="20" x2="18" y2="10" />
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Total in production</p>
-              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
+              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Total in production</p>
+              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
                 {loading ? "—" : totalInProduction}
-                <span className="text-[11px] font-normal text-ink-mid ml-1">orders</span>
+                <span className="text-[10.5px] font-normal text-ink-mid ml-1">orders</span>
               </p>
             </div>
           </div>
 
           {/* Started Today */}
-          <div className="flex items-center gap-2.5 px-4 md:px-3">
-            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-amber-700 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-2 px-3 md:px-3">
+            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-amber-700 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Started today</p>
-              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
+              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Started today</p>
+              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
                 {loading ? "—" : startedToday}
-                <span className="text-[11px] font-normal text-ink-mid ml-1">
+                <span className="text-[10.5px] font-normal text-ink-mid ml-1">
                   orders{startedTodayUnits > 0 ? ` · ${startedTodayUnits.toLocaleString()}u` : ''}
                 </span>
               </p>
@@ -490,18 +488,18 @@ function OperationsStatusTable({
           </div>
 
           {/* Invoiced Today */}
-          <div className="flex items-center gap-2.5 px-4 md:px-3">
-            <span className="w-9 h-9 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-emerald-700 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-2 px-3 md:px-3">
+            <span className="w-8 h-8 rounded-lg bg-white/80 ring-1 ring-stone-200/60 text-emerald-700 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Invoiced today</p>
-              <p className="text-base font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
+              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Invoiced today</p>
+              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
                 {loading ? "—" : invoicedToday}
-                <span className="text-[11px] font-normal text-ink-mid ml-1">
+                <span className="text-[10.5px] font-normal text-ink-mid ml-1">
                   orders{invoicedTodayUnits > 0 ? ` · ${invoicedTodayUnits.toLocaleString()}u` : ''}
                 </span>
               </p>
@@ -2293,10 +2291,10 @@ export default function ExecutiveHome() {
               substantial card: issue-type icon → order# + status pill (top
               line) + customer · reason (bottom line) → prominent aging
               badge → chevron. Group headers are colored per severity. */}
-          <div className="card-priority p-5 md:p-6 h-full">
-            <div className="flex items-start justify-between mb-4">
+          <div className="card-priority p-4 md:p-5 h-full">
+            <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex items-center justify-center">
+                <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                        strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -2304,7 +2302,7 @@ export default function ExecutiveHome() {
                     <line x1="12" y1="17" x2="12.01" y2="17" />
                   </svg>
                 </span>
-                <h3 className="text-base font-semibold text-ink-strong">Needs Attention</h3>
+                <h3 className="font-display font-bold text-ink-strong text-lg leading-none">Needs Attention</h3>
               </div>
               <div className="flex items-center gap-1.5">
                 {stuckTotal > 0 && (
@@ -2333,7 +2331,7 @@ export default function ExecutiveHome() {
 
             {/* On Hold group */}
             {stuckTotal > 0 && (
-              <div className="mb-5">
+              <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                     On Hold
