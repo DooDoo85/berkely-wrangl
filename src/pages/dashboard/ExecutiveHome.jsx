@@ -27,6 +27,13 @@ function fmt$Full(n) {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+// Week-over-week % change: returns null if prior period has no data.
+// Otherwise returns a positive or negative number (e.g. 12 for +12%, -5 for -5%).
+function wow(current, prior) {
+  if (!prior) return null;
+  return Math.round(((current - prior) / prior) * 100);
+}
+
 // ─── Sparkline ──────────────────────────────────────────────────────────────
 
 function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
@@ -53,12 +60,17 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe" }) {
 }
 
 // ─── Hero card (Roller / Faux with sparkline) ───────────────────────────────
-
-function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printedCount, loading, onClick }) {
+//
+// Revenue-focused card. Shows WTD sales, units, WoW% change, and a 30-day
+// sparkline. Credit OK / Printed counts intentionally removed — those now
+// live in the Operations Status table below, so we don't duplicate the info.
+//
+function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onClick }) {
+  const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
-      className="card card-hover p-4 md:p-6 cursor-pointer">
-      <div className="flex items-center justify-between mb-3">
+      className="card card-hover p-4 md:p-5 cursor-pointer h-full">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
           <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
@@ -66,56 +78,31 @@ function HeroCard({ label, accent, fill, data, sparkData, creditOkCount, printed
         <span className="text-xs text-ink-muted flex-shrink-0 ml-2">View →</span>
       </div>
 
-      {/* Dollar amount: stack WTD label below on mobile (was inline-baseline) */}
-      <div className="mb-3">
+      {/* WTD dollar amount */}
+      <div className="mb-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
             {loading ? "—" : fmt$Full(data.sales_wtd)}
           </span>
           <span className="text-xs text-ink-muted">WTD</span>
         </div>
-        <span className="text-xs text-ink-muted tabular-nums">
-          {loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}
-        </span>
       </div>
 
-      <div className="mb-4">
-        <Sparkline data={sparkData} color={accent} fillColor={fill} />
+      {/* Units + WoW% — one compact line */}
+      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3">
+        <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
+        {wowPct !== null && !loading && (
+          <>
+            <span className="text-ink-muted">·</span>
+            <span className={wowPositive ? "text-emerald-700" : "text-red-700"}>
+              {wowPositive ? "↑" : "↓"} {Math.abs(wowPct)}% vs last week
+            </span>
+          </>
+        )}
       </div>
 
-      {/* Stats row — 2x2 on mobile, 4-col on desktop */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-100">
-        <div>
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
-          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
-            {loading ? "—" : fmt$(data.sales_mtd)}
-          </p>
-          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
-            {loading ? "" : `${(data.units_mtd ?? 0).toLocaleString()} units`}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD</p>
-          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
-            {loading ? "—" : fmt$(data.sales_ytd)}
-          </p>
-          <p className="text-[10px] text-ink-muted tabular-nums mt-0.5">
-            {loading ? "" : `${(data.units_ytd ?? 0).toLocaleString()} units`}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">Credit OK</p>
-          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
-            {loading ? "—" : creditOkCount}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">Printed</p>
-          <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
-            {loading ? "—" : printedCount}
-          </p>
-        </div>
-      </div>
+      {/* 30-day sparkline */}
+      <Sparkline data={sparkData} color={accent} fillColor={fill} />
     </div>
   );
 }
@@ -131,6 +118,218 @@ function PipelineTile({ label, value, sub, accent, onClick }) {
       <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">{value}</p>
       {sub && <p className="text-xs text-ink-mid mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ─── Business Overview card ────────────────────────────────────────────────
+//
+// Top-left card consolidating the day's most-asked KPIs into one panel:
+// Sales WTD, Units WTD, Orders WTD, Avg P→Inv. Each shows the headline
+// figure plus a "vs last week" comparison where applicable.
+//
+function BusinessOverviewCard({
+  loading, todayEntered, todaySales,
+  salesWTD, unitsWTD, ordersWTD,
+  salesWoW, unitsWoW, ordersWoW,
+  avgDays,
+}) {
+  const kpis = [
+    {
+      label: "Sales (WTD)",
+      value: loading ? "—" : fmt$(salesWTD),
+      sub: salesWoW === null ? null : { wow: salesWoW, label: "vs last week" },
+      icon: "📊",
+    },
+    {
+      label: "Units Sold (WTD)",
+      value: loading ? "—" : (unitsWTD ?? 0).toLocaleString(),
+      sub: unitsWoW === null ? null : { wow: unitsWoW, label: "vs last week" },
+      icon: "📦",
+    },
+    {
+      label: "Orders (WTD)",
+      value: loading ? "—" : (ordersWTD ?? 0).toLocaleString(),
+      sub: ordersWoW === null ? null : { wow: ordersWoW, label: "vs last week" },
+      icon: "📋",
+    },
+    {
+      label: "Avg P → Inv",
+      value: loading ? "—" : (avgDays !== null ? `${avgDays}` : "—"),
+      valueSuffix: avgDays !== null ? "days" : null,
+      sub: { text: "90-day rolling" },
+      icon: "🕐",
+    },
+  ];
+
+  return (
+    <div className="card p-4 md:p-6 h-full">
+      <div className="mb-4">
+        <h2 className="font-display font-bold text-ink-strong text-2xl">Business Overview</h2>
+        <div className="text-xs text-ink-muted mt-1">
+          {loading ? "Loading…" :
+            <>
+              {todayEntered} order{todayEntered !== 1 ? 's' : ''} entered today
+              {todaySales > 0 && <> · {fmt$(todaySales)} in sales</>}
+            </>
+          }
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {kpis.map(k => (
+          <div key={k.label} className="bg-surface-page/40 rounded-xl p-3">
+            <div className="w-8 h-8 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-2">
+              {k.icon}
+            </div>
+            <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{k.label}</p>
+            <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1">
+              {k.value}
+              {k.valueSuffix && <span className="text-sm font-normal text-ink-muted ml-1">{k.valueSuffix}</span>}
+            </p>
+            {k.sub && (
+              <div className="mt-1.5 text-[11px] tabular-nums">
+                {k.sub.wow !== undefined ? (
+                  <>
+                    <span className={k.sub.wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                      {k.sub.wow >= 0 ? "↑" : "↓"} {Math.abs(k.sub.wow)}%
+                    </span>
+                    <span className="text-ink-muted ml-1">{k.sub.label}</span>
+                  </>
+                ) : (
+                  <span className="text-ink-muted">{k.sub.text}</span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Operations Status table ───────────────────────────────────────────────
+//
+// 3-row × (label + 2 product columns) compact pipeline view.
+// Replaces the two horizontal product-line rows. Reads like a table:
+// rows = stages, columns = product line. Eye scans diagonally.
+//
+function OperationsStatusTable({
+  loading,
+  creditOkRoller, creditOkFaux,
+  printedRoller, printedFaux,
+  inProdRoller, inProdFaux,
+  onCreditOkRollerClick, onCreditOkFauxClick,
+  onPrintedRollerClick, onPrintedFauxClick,
+  onInProdRollerClick, onInProdFauxClick,
+}) {
+  const ROLLER = "#b85d3a";
+  const FAUX   = "#d4a574";
+
+  const stages = [
+    {
+      key: "credit_ok",
+      icon: "✓",
+      iconBg: "bg-emerald-50 text-emerald-700",
+      label: "Credit OK",
+      sub: "Ready to print",
+      roller: {
+        value: loading ? "—" : creditOkRoller.count,
+        sub: creditOkRoller.total > 0 ? `${fmt$(creditOkRoller.total)} pending` : null,
+        onClick: onCreditOkRollerClick,
+      },
+      faux: {
+        value: loading ? "—" : creditOkFaux.count,
+        sub: creditOkFaux.total > 0 ? `${fmt$(creditOkFaux.total)} pending` : null,
+        onClick: onCreditOkFauxClick,
+      },
+    },
+    {
+      key: "printed",
+      icon: "🖨",
+      iconBg: "bg-amber-50 text-amber-700",
+      label: "Printed",
+      sub: "Ready for production",
+      roller: {
+        value: loading ? "—" : printedRoller.count,
+        sub: printedRoller.units > 0 ? `${printedRoller.units.toLocaleString()} units` : null,
+        onClick: onPrintedRollerClick,
+      },
+      faux: {
+        value: loading ? "—" : printedFaux.count,
+        sub: printedFaux.units > 0 ? `${printedFaux.units.toLocaleString()} units` : null,
+        onClick: onPrintedFauxClick,
+      },
+    },
+    {
+      key: "in_production",
+      icon: "⚙",
+      iconBg: "bg-stone-100 text-stone-700",
+      label: "In Production",
+      sub: "On the floor",
+      roller: {
+        value: loading ? "—" : inProdRoller.count,
+        sub: inProdRoller.units > 0 ? `${inProdRoller.units.toLocaleString()} units` : null,
+        onClick: onInProdRollerClick,
+      },
+      faux: {
+        value: loading ? "—" : inProdFaux.count,
+        sub: inProdFaux.units > 0 ? `${inProdFaux.units.toLocaleString()} units` : null,
+        onClick: onInProdFauxClick,
+      },
+    },
+  ];
+
+  return (
+    <div className="card p-4 md:p-6 h-full">
+      <h3 className="text-sm font-medium text-ink-strong mb-4">Operations Status</h3>
+
+      {/* Column headers */}
+      <div className="grid grid-cols-[1fr_1fr_1fr] gap-3 pb-2 border-b border-stone-100 mb-2">
+        <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-[0.1em]">Stage</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
+             style={{ color: ROLLER }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
+          Roller Shades
+        </div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1.5"
+             style={{ color: FAUX }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
+          Faux Wood Blinds
+        </div>
+      </div>
+
+      {/* Rows */}
+      <div className="divide-y divide-stone-100">
+        {stages.map(s => (
+          <div key={s.key} className="grid grid-cols-[1fr_1fr_1fr] gap-3 py-3 items-center">
+            {/* Stage label cell */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${s.iconBg}`}>
+                {s.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink-strong leading-tight">{s.label}</p>
+                <p className="text-[11px] text-ink-muted leading-tight">{s.sub}</p>
+              </div>
+            </div>
+
+            {/* Roller cell */}
+            <button onClick={s.roller.onClick}
+              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
+              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.roller.value}</p>
+              {s.roller.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.roller.sub}</p>}
+            </button>
+
+            {/* Faux cell */}
+            <button onClick={s.faux.onClick}
+              className="text-left hover:bg-surface-page/40 rounded-md px-2 py-1 -mx-2 transition-colors">
+              <p className="text-xl font-medium text-ink-strong tabular-nums">{s.faux.value}</p>
+              {s.faux.sub && <p className="text-[11px] text-ink-mid mt-0.5">{s.faux.sub}</p>}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -361,9 +560,9 @@ export default function ExecutiveHome() {
   const [loading, setLoading] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState(new Date());
   const [wipModal, setWipModal] = useState(null);
-  const [creditOkModal, setCreditOkModal] = useState(false);
+  const [creditOkModal, setCreditOkModal] = useState(false);    // false|true|'roller'|'faux'
   const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
-  const [inProductionModal, setInProductionModal] = useState(false);
+  const [inProductionModal, setInProductionModal] = useState(false);  // false|true|'roller'|'faux'
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     stuckOrders: [], avgDays: null, repOrders: [],
@@ -384,6 +583,9 @@ export default function ExecutiveHome() {
     dailySales: [],
     productionFlow: [],
     todayEntered: 0, todayShipped: 0, todaySales: 0,
+    salesWTD: 0, unitsWTD: 0, ordersWTD: 0,
+    salesWoW: null, unitsWoW: null, ordersWoW: null,
+    rollerWoW: null, fauxWoW: null,
   });
 
   const load = useCallback(async () => {
@@ -760,6 +962,50 @@ export default function ExecutiveHome() {
         return rollerSparkMap[d.toISOString().slice(0, 10)] || 0;
       });
 
+      // ── Business Overview totals + WoW comparison ─────────────────────
+      // Compute weekly totals (sales/units/orders) from the same orders we
+      // already pulled for sparklines, plus a separate pass for prior-week
+      // baselines so we can show "↑ 12% vs last week" deltas.
+      //
+      // Current week = Mon..now. Prior week = Mon-7d..Sun-7d (full 7 days).
+      const lastWeekStart = new Date(weekStart);
+      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+      const lastWeekEnd = new Date(weekStart);
+      lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+      const lastWeekStartStr = lastWeekStart.toISOString().slice(0, 10);
+      const lastWeekEndStr   = lastWeekEnd.toISOString().slice(0, 10);
+
+      const { data: wowOrders } = await supabase
+        .from("orders")
+        .select("order_date, order_amount, total_units")
+        .gte("order_date", lastWeekStartStr)
+        .neq("status", "quote")
+        .not("order_date", "is", null);
+
+      let salesWTD = 0, unitsWTD = 0, ordersWTD = 0;
+      let salesLastWk = 0, unitsLastWk = 0, ordersLastWk = 0;
+      (wowOrders ?? []).forEach(r => {
+        const d = r.order_date;
+        const amt = Number(r.order_amount || 0);
+        const u = Number(r.total_units || 0);
+        if (d >= weekStartDate) {
+          salesWTD += amt; unitsWTD += u; ordersWTD += 1;
+        } else if (d >= lastWeekStartStr && d <= lastWeekEndStr) {
+          salesLastWk += amt; unitsLastWk += u; ordersLastWk += 1;
+        }
+      });
+      const salesWoW  = wow(salesWTD,  salesLastWk);
+      const unitsWoW  = wow(unitsWTD,  unitsLastWk);
+      const ordersWoW = wow(ordersWTD, ordersLastWk);
+
+      // Per-product WoW for the HeroCards (uses sparkRows we already have)
+      const rollerSalesThisWk = rollerSpark.slice(-7).reduce((s, v) => s + v, 0);
+      const rollerSalesLastWk = rollerSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
+      const fauxSalesThisWk   = fauxSpark.slice(-7).reduce((s, v) => s + v, 0);
+      const fauxSalesLastWk   = fauxSpark.slice(-14, -7).reduce((s, v) => s + v, 0);
+      const rollerWoW = wow(rollerSalesThisWk, rollerSalesLastWk);
+      const fauxWoW   = wow(fauxSalesThisWk, fauxSalesLastWk);
+
       // ── Top customers this week ───────────────────────────────────────
       const { data: weekOrders } = await supabase
         .from("orders")
@@ -818,6 +1064,10 @@ export default function ExecutiveHome() {
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
         todaySales,
+        // Business Overview totals + WoW
+        salesWTD, unitsWTD, ordersWTD,
+        salesWoW, unitsWoW, ordersWoW,
+        rollerWoW, fauxWoW,
       });
       setRefreshedAt(new Date());
     } catch(err) { console.error("ExecutiveHome:", err); }
@@ -837,24 +1087,12 @@ export default function ExecutiveHome() {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-8">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-6">
 
-        {/* ── Header — stacks on mobile so Refresh isn't crammed ────────── */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-5 md:mb-6">
-          <div>
-            <h1 className="font-display text-2xl md:text-4xl">Business Overview</h1>
-            <p className="text-sm text-ink-mid mt-1">
-              {loading ? "Loading…" : (
-                <>
-                  {data.todayEntered} order{data.todayEntered !== 1 ? 's' : ''} entered today
-                  {data.todayShipped > 0 && <> · {data.todayShipped} shipped</>}
-                  {data.todaySales > 0 && <> · {fmt$(data.todaySales)} in sales</>}
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center justify-between md:flex-col md:items-end md:text-right md:pt-1">
-            <div className="text-xs text-ink-muted md:mb-1.5">
+        {/* ── Compact top bar — refresh + timestamp only (page header is in sidebar) ── */}
+        <div className="flex items-center justify-end mb-3 md:mb-4">
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-ink-muted">
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
             <button onClick={load} disabled={loading}
@@ -864,16 +1102,30 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* ── Hero Row ── stacks on mobile so cards aren't cramped ─────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mb-4">
+        {/* ═══ ROW 1 — Revenue & sales view ═══════════════════════════════
+            Business Overview KPIs on the left, product revenue cards on the right.
+            BO spans wider so the 4 KPIs have room; the two product cards share equal
+            remaining width. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-3 lg:gap-4 mb-4">
+          <BusinessOverviewCard
+            loading={loading}
+            todayEntered={data.todayEntered}
+            todaySales={data.todaySales}
+            salesWTD={data.salesWTD}
+            unitsWTD={data.unitsWTD}
+            ordersWTD={data.ordersWTD}
+            salesWoW={data.salesWoW}
+            unitsWoW={data.unitsWoW}
+            ordersWoW={data.ordersWoW}
+            avgDays={data.avgDays}
+          />
           <HeroCard
             label="Roller Shades"
             accent={ROLLER_ACCENT}
             fill={ROLLER_FILL}
             data={data.roller}
             sparkData={data.rollerSpark}
-            creditOkCount={data.creditOkRoller.count}
-            printedCount={data.printedTotal.count}
+            wowPct={data.rollerWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=roller")}
           />
@@ -883,203 +1135,128 @@ export default function ExecutiveHome() {
             fill={FAUX_FILL}
             data={data.faux}
             sparkData={data.fauxSpark}
-            creditOkCount={data.creditOkFaux.count}
-            printedCount={data.fauxPrintedTotal.count}
+            wowPct={data.fauxWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=faux")}
           />
         </div>
 
-        {/* ── Pipeline by product line — two rows, one per product ──────
-            Row 1: Roller pipeline (Credit OK → Printed → In Production)
-            Row 2: Faux pipeline (Credit OK → Printed → In Production)
-            Row 3: Avg P→Inv (product-agnostic pipeline-wide metric)
-            Each tile is clickable to drill into the matching modal.
-            TODO: pass productLine filter into CreditOkModal & InProductionModal
-            so clicking "Credit OK · Roller" shows only roller orders, etc.   */}
-        <div className="mb-4 space-y-3">
+        {/* ═══ ROW 2 — Operational view ═══════════════════════════════════
+            Operations Status table on the left (pipeline by product line).
+            Combined "Needs Attention" widget on the right — merges the old
+            Orders on Hold + Stuck Orders into one widget with two sections,
+            since both are "this needs human attention" lists. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3 lg:gap-4 mb-4">
+          <OperationsStatusTable
+            loading={loading}
+            creditOkRoller={data.creditOkRoller}
+            creditOkFaux={data.creditOkFaux}
+            printedRoller={data.printedTotal}
+            printedFaux={data.fauxPrintedTotal}
+            inProdRoller={data.inProductionRoller}
+            inProdFaux={data.inProductionFaux}
+            onCreditOkRollerClick={() => setCreditOkModal('roller')}
+            onCreditOkFauxClick={() => setCreditOkModal('faux')}
+            onPrintedRollerClick={() => setWipModal("PRINTED")}
+            onPrintedFauxClick={() => setFauxPrintedModal(true)}
+            onInProdRollerClick={() => setInProductionModal('roller')}
+            onInProdFauxClick={() => setInProductionModal('faux')}
+          />
 
-          {/* ROLLER row */}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5 px-1"
-                 style={{ color: ROLLER_ACCENT }}>
-              Roller Shades
-            </div>
-            <div className="md:grid md:grid-cols-3 md:gap-3
-                            flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
-                            snap-x snap-mandatory md:snap-none
-                            [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
-                            [&>*]:snap-start">
-              <PipelineTile
-                label="Credit OK · Roller"
-                value={loading ? "—" : data.creditOkRoller.count}
-                sub={data.creditOkRoller.total > 0 ? `${fmt$(data.creditOkRoller.total)} pending` : null}
-                accent={ROLLER_ACCENT}
-                onClick={() => setCreditOkModal(true)}
-              />
-              <PipelineTile
-                label="Printed · Roller"
-                value={loading ? "—" : data.printedTotal.count}
-                sub={data.printedTotal.units > 0 ? `${data.printedTotal.units.toLocaleString()} units` : null}
-                accent={ROLLER_ACCENT}
-                onClick={() => setWipModal("PRINTED")}
-              />
-              <PipelineTile
-                label="In Production · Roller"
-                value={loading ? "—" : data.inProductionRoller.count}
-                sub={data.inProductionRoller.units > 0 ? `${data.inProductionRoller.units.toLocaleString()} units` : (data.inProductionRoller.count > 0 ? "cutting now" : null)}
-                accent={ROLLER_ACCENT}
-                onClick={() => setInProductionModal(true)}
-              />
-            </div>
-          </div>
-
-          {/* FAUX row */}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5 px-1"
-                 style={{ color: FAUX_ACCENT }}>
-              Faux Wood Blinds
-            </div>
-            <div className="md:grid md:grid-cols-3 md:gap-3
-                            flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
-                            snap-x snap-mandatory md:snap-none
-                            [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
-                            [&>*]:snap-start">
-              <PipelineTile
-                label="Credit OK · Faux"
-                value={loading ? "—" : data.creditOkFaux.count}
-                sub={data.creditOkFaux.total > 0 ? `${fmt$(data.creditOkFaux.total)} pending` : null}
-                accent={FAUX_ACCENT}
-                onClick={() => setCreditOkModal(true)}
-              />
-              <PipelineTile
-                label="Printed · Faux"
-                value={loading ? "—" : data.fauxPrintedTotal.count}
-                sub={data.fauxPrintedTotal.units > 0 ? `${data.fauxPrintedTotal.units.toLocaleString()} units` : null}
-                accent={FAUX_ACCENT}
-                onClick={() => setFauxPrintedModal(true)}
-              />
-              <PipelineTile
-                label="In Production · Faux"
-                value={loading ? "—" : data.inProductionFaux.count}
-                sub={data.inProductionFaux.units > 0 ? `${data.inProductionFaux.units.toLocaleString()} units` : (data.inProductionFaux.count > 0 ? "cutting now" : null)}
-                accent={FAUX_ACCENT}
-                onClick={() => setInProductionModal(true)}
-              />
-            </div>
-          </div>
-
-          {/* Avg P→Inv — pipeline-wide metric, sits below the per-product rows */}
-          <div className="md:max-w-[33%]">
-            <PipelineTile
-              label="Avg P→Inv"
-              value={loading ? "—" : (data.avgDays !== null ? `${data.avgDays}d` : "—")}
-              sub="90-day rolling · all products"
-            />
-          </div>
-        </div>
-
-        {/* ── Action Zone: Orders on Hold + Stuck Orders ─ stacks on mobile ─ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          {/* Orders on Hold */}
+          {/* Needs Attention — combined Hold + SLA widget */}
           <div className="card-priority p-4 md:p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-ink-strong">Needs Attention</h3>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-ink-strong">Orders on Hold</h3>
-                {stuckTotal > 0 && (
-                  <span className="pill-warning">
-                    {stuckTotal} on hold
-                  </span>
-                )}
+                {stuckTotal > 0 && <span className="pill-warning">{stuckTotal} on hold</span>}
+                {overdueTotal > 0 && <span className="pill-critical">{overdueTotal} past SLA</span>}
               </div>
-              <button onClick={() => navigate("/orders/on-hold")}
-                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
             </div>
-            {stuckTotal === 0 ? (
-              <p className="text-sm text-ink-muted text-center py-6">No orders on hold ✓</p>
-            ) : (
-              <div className="space-y-1">
-                {data.stuckOrders.map(o => {
-                  const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
-                  return (
+
+            {/* Empty state — only when both lists are empty */}
+            {stuckTotal === 0 && overdueTotal === 0 && (
+              <p className="text-sm text-ink-muted text-center py-6">No issues — all clear ✓</p>
+            )}
+
+            {/* On Hold section */}
+            {stuckTotal > 0 && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                    On Hold
+                  </span>
+                  <button onClick={() => navigate("/orders/on-hold")}
+                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
+                </div>
+                <div className="space-y-0.5">
+                  {data.stuckOrders.slice(0, 4).map(o => {
+                    const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
+                    return (
+                      <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                        className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
+                            {statusDisplay && (
+                              <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                {statusDisplay}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-ink-mid mt-0.5 truncate">
+                            {o.customer ?? "—"}
+                            {o.hold_reason && <span className="text-ink-muted"> · {o.hold_reason}</span>}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
+                          o.days >= 8 ? "bg-status-critical-soft text-status-critical" :
+                          o.days >= 3 ? "bg-status-warning-soft text-status-warning" :
+                                        "bg-surface-page text-ink-mid"
+                        }`}>
+                          {o.days}d
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Past SLA section */}
+            {overdueTotal > 0 && (
+              <div className={stuckTotal > 0 ? "pt-3 border-t border-stone-100" : ""}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                    Past SLA
+                  </span>
+                  <button onClick={() => setWipModal("PRINTED")}
+                    className="text-[11px] text-ink-muted hover:text-ink-mid">View all →</button>
+                </div>
+                <div className="space-y-0.5">
+                  {data.overdueOrders.slice(0, 4).map(o => (
                     <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                      className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
+                      className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-surface-page/40 rounded-md px-2 -mx-2 transition-colors">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                          {statusDisplay && (
-                            <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                              {statusDisplay}
-                            </span>
-                          )}
+                          <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                            PRINTED
+                          </span>
                         </div>
-                        <p className="text-xs text-ink-mid mt-0.5 truncate">
+                        <p className="text-[11px] text-ink-mid mt-0.5 truncate">
                           {o.customer ?? "—"}
-                          {o.hold_reason && (
-                            <span className="text-ink-muted"> · {o.hold_reason}</span>
-                          )}
+                          {o.sidemark && <span className="text-ink-muted"> · {o.sidemark}</span>}
                         </p>
                       </div>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${
-                        o.days >= 8 ? "bg-status-critical-soft text-status-critical" :
-                        o.days >= 3 ? "bg-status-warning-soft text-status-warning" :
-                                      "bg-surface-page text-ink-mid"
-                      }`}>
-                        {o.days}d
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Stuck Orders (printed, past SLA) */}
-          <div className="card-priority p-4 md:p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-ink-strong">Stuck Orders</h3>
-                {overdueTotal > 0 && (
-                  <span className="pill-critical">
-                    {overdueTotal} past SLA
-                  </span>
-                )}
-              </div>
-              <button onClick={() => setWipModal("PRINTED")}
-                className="text-xs text-ink-muted hover:text-ink-mid">View all →</button>
-            </div>
-            {overdueTotal === 0 ? (
-              <p className="text-sm text-ink-muted text-center py-6">All printed orders within SLA ✓</p>
-            ) : (
-              <div className="space-y-1">
-                {data.overdueOrders.map(o => (
-                  <div key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                    className="flex items-center justify-between py-2 cursor-pointer hover:bg-surface-page/40 rounded-lg px-2 transition-colors">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-ink-strong">#{o.order_no}</p>
-                        <span className="text-[10px] font-medium text-ink-muted bg-surface-page/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                          PRINTED
-                        </span>
-                      </div>
-                      <p className="text-xs text-ink-mid mt-0.5 truncate">
-                        {o.customer ?? "—"}
-                        {o.sidemark && (
-                          <span className="text-ink-muted"> · {o.sidemark}</span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 ml-2 whitespace-nowrap">
-                      <span className="text-[10px] text-ink-muted">SLA {o.sla_days}d</span>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         o.days_over >= 5 ? "bg-status-critical-soft text-status-critical" :
-                                            "bg-status-warning-soft text-status-warning"
+                                          "bg-status-warning-soft text-status-warning"
                       }`}>
-                        {o.days_in_status}d · +{o.days_over}
+                        +{o.days_over}d
                       </span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1220,7 +1397,12 @@ export default function ExecutiveHome() {
 
       {/* ── Faux Printed Modal ──────────────────────────────────────────── */}
       {fauxPrintedModal && <FauxPrintedModal onClose={() => setFauxPrintedModal(false)} />}
-      {inProductionModal && <InProductionModal onClose={() => setInProductionModal(false)} />}
+      {inProductionModal && (
+        <InProductionModal
+          productFilter={inProductionModal === true ? 'all' : inProductionModal}
+          onClose={() => setInProductionModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1321,7 +1503,7 @@ function FauxPrintedModal({ onClose }) {
   )
 }
 
-function InProductionModal({ onClose }) {
+function InProductionModal({ onClose, productFilter }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -1338,7 +1520,12 @@ function InProductionModal({ onClose }) {
     })()
   }, [])
 
-  const totalUnits = rows.reduce((s, r) => s + (r.total_units || 0), 0)
+  // productFilter: 'roller' | 'faux' | 'all' (or anything truthy that isn't roller/faux means all)
+  const filteredRows = (productFilter === 'roller' || productFilter === 'faux')
+    ? rows.filter(r => r.product_line === productFilter)
+    : rows;
+  const totalUnits = filteredRows.reduce((s, r) => s + (r.total_units || 0), 0)
+  const lineLabel = productFilter === 'roller' ? 'Roller' : productFilter === 'faux' ? 'Faux' : 'All';
 
   // Business-day calculation (skips weekends)
   const daysSinceFn = (dateStr) => {
@@ -1363,8 +1550,8 @@ function InProductionModal({ onClose }) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h3 className="font-bold text-gray-900">In Production</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{rows.length} orders · {totalUnits.toLocaleString()} units</p>
+            <h3 className="font-bold text-gray-900">In Production · {lineLabel}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} orders · {totalUnits.toLocaleString()} units</p>
           </div>
           <button onClick={onClose}
             className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
@@ -1383,9 +1570,9 @@ function InProductionModal({ onClose }) {
             <tbody>
               {loading ? (
                 <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">No orders in production</td></tr>
-              ) : rows.map((r, i) => {
+              ) : filteredRows.map((r, i) => {
                 const days = daysSinceFn(r.wrangl_status_set_at)
                 return (
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
