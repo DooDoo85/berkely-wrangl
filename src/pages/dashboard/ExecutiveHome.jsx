@@ -698,11 +698,11 @@ function ComboChart({ data = [], priorDailyAvg = 0, width = 720, height = 190 })
   if (!data.length) return <div className="h-48 flex items-center justify-center text-sm text-ink-muted">No data</div>;
 
   const SEG = {
-    roller: '#b85d3a',
-    faux:   '#c2913a',
-    other:  '#8c7758',
+    roller: '#b85d3a',  // strong clay (brand accent, unchanged)
+    faux:   '#e3b87a',  // lighter warm honey (more contrast vs clay than the old gold)
+    other:  '#c4b59a',  // quiet sand (subtle, doesn't fight the primary segments)
   };
-  const LINE_COLOR = '#9d4f30';
+  const LINE_COLOR = '#7a3a1f';  // deeper rust — distinct from any bar segment
   const PRIOR_COLOR = '#a7a29a';
 
   const padL = 44, padR = 44, padT = 8, padB = 36;
@@ -1013,11 +1013,11 @@ function InsightsList({ kpis = {}, loading = false }) {
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2 pl-0.5">
       {insights.map(i => (
-        <li key={i.key} className="flex items-start gap-2 text-[12px] text-ink-mid leading-snug">
+        <li key={i.key} className="flex items-start gap-2.5 text-[12px] text-ink-mid leading-relaxed">
           {/* Tone dot */}
-          <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+          <span className={`w-1.5 h-1.5 rounded-full mt-[7px] flex-shrink-0 ${
             i.tone === 'up' ? "bg-emerald-500" :
             i.tone === 'down' ? "bg-red-500" :
                                 "bg-stone-400"
@@ -2486,8 +2486,8 @@ export default function ExecutiveHome() {
             dominate and KPIs/secondary row have real presence. */}
         <div className="card-priority bg-surface-page/40 p-4 md:p-5">
 
-          {/* HEADER — single compact line treatment */}
-          <div className="flex items-baseline justify-between mb-3 pb-3 border-b border-stone-200/50">
+          {/* HEADER — title + subtitle, stronger divider below */}
+          <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-stone-200">
             <h3 className="font-display font-bold text-ink-strong text-lg md:text-xl leading-none">
               Daily Sales · Last 5 Business Days
             </h3>
@@ -2496,18 +2496,24 @@ export default function ExecutiveHome() {
             </p>
           </div>
 
-          {/* TOP ROW — Chart (2/3) + KPI cards (1/3) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 mb-4">
+          {/* TOP ROW — Chart (2/3) + KPI cards (1/3) — with vertical divider between */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6 mb-4 pb-4 border-b border-stone-200">
 
             {/* Combo chart */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">Orders Entered</p>
+            <div className="lg:pr-2 lg:border-r lg:border-stone-100">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Orders Entered</p>
+                <p className="text-[10.5px] text-ink-muted">Last 5 business days</p>
+              </div>
               <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
             </div>
 
-            {/* 2×2 KPI cards — no WoW deltas, matches mockup style */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">Sales Summary</p>
+            {/* 2×2 KPI cards */}
+            <div className="lg:pl-2">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Sales Summary</p>
+                <p className="text-[10.5px] text-ink-muted">5-day totals</p>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 {/* 5-day total sales */}
                 <div className="card p-2.5 flex flex-col items-center text-center">
@@ -2579,25 +2585,17 @@ export default function ExecutiveHome() {
             </div>
           </div>
 
-          {/* BOTTOM ROW — Sales by Product (2/3) + Insights (1/3) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 pt-4 border-t border-stone-200/50">
+          {/* BOTTOM ROW — Sales by Product (2/3) + Insights (1/3) — vertical divider between */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6">
 
-            {/* Sales by Product · YTD — horizontal ranked bars.
-                PHASE 1 (today): wired to top-level Roller/Faux YTD totals
-                we already have. Visually meaningful for now.
-                PHASE 2 (next session): swap `breakdown` array for the 9-row
-                sub-product data from ROLLER SHADE INVOICE BY PRODUCT report
-                once that report ingests into Supabase. One-line change. */}
-            <div>
-              <div className="flex items-baseline justify-between mb-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            {/* Sales by Product · YTD — horizontal ranked bars */}
+            <div className="lg:pr-2 lg:border-r lg:border-stone-100">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
                   Sales by Product
                 </p>
-                <p className="text-[11px] text-ink-muted">Roller · YTD</p>
+                <p className="text-[10.5px] text-ink-muted">Roller · YTD</p>
               </div>
-              {/* Real sub-product breakdown from roller_product_breakdown table.
-                  If empty (table not seeded yet), fall back to top-level
-                  Roller/Faux totals so the panel isn't blank. */}
               {data.rollerProductBreakdown && data.rollerProductBreakdown.length > 0 ? (
                 <ProductRankedBars
                   breakdown={data.rollerProductBreakdown}
@@ -2615,12 +2613,12 @@ export default function ExecutiveHome() {
             </div>
 
             {/* Insights — auto-generated comparison statements */}
-            <div>
-              <div className="flex items-baseline justify-between mb-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            <div className="lg:pl-2">
+              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-100">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
                   Insights
                 </p>
-                <p className="text-[11px] text-ink-muted">vs prior 5 days</p>
+                <p className="text-[10.5px] text-ink-muted">vs prior 5 days</p>
               </div>
               <InsightsList kpis={data.salesKpis} loading={loading} />
             </div>
