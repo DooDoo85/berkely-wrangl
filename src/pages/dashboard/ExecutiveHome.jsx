@@ -378,6 +378,8 @@ export default function ExecutiveHome() {
     fauxPrintedTotal: { count: 0, units: 0 },
     inProductionCount: 0,
     inProductionUnits: 0,
+    inProductionRoller: { count: 0, units: 0 },
+    inProductionFaux: { count: 0, units: 0 },
     topCustomers: [],
     dailySales: [],
     productionFlow: [],
@@ -391,15 +393,26 @@ export default function ExecutiveHome() {
       const weekStartDate = weekStart.slice(0, 10);
       const today = new Date().toISOString().slice(0, 10);
 
-      // ── In Production count + units ───────────────────────────────────
+      // ── In Production count + units (split by product line) ───────────
       // PIC's flow is Printed → Invoiced (no in-between). Rene's "Start Production"
       // button in Wrangl creates this middle stage by setting wrangl_status only.
       // So wrangl_status is the sole source of truth here.
       const { data: inProductionRows } = await supabase.from("orders")
-        .select("total_units")
+        .select("total_units, product_line")
         .eq("wrangl_status", "in_production");
-      const inProductionCount = (inProductionRows ?? []).length;
-      const inProductionUnits = (inProductionRows ?? []).reduce((s, r) => s + (r.total_units || 0), 0);
+      const inProdAll = inProductionRows ?? [];
+      const inProductionCount = inProdAll.length;
+      const inProductionUnits = inProdAll.reduce((s, r) => s + (r.total_units || 0), 0);
+      const inProdRollerRows = inProdAll.filter(r => r.product_line === 'roller');
+      const inProdFauxRows   = inProdAll.filter(r => r.product_line === 'faux');
+      const inProductionRoller = {
+        count: inProdRollerRows.length,
+        units: inProdRollerRows.reduce((s, r) => s + (r.total_units || 0), 0),
+      };
+      const inProductionFaux = {
+        count: inProdFauxRows.length,
+        units: inProdFauxRows.reduce((s, r) => s + (r.total_units || 0), 0),
+      };
 
       // ── Avg days printed → invoiced (last 90 days) ───────────────────
       const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
@@ -492,8 +505,16 @@ export default function ExecutiveHome() {
         count: creditAll.length,
         total: creditAll.reduce((s, r) => s + Number(r.order_amount || 0), 0),
       };
-      const creditOkRoller = { count: creditAll.filter(r => r.product_line === 'roller').length };
-      const creditOkFaux   = { count: creditAll.filter(r => r.product_line === 'faux').length };
+      const creditOkRollerRows = creditAll.filter(r => r.product_line === 'roller');
+      const creditOkFauxRows   = creditAll.filter(r => r.product_line === 'faux');
+      const creditOkRoller = {
+        count: creditOkRollerRows.length,
+        total: creditOkRollerRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+      };
+      const creditOkFaux = {
+        count: creditOkFauxRows.length,
+        total: creditOkFauxRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+      };
 
       // For the Credit OK modal table — map to the legacy shape so the modal
       // doesn't need to change. (order_no, salesperson, etc. match what the
@@ -791,6 +812,8 @@ export default function ExecutiveHome() {
         printedTotal, fauxPrintedTotal,
         inProductionCount: inProductionCount ?? 0,
         inProductionUnits: inProductionUnits ?? 0,
+        inProductionRoller,
+        inProductionFaux,
         topCustomers, dailySales, productionFlow,
         todayEntered: todayEntered ?? 0,
         todayShipped: todayShipped ?? 0,
@@ -867,43 +890,93 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ── Pipeline Strip — horizontal scroll on mobile, 5-col grid on desktop ─ */}
-        <div className="md:grid md:grid-cols-5 md:gap-3 mb-4
-                        flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
-                        snap-x snap-mandatory md:snap-none
-                        [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
-                        [&>*]:snap-start">
-          <PipelineTile
-            label="Credit OK"
-            value={loading ? "—" : data.creditOk.count}
-            sub={data.creditOk.total > 0 ? `${fmt$(data.creditOk.total)} pending` : null}
-            onClick={() => setCreditOkModal(true)}
-          />
-          <PipelineTile
-            label="Printed · Roller"
-            value={loading ? "—" : data.printedTotal.count}
-            sub={data.printedTotal.units > 0 ? `${data.printedTotal.units.toLocaleString()} units` : null}
-            accent={ROLLER_ACCENT}
-            onClick={() => setWipModal("PRINTED")}
-          />
-          <PipelineTile
-            label="Printed · Faux"
-            value={loading ? "—" : data.fauxPrintedTotal.count}
-            sub={data.fauxPrintedTotal.units > 0 ? `${data.fauxPrintedTotal.units.toLocaleString()} units` : null}
-            accent={FAUX_ACCENT}
-            onClick={() => setFauxPrintedModal(true)}
-          />
-          <PipelineTile
-            label="In Production"
-            value={loading ? "—" : data.inProductionCount}
-            sub={data.inProductionUnits > 0 ? `${data.inProductionUnits.toLocaleString()} units` : (data.inProductionCount > 0 ? "cutting now" : null)}
-            onClick={() => setInProductionModal(true)}
-          />
-          <PipelineTile
-            label="Avg P→Inv"
-            value={loading ? "—" : (data.avgDays !== null ? `${data.avgDays}d` : "—")}
-            sub="90-day rolling"
-          />
+        {/* ── Pipeline by product line — two rows, one per product ──────
+            Row 1: Roller pipeline (Credit OK → Printed → In Production)
+            Row 2: Faux pipeline (Credit OK → Printed → In Production)
+            Row 3: Avg P→Inv (product-agnostic pipeline-wide metric)
+            Each tile is clickable to drill into the matching modal.
+            TODO: pass productLine filter into CreditOkModal & InProductionModal
+            so clicking "Credit OK · Roller" shows only roller orders, etc.   */}
+        <div className="mb-4 space-y-3">
+
+          {/* ROLLER row */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5 px-1"
+                 style={{ color: ROLLER_ACCENT }}>
+              Roller Shades
+            </div>
+            <div className="md:grid md:grid-cols-3 md:gap-3
+                            flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
+                            snap-x snap-mandatory md:snap-none
+                            [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
+                            [&>*]:snap-start">
+              <PipelineTile
+                label="Credit OK · Roller"
+                value={loading ? "—" : data.creditOkRoller.count}
+                sub={data.creditOkRoller.total > 0 ? `${fmt$(data.creditOkRoller.total)} pending` : null}
+                accent={ROLLER_ACCENT}
+                onClick={() => setCreditOkModal(true)}
+              />
+              <PipelineTile
+                label="Printed · Roller"
+                value={loading ? "—" : data.printedTotal.count}
+                sub={data.printedTotal.units > 0 ? `${data.printedTotal.units.toLocaleString()} units` : null}
+                accent={ROLLER_ACCENT}
+                onClick={() => setWipModal("PRINTED")}
+              />
+              <PipelineTile
+                label="In Production · Roller"
+                value={loading ? "—" : data.inProductionRoller.count}
+                sub={data.inProductionRoller.units > 0 ? `${data.inProductionRoller.units.toLocaleString()} units` : (data.inProductionRoller.count > 0 ? "cutting now" : null)}
+                accent={ROLLER_ACCENT}
+                onClick={() => setInProductionModal(true)}
+              />
+            </div>
+          </div>
+
+          {/* FAUX row */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5 px-1"
+                 style={{ color: FAUX_ACCENT }}>
+              Faux Wood Blinds
+            </div>
+            <div className="md:grid md:grid-cols-3 md:gap-3
+                            flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:overflow-visible md:mx-0 md:pb-0
+                            snap-x snap-mandatory md:snap-none
+                            [&>*]:flex-shrink-0 [&>*]:w-[44%] sm:[&>*]:w-[30%] md:[&>*]:w-auto
+                            [&>*]:snap-start">
+              <PipelineTile
+                label="Credit OK · Faux"
+                value={loading ? "—" : data.creditOkFaux.count}
+                sub={data.creditOkFaux.total > 0 ? `${fmt$(data.creditOkFaux.total)} pending` : null}
+                accent={FAUX_ACCENT}
+                onClick={() => setCreditOkModal(true)}
+              />
+              <PipelineTile
+                label="Printed · Faux"
+                value={loading ? "—" : data.fauxPrintedTotal.count}
+                sub={data.fauxPrintedTotal.units > 0 ? `${data.fauxPrintedTotal.units.toLocaleString()} units` : null}
+                accent={FAUX_ACCENT}
+                onClick={() => setFauxPrintedModal(true)}
+              />
+              <PipelineTile
+                label="In Production · Faux"
+                value={loading ? "—" : data.inProductionFaux.count}
+                sub={data.inProductionFaux.units > 0 ? `${data.inProductionFaux.units.toLocaleString()} units` : (data.inProductionFaux.count > 0 ? "cutting now" : null)}
+                accent={FAUX_ACCENT}
+                onClick={() => setInProductionModal(true)}
+              />
+            </div>
+          </div>
+
+          {/* Avg P→Inv — pipeline-wide metric, sits below the per-product rows */}
+          <div className="md:max-w-[33%]">
+            <PipelineTile
+              label="Avg P→Inv"
+              value={loading ? "—" : (data.avgDays !== null ? `${data.avgDays}d` : "—")}
+              sub="90-day rolling · all products"
+            />
+          </div>
         </div>
 
         {/* ── Action Zone: Orders on Hold + Stuck Orders ─ stacks on mobile ─ */}
