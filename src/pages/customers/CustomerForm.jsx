@@ -87,6 +87,9 @@ export default function CustomerForm() {
           customerName,
           contactName:  contact.name,
           contactEmail: contact.email,
+          // The logged-in rep who created this customer — CC'd on the
+          // agreement (both send and signed-completion) by DocuSeal.
+          salesRepEmail: profile?.email || null,
         }),
       })
       const data = await res.json()
@@ -194,9 +197,11 @@ export default function CustomerForm() {
             <div>
               <p className="text-sm font-semibold text-amber-800">Account Agreement</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                By default, creating a customer sends a DocuSeal account agreement to the primary contact's email
-                (Parker, Customer Service, and Abigail are CC'd). Use <strong>Quick Add</strong> at the bottom
-                to skip the agreement — useful for prospects, internal records, or when the agreement was already signed elsewhere.
+                By default, creating a customer sends a DocuSeal account agreement to the primary contact's email.
+                You (the submitting rep), Parker, Customer Service, and Abigail are all copied — on both the
+                initial send and the signed copy once the customer completes it. Use <strong>Quick Add</strong> at
+                the bottom to skip the agreement — useful for prospects, internal records, or when the agreement
+                was already signed elsewhere.
               </p>
             </div>
           </div>
