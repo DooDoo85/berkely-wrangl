@@ -39,12 +39,12 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon, valueSu
   const valueColor = hit ? 'text-status-healthy' : 'text-ink-strong'
 
   const clickable = !!onClick
-  const tileClass = `card p-4 md:p-5 transition-shadow duration-200 ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`
+  const tileClass = `card p-3.5 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none transition-colors duration-200 ${clickable ? 'cursor-pointer hover:bg-stone-50/50' : ''}`
 
   return (
     <div className={tileClass} onClick={onClick}>
       <div className="flex items-start gap-2 md:gap-3">
-        <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+        <div className={`w-8 h-8 md:w-9 md:h-9 rounded-md ${iconBg} flex items-center justify-center flex-shrink-0`}>
           <span className={iconColor}>{icon}</span>
         </div>
         <div className="flex-1 min-w-0">
@@ -59,7 +59,7 @@ function KpiTile({ label, value, goal, loading, iconBg, iconColor, icon, valueSu
           </div>
           {g > 0 ? (
             <div className="mt-2.5">
-              <div className="w-full h-1.5 bg-[var(--surface-border)] rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-[var(--surface-border)] rounded-sm overflow-hidden">
                 <div
                   className={`h-full ${barColor} transition-all duration-500`}
                   style={{ width: `${pct}%` }}
@@ -87,7 +87,7 @@ function QuickAction({ icon, label, primary, onClick }) {
     return (
       <button
         onClick={onClick}
-        className="flex items-center justify-center gap-2 md:gap-2.5 rounded-xl px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 font-medium text-xs md:text-sm"
+        className="flex items-center justify-center gap-2 md:gap-2.5 rounded-lg px-3 py-3 md:px-5 md:py-3.5 transition-colors duration-200 font-medium text-xs md:text-sm"
         style={{ background: '#2a1d10', color: '#f7f0e0' }}
         onMouseEnter={e => (e.currentTarget.style.background = '#1a0f08')}
         onMouseLeave={e => (e.currentTarget.style.background = '#2a1d10')}
@@ -100,7 +100,7 @@ function QuickAction({ icon, label, primary, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="card flex items-center justify-center gap-2 md:gap-2.5 px-3 py-3 md:px-5 md:py-4 transition-colors duration-200 text-ink-mid font-medium text-xs md:text-sm hover:text-ink-strong"
+      className="card !rounded-lg ring-1 ring-stone-200 shadow-none flex items-center justify-center gap-2 md:gap-2.5 px-3 py-3 md:px-5 md:py-3.5 transition-colors duration-200 text-ink-mid font-medium text-xs md:text-sm hover:text-ink-strong hover:bg-stone-50/50"
     >
       {icon}
       <span>{label}</span>
@@ -114,7 +114,7 @@ function PipelineCard({ label, count, accentColor, dotColor, accentStyle, dotSty
   return (
     <button
       onClick={onClick}
-      className="card p-4 md:p-5 text-left transition-all duration-200 hover:-translate-y-px w-full"
+      className="card p-3.5 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none text-left transition-colors duration-200 hover:bg-stone-50/50 w-full"
     >
       <div className="flex items-center gap-2 mb-3">
         <div className={`w-2 h-2 rounded-full ${dotColor || ''}`} style={dotStyle} />
@@ -400,7 +400,7 @@ export default function RepHome() {
       </div>
 
       {/* Weekly KPI Strip — 5 tiles including Open Quotes */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-4 md:mb-5">
         <KpiTile
           label="Scheduled Meetings"
           value={data.kpis.scheduledMeetings}
@@ -441,8 +441,8 @@ export default function RepHome() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mb-5 md:mb-6">
-        <h2 className="text-sm font-semibold text-ink-strong mb-3">Quick actions</h2>
+      <div className="mb-4 md:mb-5">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid mb-2.5">Quick actions</h2>
         <div className="grid grid-cols-3 gap-2 md:gap-3">
           <QuickAction primary icon={Icon.fileText}  label="New Order"    onClick={() => navigate("/orders/new")} />
           <QuickAction         icon={Icon.edit}      label="Log Activity" onClick={() => navigate("/log")} />
@@ -451,11 +451,11 @@ export default function RepHome() {
       </div>
 
       {/* 2-column row: Follow-ups (left) + Upcoming Activities (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-5 md:mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-5">
         {/* Follow-ups */}
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-ink-strong">Follow-ups</h2>
+        <div className="card overflow-hidden !rounded-lg ring-1 ring-stone-200 shadow-none">
+          <div className="flex items-center justify-between px-4 md:px-5 pt-3.5 pb-2.5 border-b border-stone-200">
+            <h2 className="text-[13px] font-bold text-ink-strong">Follow-ups</h2>
             <button onClick={() => navigate("/activities")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
               View all →
             </button>
@@ -464,25 +464,25 @@ export default function RepHome() {
           {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
 
           {!loading && data.followUps.length === 0 && (
-            <div className="px-5 pb-6 pt-2 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+            <div className="px-4 md:px-5 py-5 flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-md bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                 {Icon.check}
               </div>
               <div>
-                <div className="text-base font-semibold text-ink-strong">You're all caught up!</div>
-                <div className="text-sm text-ink-muted mt-0.5">No follow-ups due. Nice work.</div>
+                <div className="text-[15px] font-semibold text-ink-strong">You're all caught up!</div>
+                <div className="text-[13px] text-ink-muted mt-0.5">No follow-ups due. Nice work.</div>
               </div>
             </div>
           )}
 
           {!loading && data.followUps.length > 0 && (
-            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
+            <div className="divide-y" style={{ borderColor: 'var(--surface-border)' }}>
               {data.followUps.map(f => {
                 const overdue = f.follow_up_date < today;
                 const phone = f.customers?.phone;
                 return (
-                  <div key={f.id} className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
-                    <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${overdue ? "bg-status-critical" : "bg-status-healthy"}`} />
+                  <div key={f.id} className="px-4 md:px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 flex items-center gap-3.5" style={{ borderColor: 'var(--surface-border)' }}>
+                    <div className={`w-1 h-9 rounded-sm flex-shrink-0 ${overdue ? "bg-status-critical" : "bg-status-healthy"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-ink-strong truncate">{f.customers?.account_name || "—"}</p>
@@ -513,9 +513,9 @@ export default function RepHome() {
         </div>
 
         {/* Upcoming activities */}
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-ink-strong">Upcoming activities</h2>
+        <div className="card overflow-hidden !rounded-lg ring-1 ring-stone-200 shadow-none">
+          <div className="flex items-center justify-between px-4 md:px-5 pt-3.5 pb-2.5 border-b border-stone-200">
+            <h2 className="text-[13px] font-bold text-ink-strong">Upcoming activities</h2>
             <button onClick={() => navigate("/calendar")} className="text-xs font-medium text-accent-clay hover:opacity-80 transition-opacity">
               View calendar →
             </button>
@@ -524,23 +524,23 @@ export default function RepHome() {
           {loading && <div className="px-5 py-8 text-sm text-ink-muted text-center">Loading…</div>}
 
           {!loading && data.upcomingTasks.length === 0 && (
-            <div className="px-5 pb-6 pt-2 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+            <div className="px-4 md:px-5 py-5 flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-md bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                 {Icon.cal}
               </div>
               <div>
-                <div className="text-base font-semibold text-ink-strong">No upcoming activities</div>
-                <div className="text-sm text-ink-muted mt-0.5">You're all set for now.</div>
+                <div className="text-[15px] font-semibold text-ink-strong">No upcoming activities</div>
+                <div className="text-[13px] text-ink-muted mt-0.5">You're all set for now.</div>
               </div>
             </div>
           )}
 
           {!loading && data.upcomingTasks.length > 0 && (
-            <div className="divide-y border-t" style={{ borderColor: 'var(--surface-border)' }}>
+            <div className="divide-y" style={{ borderColor: 'var(--surface-border)' }}>
               {data.upcomingTasks.map(t => (
                 <div key={t.id} onClick={() => navigate("/calendar")}
-                  className="px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 cursor-pointer flex items-center gap-4" style={{ borderColor: 'var(--surface-border)' }}>
-                  <div className="w-10 h-10 rounded-full bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
+                  className="px-4 md:px-5 py-3 hover:bg-black/[0.02] transition-colors duration-150 cursor-pointer flex items-center gap-3.5" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="w-9 h-9 rounded-md bg-status-healthy-soft flex items-center justify-center text-status-healthy flex-shrink-0">
                     {Icon.cal}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -550,7 +550,7 @@ export default function RepHome() {
                       <span>{t.category}</span>
                     </p>
                   </div>
-                  <div className="text-xs text-ink-muted font-medium">
+                  <div className="text-xs text-ink-muted font-medium tabular-nums">
                     {new Date(t.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </div>
                 </div>
@@ -561,14 +561,14 @@ export default function RepHome() {
       </div>
 
       {/* My Pipeline — full width strip at the bottom */}
-      <div className="mb-5 md:mb-6">
-        <h2 className="text-sm font-semibold text-ink-strong mb-3">My pipeline</h2>
+      <div className="mb-4 md:mb-5">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mid mb-2.5">My pipeline</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <PipelineCard
             label="Printed"
             count={data.pipeline.printed}
             dotStyle={{ backgroundColor: '#b85d3a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
+            icon={<div className="w-8 h-8 rounded-md flex items-center justify-center bg-accent-clay-soft text-accent-clay">{Icon.send}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=printed")}
           />
@@ -576,7 +576,7 @@ export default function RepHome() {
             label="In Production"
             count={data.pipeline.inProduction}
             dotStyle={{ backgroundColor: '#c2913a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
+            icon={<div className="w-8 h-8 rounded-md flex items-center justify-center bg-status-warning-soft text-status-warning">{Icon.settings}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=in_production")}
           />
@@ -584,7 +584,7 @@ export default function RepHome() {
             label="On Hold"
             count={data.pipeline.onHold}
             dotStyle={{ backgroundColor: '#b54a3a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
+            icon={<div className="w-8 h-8 rounded-md flex items-center justify-center bg-status-critical-soft text-status-critical">{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders/on-hold")}
           />
@@ -592,7 +592,7 @@ export default function RepHome() {
             label="Invoiced WTD"
             count={data.pipeline.invoicedWtd}
             dotStyle={{ backgroundColor: '#5b8c5a' }}
-            icon={<div className="w-9 h-9 rounded-full flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
+            icon={<div className="w-8 h-8 rounded-md flex items-center justify-center bg-status-healthy-soft text-status-healthy">{Icon.package}</div>}
             loading={loading}
             onClick={() => navigate("/orders?status=invoiced")}
           />
