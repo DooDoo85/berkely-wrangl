@@ -384,12 +384,12 @@ function OperationsStatusTable({
       {/* Column headers row */}
       <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-2">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Stage</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-end gap-1.5"
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-center gap-1.5"
              style={{ color: ROLLER }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
           Roller Shades
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-end gap-1.5"
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-center gap-1.5"
              style={{ color: FAUX }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
           Faux Wood Blinds
@@ -414,9 +414,9 @@ function OperationsStatusTable({
                 </div>
               </div>
 
-              {/* Roller cell — right-aligned numbers, dashed left divider */}
+              {/* Roller cell — centered numbers, dashed left divider */}
               <button onClick={s.roller.onClick}
-                className="group relative text-right py-3 px-3.5 self-stretch
+                className="group relative text-center py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
                 <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
@@ -428,9 +428,9 @@ function OperationsStatusTable({
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
 
-              {/* Faux cell — right-aligned numbers, dashed left divider */}
+              {/* Faux cell — centered numbers, dashed left divider */}
               <button onClick={s.faux.onClick}
-                className="group relative text-right py-3 px-3.5 self-stretch
+                className="group relative text-center py-3 px-3.5 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
                 <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
