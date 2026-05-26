@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
+import { logStageEvent, STAGES } from '../../lib/stageEvents'
 
 const STATUS_STYLES = {
   draft:         'bg-stone-50 text-stone-500 border-stone-200',
@@ -107,6 +108,14 @@ export default function OrderDetail() {
       changed_by:   profile?.id,
       notes:        `Manually marked In Production by ${profile?.full_name || profile?.email}`,
     })
+
+    // Log the Fabric Cut stage event — only on a genuine transition into
+    // production, so re-clicking on an already-in-production order doesn't
+    // create a duplicate event. Shared helper keeps this consistent with
+    // ProductionHub's logging. A failed stage-log does not block anything.
+    if (oldStatus !== 'in_production') {
+      await logStageEvent(id, STAGES.FABRIC_CUT, { loggedBy: profile?.id })
+    }
 
     await loadOrder()
     setUpdating(false)
