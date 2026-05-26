@@ -25,3 +25,11 @@
 # 8am CDT = 13:00 UTC.
 [functions."send-rep-rollup"]
   schedule = "0 13 * * 1"
+
+# Friday 8am CDT weekly usage digest (Phase 1C — owner-only usage analytics).
+# 8am CDT = 13:00 UTC. Deliberately a morning slot, separate from the
+# send-weekly-recap email at 3pm Friday, so the two don't arrive together.
+# DST note: same as above — when clocks fall back to CST (UTC-6), 8am CDT
+# becomes 14:00 UTC. Re-check in Nov along with send-weekly-recap.
+[functions."send-usage-digest"]
+  schedule = "0 13 * * 5"
