@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 import HoldModal from '../../components/HoldModal'
+import { logStageEvent, STAGES } from '../../lib/stageEvents'
 
 // Strip accents for search (é→e, ô→o, etc.)
 const stripAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -158,6 +159,7 @@ export default function ProductionHub() {
 
     try {
       let orderId = order.id
+      let justStarted = false   // true only on a genuine transition into production
 
       // If manual order, create it first
       if (order._manual) {
@@ -178,6 +180,7 @@ export default function ProductionHub() {
 
         if (createErr) throw new Error('Failed to create order: ' + createErr.message)
         orderId = newOrder.id
+        justStarted = true
       } else if (order.status !== 'in_production') {
         // First time starting — update status
         const { error: updateErr } = await supabase
@@ -192,8 +195,17 @@ export default function ProductionHub() {
           .eq('id', orderId)
 
         if (updateErr) throw new Error('Failed to update order: ' + updateErr.message)
+        justStarted = true
       }
       // else: already in production — just log additional cuts, no status change
+
+      // Log the Fabric Cut stage event — only on a genuine transition into
+      // production, not when adding cuts to an already-in-production order.
+      // A failed stage-log must NOT block the cut: the cut is real either way.
+      if (justStarted) {
+        await logStageEvent(orderId, STAGES.FABRIC_CUT, { loggedBy: profile?.id })
+      }
+
 
       // Process each cut — deduct from inventory + log transaction
       for (const cut of validCuts) {
