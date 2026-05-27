@@ -26,6 +26,18 @@ export default function ReorderQueue() {
   const [recDismissing, setRecDismissing] = useState(null) // part_id being dismissed/snoozed
   const [recExpanded, setRecExpanded] = useState({})      // {part_id: bool} for "show math"
 
+  // ── Fabric Shortages state ───────────────────────────────────────────────
+  // Forward-looking commitment-based shortages from v_committed_inventory.
+  // Distinct from the velocity-based Recommendations above: that engine
+  // looks at average daily usage; this one looks at literal open orders
+  // and answers "do we have enough fabric to build what's been sold?".
+  // Auto-loads on page mount (visible to all users — it's an operational
+  // fact, not a gated preview like Recommendations).
+  const [fabricShortages, setFabricShortages] = useState([])
+  const [fabricShortagesLoading, setFabricShortagesLoading] = useState(true)
+  const [fabricShortagesOpen, setFabricShortagesOpen] = useState(true)  // default open — it's a real alert
+  const [shortageAdding, setShortageAdding] = useState(null)
+
   // ── Quick-add state ─────────────────────────────────────────────────────────
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [addSearch, setAddSearch] = useState('')
@@ -40,6 +52,10 @@ export default function ReorderQueue() {
   const debounceRef = useRef(null)
 
   useEffect(() => { loadQueue() }, [])
+
+  // Load fabric shortages on mount — these are real operational alerts,
+  // not a gated preview, so they're always visible.
+  useEffect(() => { loadFabricShortages() }, [])
 
   // Load recommendations whenever the panel is opened
   useEffect(() => {
@@ -63,6 +79,80 @@ export default function ReorderQueue() {
       setRecs(data || [])
     }
     setRecsLoading(false)
+  }
+
+  // ── Fabric Shortages ─────────────────────────────────────────────────────
+  // Reads v_committed_inventory for fabric rows that are short — i.e., the
+  // open orders we've committed to require more material than we have on
+  // hand. View was extended on May 27 to include fabric (previously only
+  // components/extrusions/blinds), via UNION on epic_committed_fabric with
+  // inches→LF conversion (÷12).
+  async function loadFabricShortages() {
+    setFabricShortagesLoading(true)
+    const { data, error } = await supabase
+      .from('v_committed_inventory')
+      .select('part_id, name, qty_on_hand, committed, available, available_raw, is_shortage')
+      .eq('part_type', 'fabric')
+      .eq('is_shortage', true)
+      .order('available_raw', { ascending: true })
+    if (error) {
+      console.error('Fabric shortages load error:', error)
+      setFabricShortages([])
+    } else {
+      setFabricShortages(data || [])
+    }
+    setFabricShortagesLoading(false)
+  }
+
+  // Add a fabric shortage to the reorder queue. Mirrors addRecommendationToQueue
+  // but is much simpler — no vendor lookup (fabric vendor isn't on the view),
+  // no suggested-qty math (the shortfall IS the suggested qty).
+  async function addShortageToQueue(shortage) {
+    setShortageAdding(shortage.part_id)
+    try {
+      // Look up the part for fuller context (vendor, vendor_part_number)
+      const { data: part } = await supabase
+        .from('parts')
+        .select('id, name, vendor, vendor_part_number')
+        .eq('id', shortage.part_id)
+        .single()
+
+      let vendorId = null
+      if (part?.vendor) {
+        const { data: vendors } = await supabase
+          .from('vendors')
+          .select('id')
+          .ilike('vendor_name', part.vendor)
+          .limit(1)
+        vendorId = vendors?.[0]?.id || null
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+
+      // Shortfall = how much we're under in LF. Round up to a whole LF for
+      // ordering purposes — fabric is rarely sold in fractional feet.
+      const shortfallLF = Math.max(0, shortage.committed - shortage.qty_on_hand)
+      const suggestedQty = Math.ceil(shortfallLF)
+
+      await supabase.from('reorder_queue').insert({
+        part_id: shortage.part_id,
+        part_name: part?.name || shortage.name,
+        stock_number: part?.vendor_part_number || null,
+        vendor_id: vendorId,
+        vendor_name: part?.vendor || 'Unknown Vendor',
+        qty_requested: suggestedQty,
+        note: `Fabric shortage · ${shortage.committed.toFixed(1)} LF committed against ${shortage.qty_on_hand.toFixed(1)} LF on hand`,
+        added_by: user?.id || null,
+      })
+
+      // Remove from local list, refresh queue
+      setFabricShortages(prev => prev.filter(s => s.part_id !== shortage.part_id))
+      loadQueue()
+    } catch (e) {
+      alert('Error adding shortage to queue: ' + e.message)
+    } finally {
+      setShortageAdding(null)
+    }
   }
 
   async function addRecommendationToQueue(rec) {
@@ -351,6 +441,26 @@ export default function ReorderQueue() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Fabric Shortages toggle — visible to everyone when there are shortages */}
+          {fabricShortages.length > 0 && (
+            <button
+              onClick={() => setFabricShortagesOpen(!fabricShortagesOpen)}
+              className={`text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-2 ${
+                fabricShortagesOpen
+                  ? 'bg-stone-200 text-stone-700'
+                  : 'bg-red-50 text-red-900 hover:bg-red-100 border border-red-300'
+              }`}
+              title="Fabric needed for open orders exceeds on-hand"
+            >
+              {fabricShortagesOpen ? '✕ Hide Shortages' : '⚠ Fabric Shortages'}
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                fabricShortagesOpen ? 'bg-stone-300 text-stone-700' : 'bg-red-700 text-white'
+              }`}>
+                {fabricShortages.length}
+              </span>
+            </button>
+          )}
+
           {showRecommendations && (
             <button
               onClick={() => setRecsOpen(!recsOpen)}
@@ -384,6 +494,20 @@ export default function ReorderQueue() {
           </button>
         </div>
       </div>
+
+      {/* ── Fabric Shortages Panel ─────────────────────────────────────────── */}
+      {/* Forward-looking shortage alerts: open orders need more fabric than we
+          have. Distinct from velocity Recommendations below — this surfaces
+          known shortfalls right now, not statistical drift over time. */}
+      {fabricShortagesOpen && (
+        <FabricShortagesPanel
+          shortages={fabricShortages}
+          loading={fabricShortagesLoading}
+          adding={shortageAdding}
+          onAdd={addShortageToQueue}
+          onRefresh={loadFabricShortages}
+        />
+      )}
 
       {/* ── Recommendations Panel ──────────────────────────────────────────── */}
       {showRecommendations && recsOpen && (
@@ -864,6 +988,122 @@ function RecommendationCard({ rec, expanded, adding, dismissing, onToggleExpand,
               Dismiss
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── Fabric Shortages Panel ─────────────────────────────────────────────────
+// Reads v_committed_inventory for fabric rows where is_shortage = true.
+// View math (post May 27 fabric extension):
+//   committed  = SUM(epic_committed_fabric.required_qty_inches ÷ 12)  [in LF]
+//              + SUM(epic_committed_stock.required_qty)
+//                FILTER (relieved = false, part_id matches this part)
+//   available  = GREATEST(qty_on_hand - committed, 0)
+//   shortage   = (qty_on_hand - committed) < 0
+// So a shortage means: open Credit OK / Printed orders need more LF of
+// this fabric than we physically have. Direct, not statistical.
+//
+// Operator action: "Add to Queue" creates a reorder_queue row for the
+// shortfall (rounded up to a whole LF). Removed from the panel afterward
+// so it doesn't double-add.
+
+function FabricShortagesPanel({ shortages, loading, adding, onAdd, onRefresh }) {
+  if (loading) {
+    return (
+      <div className="card p-6 mb-6 border-2 border-red-200 bg-red-50/40">
+        <div className="flex items-center gap-3 text-sm text-red-800">
+          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+          Checking fabric commitments against on-hand...
+        </div>
+      </div>
+    )
+  }
+
+  // Note: when there are 0 shortages we DON'T render the panel at all —
+  // the parent only mounts this component when fabricShortages.length > 0.
+  // (See conditional render in ReorderQueue's JSX.) So no empty state needed.
+
+  return (
+    <div className="card mb-6 border-2 border-red-200 bg-gradient-to-br from-red-50/60 to-stone-50 overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-red-200/60 flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">⚠ Fabric Shortages</p>
+          <p className="text-xs text-stone-500 mt-1">
+            {shortages.length} fabric{shortages.length !== 1 ? 's' : ''} short of what open orders require ·
+            {' '}Math: committed (Credit OK + Printed) minus on-hand
+          </p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="text-xs text-stone-500 hover:text-stone-800 px-2 py-1 rounded hover:bg-stone-100"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* Section header */}
+      <div className="px-5 py-2 bg-red-50/70 border-b border-red-100 flex items-center gap-2">
+        <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">🔴 Order Now</span>
+        <span className="text-xs text-red-700">— material committed exceeds on-hand</span>
+      </div>
+
+      {/* Shortage rows */}
+      {shortages.map(s => (
+        <FabricShortageCard
+          key={s.part_id}
+          shortage={s}
+          adding={adding === s.part_id}
+          onAdd={() => onAdd(s)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function FabricShortageCard({ shortage, adding, onAdd }) {
+  const onHand    = Number(shortage.qty_on_hand || 0)
+  const committed = Number(shortage.committed   || 0)
+  const shortfall = Math.max(0, committed - onHand)
+  const suggested = Math.ceil(shortfall)
+
+  return (
+    <div className="px-5 py-4 border-b border-red-100/60 last:border-b-0 hover:bg-red-50/20 transition-colors">
+      <div className="flex items-center justify-between gap-4">
+        {/* Left: identity + the math */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-stone-800 truncate">{shortage.name}</p>
+          <div className="flex items-center gap-4 mt-1 text-xs text-stone-600">
+            <span>
+              On hand: <span className="font-mono font-semibold tabular-nums">{onHand.toFixed(1)} LF</span>
+            </span>
+            <span className="text-stone-300">·</span>
+            <span>
+              Committed: <span className="font-mono font-semibold tabular-nums text-red-700">{committed.toFixed(1)} LF</span>
+            </span>
+            <span className="text-stone-300">·</span>
+            <span className="text-red-700 font-semibold">
+              Short: <span className="font-mono tabular-nums">{shortfall.toFixed(1)} LF</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Right: action */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-widest text-stone-400">Suggested qty</p>
+            <p className="text-sm font-bold text-stone-800 tabular-nums">{suggested} LF</p>
+          </div>
+          <button
+            onClick={onAdd}
+            disabled={adding}
+            className="text-sm font-semibold bg-brand-dark text-white px-3 py-2 rounded-lg hover:bg-brand-dark/90 disabled:opacity-50 disabled:cursor-wait whitespace-nowrap"
+          >
+            {adding ? 'Adding…' : '+ Queue'}
+          </button>
         </div>
       </div>
     </div>
