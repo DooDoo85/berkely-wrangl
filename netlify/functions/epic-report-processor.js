@@ -1373,9 +1373,9 @@ async function processPartsShipped(csvText, source) {
 // strips accents and trailing type tags (" - FABRIC" / " - SCREEN") before comparing.
 // Units: PIC reports SY; Wrangl stores linear inches. Conversion via SY_TO_INCHES().
 
-async function processCommittedFabric(csvText) {
+async function processCommittedFabric(csvText, orderStatus = 'PRINTED') {
   const rows = parseCSV(csvText)
-  console.log(`  COMMITTED_FABRIC: ${rows.length} rows`)
+  console.log(`  COMMITTED_FABRIC [${orderStatus}]: ${rows.length} rows`)
 
   // Load all active fabric parts once
   const fabricParts = await sbQuery(
@@ -1399,15 +1399,13 @@ async function processCommittedFabric(csvText) {
     }
   }
 
-  // FRESH SNAPSHOT — clear unrelieved fabric commitments and reset qty_committed
-  // on all fabrics. The current report becomes the new truth.
-  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_fabric?relieved=eq.false`, {
+  // FRESH SNAPSHOT — clear ONLY this status's unrelieved rows.
+  // We must NOT clear the other status's rows; both reports coexist.
+  // We also do NOT zero out parts.qty_committed here — see reconciliation
+  // block at the end, which sums across both status feeds.
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_fabric?relieved=eq.false&order_status=eq.${encodeURIComponent(orderStatus)}`, {
     method:  'DELETE',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  })
-  await sbUpdate('parts', `part_type=eq.fabric&active=eq.true`, {
-    qty_committed: 0,
-    updated_at:    new Date().toISOString(),
   })
 
   const stats    = { new: 0, auto_matched: 0, unmatched: 0 }
@@ -1416,7 +1414,9 @@ async function processCommittedFabric(csvText) {
 
   for (const row of rows) {
     const wo          = (row.WorkOrder || '').trim()
+    // Printed reports use DatePrinted; Credit OK reports use DateEntered.
     const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
+    const dateEntered = (row.DateEntered || '').trim().slice(0, 10) || null
     const customer    = (row.Customer || '').trim()
     const description = (row.FabricDescription || '').trim()
     const stockCode   = (row.FabricSKU || '').trim()    // captured for traceability only
@@ -1461,6 +1461,8 @@ async function processCommittedFabric(csvText) {
     await sbInsert('epic_committed_fabric', [{
       work_order:           wo,
       date_printed:         datePrinted,
+      date_entered:         dateEntered,
+      order_status:         orderStatus,
       fabric_sku:           stockCode,
       fabric_description:   description,
       required_qty_sy:      qtySY,
@@ -1473,10 +1475,39 @@ async function processCommittedFabric(csvText) {
     }])
   }
 
-  // Apply qty_committed bumps to matched fabrics (in inches)
-  for (const [partId, inches] of Object.entries(toCommit)) {
+  // ── Reconcile parts.qty_committed across BOTH status feeds ───────────
+  // Both Printed and Credit OK fabric reports write into the same
+  // parts.qty_committed column. Recompute from the table itself so neither
+  // status's commitments overwrite the other's.
+  console.log(`  Reconciling parts.qty_committed for fabric across all statuses...`)
+  const partIdsToReconcile = new Set(Object.keys(toCommit))
+  const allFabricCommitRows = await sbQuery(
+    'epic_committed_fabric',
+    `select=part_id&relieved=eq.false&part_id=not.is.null`
+  )
+  if (Array.isArray(allFabricCommitRows)) {
+    for (const r of allFabricCommitRows) if (r.part_id) partIdsToReconcile.add(r.part_id)
+  }
+  // Include any fabric currently showing qty_committed > 0 so we can zero
+  // it if it's no longer in the table.
+  const currentlyCommittedFabrics = await sbQuery(
+    'parts',
+    `select=id&part_type=eq.fabric&active=eq.true&qty_committed=gt.0`
+  )
+  if (Array.isArray(currentlyCommittedFabrics)) {
+    for (const p of currentlyCommittedFabrics) partIdsToReconcile.add(p.id)
+  }
+
+  for (const partId of partIdsToReconcile) {
+    const sumRes = await sbQuery(
+      'epic_committed_fabric',
+      `select=required_qty_inches&part_id=eq.${partId}&relieved=eq.false`
+    )
+    const totalInches = Array.isArray(sumRes)
+      ? sumRes.reduce((acc, r) => acc + (parseFloat(r.required_qty_inches) || 0), 0)
+      : 0
     await sbUpdate('parts', `id=eq.${partId}`, {
-      qty_committed: Math.round(inches * 100) / 100,
+      qty_committed: Math.round(totalInches * 100) / 100,
       updated_at:    new Date().toISOString(),
     })
   }
@@ -1486,15 +1517,15 @@ async function processCommittedFabric(csvText) {
   }
 
   await sbInsert('epic_import_log', [{
-    import_type:            'committed_fabric',
+    import_type:            orderStatus === 'CREDIT OK' ? 'committed_fabric_credit_ok' : 'committed_fabric',
     records_total:          rows.length,
     records_new:            stats.new,
     records_auto_matched:   stats.auto_matched,
     records_unmatched:      stats.unmatched,
-    notes:                  `Committed ${Object.keys(toCommit).length} fabrics`,
+    notes:                  `Committed ${Object.keys(toCommit).length} fabrics (${orderStatus})`,
   }])
 
-  console.log(`  COMMITTED_FABRIC done — new: ${stats.new}, matched: ${stats.auto_matched}, unmatched: ${stats.unmatched}`)
+  console.log(`  COMMITTED_FABRIC [${orderStatus}] done — new: ${stats.new}, matched: ${stats.auto_matched}, unmatched: ${stats.unmatched}`)
   return stats.new
 }
 
@@ -1701,27 +1732,27 @@ async function processFabricCompleted(csvText) {
 //   FW          blind        FAUX COMMITTED
 //   RS COMP     extrusion    COMMITTED EXTRUSIONS
 
-async function processCommittedByClass(csvText, stockClass, partType, reportName) {
+async function processCommittedByClass(csvText, stockClass, partType, reportName, orderStatus = 'PRINTED') {
   const rows = parseCSV(csvText)
-  console.log(`  ${reportName.toUpperCase()}: ${rows.length} rows`)
+  console.log(`  ${reportName.toUpperCase()} [${orderStatus}]: ${rows.length} rows`)
 
   // Filter to this stock class only
   const classRows = rows.filter(r => (r.StockClass || '').trim() === stockClass)
   console.log(`  Rows matching stock class '${stockClass}': ${classRows.length}`)
 
-  // FRESH SNAPSHOT — clear only unrelieved rows for this stock class
-  console.log(`  Clearing previous ${stockClass} committed stock...`)
-  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_stock?relieved=eq.false&stock_class=eq.${encodeURIComponent(stockClass)}`, {
+  // FRESH SNAPSHOT — clear ONLY this status's unrelieved rows for this stock class.
+  // We must NOT clear the other status's rows; both reports coexist in the same table.
+  console.log(`  Clearing previous ${stockClass} / ${orderStatus} committed stock...`)
+  await fetch(`${SUPABASE_URL}/rest/v1/epic_committed_stock?relieved=eq.false&stock_class=eq.${encodeURIComponent(stockClass)}&order_status=eq.${encodeURIComponent(orderStatus)}`, {
     method:  'DELETE',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
 
-  // Reset qty_committed only for this part type
-  await sbUpdate('parts', `part_type=eq.${partType}&active=eq.true`, {
-    qty_committed: 0,
-    updated_at:    new Date().toISOString(),
-  })
-  console.log(`  Snapshot cleared — importing fresh ${reportName} data...`)
+  // NOTE: do NOT zero out parts.qty_committed here. With two status feeds
+  // writing into the same column, zeroing on each report would wipe the
+  // other's contribution. Instead we recompute qty_committed from BOTH
+  // statuses at the end of this function (see "Reconcile" block below).
+  console.log(`  Snapshot cleared — importing fresh ${reportName} (${orderStatus}) data...`)
 
   // Load approved mappings for this part type
   const mappings = await sbQuery(
@@ -1747,7 +1778,10 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
     const stockCode   = (row.StockCode || '').trim()
     const description = (row.ComponentDescription || '').trim()
     const requiredQty = parseFloat(row.TotalRequiredQty || row.RequiredQty || 0) || 0
+    // Printed reports use DatePrinted; Credit OK reports use DateEntered.
+    // We record both — the relevant one per row, the other null.
     const datePrinted = (row.DatePrinted || '').trim().slice(0, 10) || null
+    const dateEntered = (row.DateEntered || '').trim().slice(0, 10) || null
     const uom         = (row.UOM || '').trim()
 
     if (!wo || !lineItem || !description) continue
@@ -1834,6 +1868,8 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
       work_order:            wo,
       line_item:             lineItem,
       date_printed:          datePrinted,
+      date_entered:          dateEntered,
+      order_status:          orderStatus,
       stock_code:            stockCode,
       component_description: description,
       required_qty:          requiredQty,
@@ -1850,16 +1886,50 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
     }
   }
 
-  // Update qty_committed on matched parts
-  for (const [partId, qty] of Object.entries(toCommit)) {
+  // ── Reconcile parts.qty_committed across BOTH status feeds ───────────
+  // We can't just write `qty_committed = qty` here, because the other status
+  // feed (Printed or Credit OK) has its own commitments in the table. We
+  // recompute from the table itself, summing all unrelieved rows for parts
+  // of this part_type across both statuses.
+  console.log(`  Reconciling parts.qty_committed for ${partType} across all statuses...`)
+  const partIdsToReconcile = new Set(Object.keys(toCommit))
+  // Also reconcile any parts that previously had commitments but no longer do
+  // (e.g. a row that disappeared from the report). Fetch all parts that had
+  // commitments under the OPPOSITE status too, since we don't know which.
+  const otherStatusRows = await sbQuery(
+    'epic_committed_stock',
+    `select=part_id&stock_class=eq.${encodeURIComponent(stockClass)}&relieved=eq.false&part_id=not.is.null`
+  )
+  if (Array.isArray(otherStatusRows)) {
+    for (const r of otherStatusRows) if (r.part_id) partIdsToReconcile.add(r.part_id)
+  }
+  // Also include parts whose qty_committed is currently > 0 but no longer in
+  // the table at all (so we can zero them).
+  const currentlyCommitted = await sbQuery(
+    'parts',
+    `select=id&part_type=eq.${partType}&active=eq.true&qty_committed=gt.0`
+  )
+  if (Array.isArray(currentlyCommitted)) {
+    for (const p of currentlyCommitted) partIdsToReconcile.add(p.id)
+  }
+
+  // For each affected part, sum its committed qty across all statuses + relieved=false
+  for (const partId of partIdsToReconcile) {
+    const sumRes = await sbQuery(
+      'epic_committed_stock',
+      `select=required_qty&part_id=eq.${partId}&relieved=eq.false&stock_class=eq.${encodeURIComponent(stockClass)}`
+    )
+    const total = Array.isArray(sumRes)
+      ? sumRes.reduce((acc, r) => acc + (parseFloat(r.required_qty) || 0), 0)
+      : 0
     await sbUpdate('parts', `id=eq.${partId}`, {
-      qty_committed: qty,
+      qty_committed: Math.round(total * 10000) / 10000,
       updated_at:    new Date().toISOString(),
     })
   }
 
   await sbInsert('epic_import_log', [{
-    import_type:            reportName,
+    import_type:            orderStatus === 'CREDIT OK' ? `${reportName}_credit_ok` : reportName,
     records_total:          classRows.length,
     records_new:            stats.new,
     records_skipped:        stats.skipped,
@@ -1868,7 +1938,7 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
     records_unmatched:      stats.unmatched,
   }])
 
-  console.log(`  ${reportName} — new: ${stats.new}, auto: ${stats.auto_matched}, review: ${stats.pending_review}, unmatched: ${stats.unmatched}`)
+  console.log(`  ${reportName} [${orderStatus}] — new: ${stats.new}, auto: ${stats.auto_matched}, review: ${stats.pending_review}, unmatched: ${stats.unmatched}`)
   return stats.new
 }
 
@@ -2469,6 +2539,29 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCommittedByClass(csvText, 'RS COMP', 'extrusion', 'committed_extrusions')
           await markProcessed(messageId, 'committed_extrusions', count)
+          results.processed++
+
+        } else if (subject.includes('COMMITTED STOCK CREDIT OK')) {
+          // Credit OK committed stock — same stock class as Printed (RS PART)
+          // but the orders are earlier in the pipeline (not yet printed).
+          // Placed BEFORE the Printed route below since this is the more
+          // specific match. The Printed route's subject has a one-M typo
+          // ('COMITTED'), so the two don't overlap, but being explicit.
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCommittedByClass(csvText, 'RS PART', 'component', 'committed_stock', 'CREDIT OK')
+          await markProcessed(messageId, 'committed_stock_credit_ok', count)
+          results.processed++
+
+        } else if (subject.includes('COMMITTED FARBIC CREDIT OK')) {
+          // Credit OK committed fabric. Note "FARBIC" — that's the actual PIC
+          // subject typo, carried forward verbatim. (Separate from the
+          // Printed route's correct "COMMITTED FABRIC" spelling — distinct
+          // strings, no collision.)
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processCommittedFabric(csvText, 'CREDIT OK')
+          await markProcessed(messageId, 'committed_fabric_credit_ok', count)
           results.processed++
 
         } else if (subject.includes('COMITTED STOCK')) {
