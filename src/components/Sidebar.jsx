@@ -33,6 +33,7 @@ const EXEC_NAV = [
       { to: '/inventory/extrusions',  label: 'Extrusions'  },
       { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
       { to: '/inventory/committed',   label: 'Committed Orders' },
+      { to: '/inventory/adjust',      label: 'Adjust On-Hand' },
     ],
   },
   {
@@ -95,6 +96,7 @@ const PRODUCTION_NAV = [
       { to: '/inventory/extrusions',  label: 'Extrusions'  },
       { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
       { to: '/inventory/committed',   label: 'Committed Orders' },
+      { to: '/inventory/adjust',      label: 'Adjust On-Hand' },
     ],
   },
   {
