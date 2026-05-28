@@ -129,10 +129,13 @@ export default function ReorderQueue() {
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      // Shortfall = how much we're under in LF. Round up to a whole LF for
-      // ordering purposes — fabric is rarely sold in fractional feet.
-      const shortfallLF = Math.max(0, shortage.committed - shortage.qty_on_hand)
-      const suggestedQty = Math.ceil(shortfallLF)
+      // Shortfall in inches (view returns LF, ×12 to inches) to match what the
+      // panel displays. Round up to a whole inch for ordering.
+      const LF_TO_IN = 12
+      const committedIn = Number(shortage.committed || 0) * LF_TO_IN
+      const onHandIn    = Number(shortage.qty_on_hand || 0) * LF_TO_IN
+      const shortfallIn = Math.max(0, committedIn - onHandIn)
+      const suggestedQty = Math.ceil(shortfallIn)
 
       await supabase.from('reorder_queue').insert({
         part_id: shortage.part_id,
@@ -141,7 +144,7 @@ export default function ReorderQueue() {
         vendor_id: vendorId,
         vendor_name: part?.vendor || 'Unknown Vendor',
         qty_requested: suggestedQty,
-        note: `Fabric shortage · ${shortage.committed.toFixed(1)} LF committed against ${shortage.qty_on_hand.toFixed(1)} LF on hand`,
+        note: `Fabric shortage · ${committedIn.toFixed(1)} in committed against ${onHandIn.toFixed(1)} in on hand`,
         added_by: user?.id || null,
       })
 
@@ -1065,8 +1068,12 @@ function FabricShortagesPanel({ shortages, loading, adding, onAdd, onRefresh }) 
 }
 
 function FabricShortageCard({ shortage, adding, onAdd }) {
-  const onHand    = Number(shortage.qty_on_hand || 0)
-  const committed = Number(shortage.committed   || 0)
+  // The view returns fabric quantities in LF (linear feet). Display in inches
+  // per request — multiply by 12. on_hand is stored LF; committed is computed
+  // in LF by the view (required_qty_inches ÷ 12), so ×12 returns both to inches.
+  const LF_TO_IN = 12
+  const onHand    = Number(shortage.qty_on_hand || 0) * LF_TO_IN
+  const committed = Number(shortage.committed   || 0) * LF_TO_IN
   const shortfall = Math.max(0, committed - onHand)
   const suggested = Math.ceil(shortfall)
 
@@ -1078,15 +1085,15 @@ function FabricShortageCard({ shortage, adding, onAdd }) {
           <p className="text-sm font-semibold text-stone-800 truncate">{shortage.name}</p>
           <div className="flex items-center gap-4 mt-1 text-xs text-stone-600">
             <span>
-              On hand: <span className="font-mono font-semibold tabular-nums">{onHand.toFixed(1)} LF</span>
+              On hand: <span className="font-mono font-semibold tabular-nums">{onHand.toFixed(1)} in</span>
             </span>
             <span className="text-stone-300">·</span>
             <span>
-              Committed: <span className="font-mono font-semibold tabular-nums text-red-700">{committed.toFixed(1)} LF</span>
+              Committed: <span className="font-mono font-semibold tabular-nums text-red-700">{committed.toFixed(1)} in</span>
             </span>
             <span className="text-stone-300">·</span>
             <span className="text-red-700 font-semibold">
-              Short: <span className="font-mono tabular-nums">{shortfall.toFixed(1)} LF</span>
+              Short: <span className="font-mono tabular-nums">{shortfall.toFixed(1)} in</span>
             </span>
           </div>
         </div>
@@ -1095,7 +1102,7 @@ function FabricShortageCard({ shortage, adding, onAdd }) {
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-widest text-stone-400">Suggested qty</p>
-            <p className="text-sm font-bold text-stone-800 tabular-nums">{suggested} LF</p>
+            <p className="text-sm font-bold text-stone-800 tabular-nums">{suggested} in</p>
           </div>
           <button
             onClick={onAdd}
