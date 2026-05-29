@@ -96,8 +96,8 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
   const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
-      className="card card-hover p-4 md:p-5 cursor-pointer h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
-      <div className="flex items-center justify-between mb-2">
+      className="card card-hover p-3 md:p-4 cursor-pointer h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
           <span className="text-sm font-medium text-ink-strong truncate">{label}</span>
@@ -108,7 +108,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       {/* WTD dollar amount */}
       <div className="mb-1">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums">
+          <span className="text-xl md:text-2xl font-medium text-ink-strong tabular-nums">
             {loading ? "—" : fmt$Full(data.sales_wtd)}
           </span>
           <span className="text-xs text-ink-muted">WTD</span>
@@ -116,7 +116,7 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* Units + WoW% — one compact line */}
-      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-3">
+      <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-2">
         <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
         {wowPct !== null && !loading && (
           <>
@@ -129,12 +129,12 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
       </div>
 
       {/* 30-day sparkline */}
-      <div className="mb-4">
+      <div className="mb-2.5">
         <Sparkline data={sparkData} color={accent} fillColor={fill} />
       </div>
 
       {/* MTD / YTD footer */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-stone-100">
+      <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-stone-100">
         <div className="text-center">
           <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
@@ -213,10 +213,10 @@ function BusinessOverviewCard({
   ];
 
   return (
-    <div className="card p-4 md:p-6 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
-      <div className="mb-4">
-        <h2 className="font-display font-bold text-ink-strong text-2xl">Business Overview</h2>
-        <div className="text-xs text-ink-muted mt-1">
+    <div className="card p-3 md:p-4 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
+      <div className="mb-3">
+        <h2 className="font-display font-bold text-ink-strong text-xl">Business Overview</h2>
+        <div className="text-xs text-ink-muted mt-0.5">
           {loading ? "Loading…" :
             <>
               {todayEntered} order{todayEntered !== 1 ? 's' : ''} entered today
@@ -226,19 +226,19 @@ function BusinessOverviewCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {kpis.map(k => (
-          <div key={k.label} className="bg-surface-page/40 rounded-xl p-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-2">
+          <div key={k.label} className="bg-surface-page/40 rounded-xl p-2.5">
+            <div className="w-7 h-7 rounded-lg bg-brand-gold/15 flex items-center justify-center text-sm mb-1.5">
               {k.icon}
             </div>
             <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider">{k.label}</p>
             {k.hint && <p className="text-[10px] text-ink-muted mt-0.5">{k.hint}</p>}
-            <p className="text-2xl font-medium text-ink-strong tabular-nums mt-1.5">
+            <p className="text-xl font-medium text-ink-strong tabular-nums mt-1">
               {k.value}
             </p>
             {k.sub && (
-              <div className="mt-1.5 text-[11px] tabular-nums">
+              <div className="mt-1 text-[11px] tabular-nums">
                 <span className={k.sub.wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
                   {k.sub.wow >= 0 ? "↑" : "↓"} {Math.abs(k.sub.wow)}%
                 </span>
@@ -368,7 +368,7 @@ function OperationsStatusTable({
     <div className={embedded ? "" : "card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none"}>
 
       {/* Panel header — matches Daily Sales hero treatment */}
-      <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-200">
+      <div className="flex items-center justify-between mb-2.5 pb-2.5 border-b border-stone-200">
         <div className="flex items-center gap-2.5">
           <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -377,13 +377,13 @@ function OperationsStatusTable({
               <rect x="9" y="2" width="6" height="9" rx="1" />
             </svg>
           </span>
-          <h3 className="font-display font-bold text-ink-strong text-lg leading-none">Operations Status</h3>
+          <h3 className="font-display font-bold text-ink-strong text-base leading-none">Operations Status</h3>
         </div>
         <p className="text-[11px] text-ink-muted">Live order flow by stage</p>
       </div>
 
       {/* Column headers row */}
-      <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-2">
+      <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-1.5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Stage</div>
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-center gap-1.5"
              style={{ color: ROLLER }}>
@@ -398,47 +398,47 @@ function OperationsStatusTable({
       </div>
 
       {/* Stacked stage bands — tightened padding and smaller iconography */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {stages.map(s => (
           <div key={s.key}
             className={`${s.bandBg} ring-1 ring-stone-200 rounded-md overflow-hidden`}>
             <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
 
               {/* Stage chip — icon + label + sub-label */}
-              <div className="flex items-center gap-2.5 py-3 px-3.5">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
+              <div className="flex items-center gap-2.5 py-2 px-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
                   {s.iconSvg}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[14px] font-semibold text-ink-strong leading-tight">{s.label}</p>
-                  <p className="text-[10.5px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
+                  <p className="text-[13px] font-semibold text-ink-strong leading-tight">{s.label}</p>
+                  <p className="text-[10px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
                 </div>
               </div>
 
               {/* Roller cell — centered numbers, dashed left divider */}
               <button onClick={s.roller.onClick}
-                className="group relative text-center py-3 px-3.5 self-stretch
+                className="group relative text-center py-2 px-3 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
-                <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
+                <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
                   {s.roller.value}
                 </p>
                 {s.roller.sub && (
-                  <p className="text-[10.5px] text-ink-muted mt-1.5">{s.roller.sub}</p>
+                  <p className="text-[10px] text-ink-muted mt-1">{s.roller.sub}</p>
                 )}
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
 
               {/* Faux cell — centered numbers, dashed left divider */}
               <button onClick={s.faux.onClick}
-                className="group relative text-center py-3 px-3.5 self-stretch
+                className="group relative text-center py-2 px-3 self-stretch
                            border-l border-dashed border-stone-300/60
                            hover:bg-white/50 transition-colors">
-                <p className="text-2xl font-medium text-ink-strong tabular-nums leading-none">
+                <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
                   {s.faux.value}
                 </p>
                 {s.faux.sub && (
-                  <p className="text-[10.5px] text-ink-muted mt-1.5">{s.faux.sub}</p>
+                  <p className="text-[10px] text-ink-muted mt-1">{s.faux.sub}</p>
                 )}
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
               </button>
@@ -2162,10 +2162,10 @@ export default function ExecutiveHome() {
 
   return (
     <div className="min-h-screen bg-surface-page">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-6 pb-16 md:pb-20">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-4 pb-10 md:pb-12">
 
         {/* ── Compact top bar — refresh + timestamp only (page header is in sidebar) ── */}
-        <div className="flex items-center justify-end mb-3 md:mb-4">
+        <div className="flex items-center justify-end mb-2 md:mb-2.5">
           <div className="flex items-center gap-3">
             <div className="text-xs text-ink-muted">
               Updated {refreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -2181,7 +2181,7 @@ export default function ExecutiveHome() {
             Business Overview KPIs on the left, product revenue cards on the right.
             BO spans wider so the 4 KPIs have room; the two product cards share equal
             remaining width. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-3 lg:gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-2.5 lg:gap-3 mb-3">
           <BusinessOverviewCard
             loading={loading}
             todayEntered={data.todayEntered}
@@ -2218,7 +2218,7 @@ export default function ExecutiveHome() {
             the two alert groups split beneath — On Hold (left) + Past SLA
             (right). Combines the former two side-by-side cards into one
             cohesive operational panel. */}
-        <div className="card-priority p-4 md:p-5 !rounded-lg ring-1 ring-stone-200 shadow-none mb-4">
+        <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none mb-3">
 
           {/* ── Top band: Operations Status (full width) ── */}
           <OperationsStatusTable
@@ -2255,150 +2255,95 @@ export default function ExecutiveHome() {
             </div>
           )}
 
-          {/* ── Bottom split: On Hold (left) + Past SLA (right) ── */}
+          {/* ── Bottom split: On Hold (left) + Past SLA (right) as compact tables ── */}
           {(stuckTotal > 0 || overdueTotal > 0) && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
 
-              {/* On Hold column */}
+              {/* On Hold table */}
               {stuckTotal > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                      On Hold
+                      On Hold <span className="text-ink-muted font-medium normal-case tracking-normal">· {stuckTotal}</span>
                     </span>
                     <button onClick={() => setOnHoldModal(true)}
                       className="text-[11px] text-ink-muted hover:text-ink-mid font-medium">View all →</button>
                   </div>
-                  <div className="space-y-2">
-                    {data.stuckOrders.slice(0, 3).map(o => {
-                      const statusDisplay = (o.status_label || '').replace(/_/g, ' ');
-                      const severe = o.days >= 8;
-                      return (
-                        <button key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                          className="w-full text-left flex items-stretch group rounded-xl bg-amber-50/40 border border-amber-100/60 overflow-hidden hover:bg-amber-50/70 hover:border-amber-200/70 transition-colors">
-                          {/* Severity left-border strip */}
-                          <span className={`w-1 flex-shrink-0 ${severe ? "bg-red-500/70" : "bg-amber-500/70"}`} />
-
-                          <div className="flex items-center gap-3 px-4 py-3.5 flex-1 min-w-0">
-                            {/* Issue-type icon (clipboard for hold) */}
-                            <div className="w-9 h-9 rounded-lg bg-amber-100/80 text-amber-700 ring-1 ring-amber-200/50 flex items-center justify-center flex-shrink-0">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4" />
-                                <rect x="9" y="2" width="6" height="9" rx="1" />
-                              </svg>
-                            </div>
-
-                            {/* Order info */}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <p className="text-[15px] font-semibold text-ink-strong tabular-nums">#{o.order_no}</p>
-                                {statusDisplay && (
-                                  <span className="text-[10px] font-medium text-ink-mid bg-white/80 ring-1 ring-stone-200/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                                    {statusDisplay}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[12px] truncate">
-                                <span className="text-ink-muted">{o.customer ?? "—"}</span>
-                                {o.hold_reason && (
-                                  <>
-                                    <span className="text-ink-muted/50 mx-1.5">·</span>
-                                    <span className="text-ink-mid">{o.hold_reason}</span>
-                                  </>
-                                )}
-                              </p>
-                            </div>
-
-                            {/* Aging badge */}
-                            <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg font-bold text-sm tabular-nums ${
-                              severe
-                                ? "bg-red-100 text-red-700 ring-1 ring-red-200/60"
-                                : "bg-amber-100 text-amber-800 ring-1 ring-amber-200/60"
-                            }`}>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted border-b border-stone-200">
+                        <th className="font-semibold py-1 pr-2">Order</th>
+                        <th className="font-semibold py-1 pr-2">Customer</th>
+                        <th className="font-semibold py-1 pr-2">Reason</th>
+                        <th className="font-semibold py-1 text-right">Age</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.stuckOrders.slice(0, 6).map(o => {
+                        const severe = o.days >= 8;
+                        return (
+                          <tr key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                            className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-amber-50/50 transition-colors">
+                            <td className="py-1.5 pr-2 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${severe ? "bg-red-500" : "bg-amber-500"}`} />
+                                <span className="text-[12.5px] font-semibold text-ink-strong tabular-nums">{o.order_no}</span>
+                              </span>
+                            </td>
+                            <td className="py-1.5 pr-2 text-[12px] text-ink-mid truncate max-w-[120px]">{o.customer ?? "—"}</td>
+                            <td className="py-1.5 pr-2 text-[12px] text-ink-muted truncate max-w-[110px]">{o.hold_reason || "—"}</td>
+                            <td className={`py-1.5 text-right text-[12px] font-bold tabular-nums ${severe ? "text-red-700" : "text-amber-700"}`}>
                               {o.days}d
-                            </div>
-
-                            {/* Chevron */}
-                            <span className="text-ink-muted/60 flex-shrink-0">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                <polyline points="9 18 15 12 9 6" />
-                              </svg>
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              {/* Past SLA column */}
+              {/* Past SLA table */}
               {overdueTotal > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-red-700">
-                      Past SLA
+                      Past SLA <span className="text-ink-muted font-medium normal-case tracking-normal">· {overdueTotal}</span>
                     </span>
                     <button onClick={() => setWipModal("PRINTED")}
                       className="text-[11px] text-ink-muted hover:text-ink-mid font-medium">View all →</button>
                   </div>
-                  <div className="space-y-2">
-                    {data.overdueOrders.slice(0, 3).map(o => {
-                      const severe = o.days_over >= 5;
-                      return (
-                        <button key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                          className="w-full text-left flex items-stretch group rounded-xl bg-red-50/40 border border-red-100/60 overflow-hidden hover:bg-red-50/70 hover:border-red-200/70 transition-colors">
-                          <span className={`w-1 flex-shrink-0 ${severe ? "bg-red-600" : "bg-red-400"}`} />
-
-                          <div className="flex items-center gap-3 px-4 py-3.5 flex-1 min-w-0">
-                            {/* Clock icon for SLA breach */}
-                            <div className="w-9 h-9 rounded-lg bg-red-100/80 text-red-700 ring-1 ring-red-200/50 flex items-center justify-center flex-shrink-0">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                <circle cx="12" cy="12" r="10" />
-                                <polyline points="12 6 12 12 16 14" />
-                              </svg>
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <p className="text-[15px] font-semibold text-ink-strong tabular-nums">#{o.order_no}</p>
-                                <span className="text-[10px] font-medium text-ink-mid bg-white/80 ring-1 ring-stone-200/60 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                                  PRINTED
-                                </span>
-                              </div>
-                              <p className="text-[12px] truncate">
-                                <span className="text-ink-muted">{o.customer ?? "—"}</span>
-                                {o.sidemark && (
-                                  <>
-                                    <span className="text-ink-muted/50 mx-1.5">·</span>
-                                    <span className="text-ink-mid">{o.sidemark}</span>
-                                  </>
-                                )}
-                              </p>
-                            </div>
-
-                            <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg font-bold text-sm tabular-nums ${
-                              severe
-                                ? "bg-red-200/80 text-red-800 ring-1 ring-red-300/60"
-                                : "bg-red-100 text-red-700 ring-1 ring-red-200/60"
-                            }`}>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted border-b border-stone-200">
+                        <th className="font-semibold py-1 pr-2">Order</th>
+                        <th className="font-semibold py-1 pr-2">Customer</th>
+                        <th className="font-semibold py-1 pr-2">Sidemark</th>
+                        <th className="font-semibold py-1 text-right">Over</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.overdueOrders.slice(0, 6).map(o => {
+                        const severe = o.days_over >= 5;
+                        return (
+                          <tr key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
+                            className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-red-50/50 transition-colors">
+                            <td className="py-1.5 pr-2 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${severe ? "bg-red-600" : "bg-red-400"}`} />
+                                <span className="text-[12.5px] font-semibold text-ink-strong tabular-nums">{o.order_no}</span>
+                              </span>
+                            </td>
+                            <td className="py-1.5 pr-2 text-[12px] text-ink-mid truncate max-w-[120px]">{o.customer ?? "—"}</td>
+                            <td className="py-1.5 pr-2 text-[12px] text-ink-muted truncate max-w-[110px]">{o.sidemark || "—"}</td>
+                            <td className={`py-1.5 text-right text-[12px] font-bold tabular-nums ${severe ? "text-red-800" : "text-red-600"}`}>
                               +{o.days_over}d
-                            </div>
-
-                            <span className="text-ink-muted/60 flex-shrink-0">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                   strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                <polyline points="9 18 15 12 9 6" />
-                              </svg>
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -2413,11 +2358,11 @@ export default function ExecutiveHome() {
               BR: Insights (auto-generated comparison statements)
             Card height stays. Internal proportions balanced so chart doesn't
             dominate and KPIs/secondary row have real presence. */}
-        <div className="card-priority p-4 md:p-5 !rounded-lg ring-1 ring-stone-200 shadow-none">
+        <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
 
           {/* HEADER — title + subtitle, stronger divider below */}
-          <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-stone-200">
-            <h3 className="font-display font-bold text-ink-strong text-lg md:text-xl leading-none">
+          <div className="flex items-baseline justify-between mb-3 pb-2.5 border-b border-stone-200">
+            <h3 className="font-display font-bold text-ink-strong text-base md:text-lg leading-none">
               Daily Sales · Last 5 Business Days
             </h3>
             <p className="text-[11px] text-ink-muted">
@@ -2426,7 +2371,7 @@ export default function ExecutiveHome() {
           </div>
 
           {/* TOP ROW — Chart (2/3) + KPI cards (1/3) — with vertical divider between */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6 mb-4 pb-4 border-b border-stone-200">
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-4 lg:gap-5 mb-3 pb-3 border-b border-stone-200">
 
             {/* Combo chart */}
             <div className="lg:pr-3 lg:border-r lg:border-stone-200">
