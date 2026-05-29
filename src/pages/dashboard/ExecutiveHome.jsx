@@ -2257,13 +2257,13 @@ export default function ExecutiveHome() {
 
           {/* ── Bottom split: On Hold (left) + Past SLA (right) as compact tables ── */}
           {(stuckTotal > 0 || overdueTotal > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-7">
 
               {/* On Hold table */}
               {stuckTotal > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                    <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                       On Hold <span className="text-ink-muted font-medium normal-case tracking-normal">· {stuckTotal}</span>
                     </span>
                     <button onClick={() => setOnHoldModal(true)}
@@ -2305,9 +2305,9 @@ export default function ExecutiveHome() {
 
               {/* Past SLA table */}
               {overdueTotal > 0 && (
-                <div>
+                <div className="lg:border-l lg:border-stone-200 lg:pl-7">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-red-700">
+                    <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-red-700">
                       Past SLA <span className="text-ink-muted font-medium normal-case tracking-normal">· {overdueTotal}</span>
                     </span>
                     <button onClick={() => setWipModal("PRINTED")}
