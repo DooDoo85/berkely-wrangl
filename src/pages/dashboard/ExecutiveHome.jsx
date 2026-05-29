@@ -382,69 +382,66 @@ function OperationsStatusTable({
         <p className="text-[11px] text-ink-muted">Live order flow by stage</p>
       </div>
 
-      {/* Column headers row */}
-      <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] gap-3 px-3 mb-1.5">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Stage</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-center gap-1.5"
-             style={{ color: ROLLER }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: ROLLER }} />
-          Roller Shades
-        </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center justify-center gap-1.5"
-             style={{ color: FAUX }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: FAUX }} />
-          Faux Wood Blinds
-        </div>
-      </div>
-
-      {/* Stacked stage bands — tightened padding and smaller iconography */}
-      <div className="space-y-1">
-        {stages.map(s => (
-          <div key={s.key}
-            className={`${s.bandBg} ring-1 ring-stone-200 rounded-md overflow-hidden`}>
-            <div className="grid grid-cols-[minmax(0,1.1fr)_1fr_1fr] items-center">
-
-              {/* Stage chip — icon + label + sub-label */}
-              <div className="flex items-center gap-2.5 py-2 px-3">
+      {/* Horizontal pipeline — three stages flow left→right (Credit OK → Printed →
+          In Production), each a column with a chevron-connected header band on top
+          and a Roller / Faux two-up beneath. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-0">
+        {stages.map((s, i) => {
+          const isFirst = i === 0;
+          const isLast  = i === stages.length - 1;
+          // Chevron notch via clip-path: each header points right into the next.
+          // First stage is flat on the left; last is flat on the right.
+          const clip = isLast
+            ? (isFirst ? 'none' : 'polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%)')
+            : (isFirst
+                ? 'polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%)'
+                : 'polygon(18px 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 18px 100%, 0 50%)');
+          return (
+            <div key={s.key} className={`min-w-0 ${i > 0 ? 'md:-ml-2' : ''}`}>
+              {/* Stage header band — chevron-shaped flow segment */}
+              <div
+                className={`${s.bandBg} ring-1 ring-stone-200 flex items-center gap-2.5 py-2.5 ${isFirst ? 'pl-3' : 'pl-7'} ${isLast ? 'pr-3' : 'pr-7'}`}
+                style={{ clipPath: clip === 'none' ? undefined : clip, borderRadius: isFirst ? '6px 0 0 6px' : isLast ? '0 6px 6px 0' : 0 }}
+              >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
                   {s.iconSvg}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-ink-strong leading-tight">{s.label}</p>
-                  <p className="text-[10px] text-ink-muted leading-tight mt-0.5">{s.sub}</p>
+                  <p className="text-[13px] font-semibold text-ink-strong leading-tight truncate">{s.label}</p>
+                  <p className="text-[10px] text-ink-muted leading-tight mt-0.5 truncate">{s.sub}</p>
                 </div>
               </div>
 
-              {/* Roller cell — centered numbers, dashed left divider */}
-              <button onClick={s.roller.onClick}
-                className="group relative text-center py-2 px-3 self-stretch
-                           border-l border-dashed border-stone-300/60
-                           hover:bg-white/50 transition-colors">
-                <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
-                  {s.roller.value}
-                </p>
-                {s.roller.sub && (
-                  <p className="text-[10px] text-ink-muted mt-1">{s.roller.sub}</p>
-                )}
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-              </button>
-
-              {/* Faux cell — centered numbers, dashed left divider */}
-              <button onClick={s.faux.onClick}
-                className="group relative text-center py-2 px-3 self-stretch
-                           border-l border-dashed border-stone-300/60
-                           hover:bg-white/50 transition-colors">
-                <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
-                  {s.faux.value}
-                </p>
-                {s.faux.sub && (
-                  <p className="text-[10px] text-ink-muted mt-1">{s.faux.sub}</p>
-                )}
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-              </button>
+              {/* Roller / Faux two-up beneath the stage */}
+              <div className="grid grid-cols-2 gap-1.5 mt-1.5 px-1">
+                <button onClick={s.roller.onClick}
+                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2.5 px-2 text-center hover:bg-white transition-colors">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] mb-1 truncate" style={{ color: ROLLER }}>
+                    Roller Shades
+                  </p>
+                  <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
+                    {s.roller.value}
+                  </p>
+                  {s.roller.sub && (
+                    <p className="text-[10px] text-ink-muted mt-1 truncate">{s.roller.sub}</p>
+                  )}
+                </button>
+                <button onClick={s.faux.onClick}
+                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2.5 px-2 text-center hover:bg-white transition-colors">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] mb-1 truncate" style={{ color: FAUX }}>
+                    Faux Wood Blinds
+                  </p>
+                  <p className="text-xl font-medium text-ink-strong tabular-nums leading-none">
+                    {s.faux.value}
+                  </p>
+                  {s.faux.sub && (
+                    <p className="text-[10px] text-ink-muted mt-1 truncate">{s.faux.sub}</p>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
     </div>
