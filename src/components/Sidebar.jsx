@@ -189,14 +189,14 @@ export default function Sidebar() {
         <div key={item.label}>
           <button
             onClick={() => toggleGroup(item.label)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm
+            className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm
                        transition-colors duration-150
                        ${active
                           ? 'text-[#f7f0e0] bg-[rgba(247,240,224,0.06)]'
                           : 'text-[rgba(247,240,224,0.82)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)]'}`}
           >
-            <span className="flex items-center gap-3">
-              <span className="text-base opacity-90">{item.icon}</span>
+            <span className="flex items-center gap-2.5">
+              <span className="text-sm opacity-90">{item.icon}</span>
               <span className="font-medium">{item.label}</span>
             </span>
             <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
@@ -208,7 +208,7 @@ export default function Sidebar() {
                 .map(child => (
                   <NavLink key={child.to} to={child.to}
                     className={({ isActive }) =>
-                      `block px-3 py-1.5 rounded-md text-xs transition-colors duration-150
+                      `block px-3 py-1 rounded-md text-xs transition-colors duration-150
                        ${isActive
                           ? 'text-[#c89860] bg-[rgba(200,152,96,0.08)] font-semibold'
                           : 'text-[rgba(247,240,224,0.72)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)]'}`
@@ -225,12 +225,12 @@ export default function Sidebar() {
     return (
       <NavLink key={item.to} to={item.to} end={item.exact}
         className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150
+          `flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-colors duration-150
            border-l-2 ${isActive
               ? 'text-[#c89860] bg-[rgba(200,152,96,0.08)] border-[#c89860] font-semibold'
               : 'text-[rgba(247,240,224,0.82)] hover:text-[#f7f0e0] hover:bg-[rgba(247,240,224,0.06)] border-transparent'}`
         }>
-        <span className="text-base opacity-90">{item.icon}</span>
+        <span className="text-sm opacity-90">{item.icon}</span>
         <span className="font-medium">{item.label}</span>
       </NavLink>
     )
@@ -245,7 +245,7 @@ export default function Sidebar() {
       }}
     >
       {/* Header — compact: badge + "Wrangl" only (tagline dropped to save vertical) */}
-      <div className="px-4 pt-4 pb-3 border-b border-[rgba(247,240,224,0.08)]">
+      <div className="px-4 pt-3 pb-2.5 border-b border-[rgba(247,240,224,0.08)]">
         <div className="flex items-center gap-2.5">
           <WranglBadge size={32} />
           <div
@@ -264,14 +264,14 @@ export default function Sidebar() {
             const isCollapsible = item.collapsible
             const isOpen = !isCollapsible || openSections[item.label]
             return (
-              <div key={item.label} className={idx > 0 ? 'mt-3' : ''}>
+              <div key={item.label} className={idx > 0 ? 'mt-2' : ''}>
                 {/* Hairline divider above each section, except the first item */}
                 {idx > 1 && <div className="border-t border-[rgba(247,240,224,0.06)] mx-3" />}
 
                 {isCollapsible ? (
                   <button
                     onClick={() => toggleSection(item.label)}
-                    className="w-full pt-3.5 pb-1.5 px-3 flex items-center justify-between"
+                    className="w-full pt-2.5 pb-1 px-3 flex items-center justify-between"
                   >
                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8c7758]">
                       {item.label}
@@ -279,7 +279,7 @@ export default function Sidebar() {
                     <span className={`text-[10px] text-[#8c7758] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>›</span>
                   </button>
                 ) : (
-                  <div className="pt-3.5 pb-1.5 px-3">
+                  <div className="pt-2.5 pb-1 px-3">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8c7758]">
                       {item.label}
                     </span>
