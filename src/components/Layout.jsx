@@ -82,7 +82,7 @@ export default function Layout() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
           {/* Top bar — same on both, with mobile-friendly adjustments */}
           <header
-            className={`h-14 min-h-[56px] flex items-center justify-between flex-shrink-0 border-b ${isMobile ? 'px-4' : 'px-6'}`}
+            className={`h-12 min-h-[48px] flex items-center justify-between flex-shrink-0 border-b ${isMobile ? 'px-4' : 'px-5'}`}
             style={{
               background: '#f4eee2',
               borderColor: 'rgba(92,67,42,0.10)',
