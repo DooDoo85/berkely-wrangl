@@ -79,7 +79,7 @@ export default function Layout() {
         {/* Sidebar — desktop only. Hidden on mobile in favor of bottom nav. */}
         {!isMobile && <Sidebar />}
 
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
           {/* Top bar — same on both, with mobile-friendly adjustments */}
           <header
             className={`h-14 min-h-[56px] flex items-center justify-between flex-shrink-0 border-b ${isMobile ? 'px-4' : 'px-6'}`}
@@ -120,7 +120,7 @@ export default function Layout() {
               Bottom padding on mobile so content doesn't hide behind bottom nav. */}
           <main
             data-page-mode={pageMode}
-            className="flex-1 overflow-y-auto page-surface"
+            className="flex-1 overflow-y-auto min-h-0 page-surface"
             style={isMobile ? { paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' } : undefined}
           >
             <div className="page-enter">
