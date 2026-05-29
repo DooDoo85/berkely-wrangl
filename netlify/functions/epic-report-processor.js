@@ -3,12 +3,9 @@
 // Reads Gmail, processes ePIC CSV reports, updates Wrangl Supabase
 //
 // Reports handled:
-//   BERKELY ROLLER SHADE FULL SHIP  → orders.status = 'invoiced', roller_shipments_daily, inventory relief
-//   BERKELY FAUX FULL SHIP          → orders.status = 'invoiced'
-//   BEREKLY FAUX FULL SHIP          → orders.status = 'invoiced' (typo variant)
-//   BERKELY ROLLER SHADE PRINTED    → orders.status = 'printed' (legacy, still handled)
-//   BERKELY FAUX PRINTED            → orders.status = 'printed' (legacy, still handled)
-//   BERKELY PRINTED ORDERS          → orders.status = 'printed', product_line tagged, stale faux purged
+//   (DEPRECATED — handlers removed 2026-05-29) Roller/Faux Full Ship, Roller/Faux
+//   Printed, Printed Orders, Roller Shade WIP, Credit Hold/OK Orders — all folded
+//   into MASTER SALES REPORT; ePIC subscriptions turned off.
 //   ROLLER SHADE INVOICE BY PRODUCT → product_line_sales (Roller Shades)
 //   COMBINED ROLLER/FAUX            → product_line_sales (both lines)
 //   COMITTED STOCK                  → epic_committed_stock, qty_committed on parts (RS PART only)
@@ -229,101 +226,6 @@ function stringSimilarity(a, b) {
 
 // ── Report processors ─────────────────────────────────────────────────────────
 
-async function processFullShip(csvText, orderType) {
-  const rows = parseCSV(csvText)
-  console.log(`  ${orderType.toUpperCase()} FULL SHIP: ${rows.length} rows`)
-  let updated = 0
-
-  for (const row of rows) {
-    const orderNo = (row.OrderNo || row.Wo || '').trim()
-    if (!orderNo) continue
-
-    const ok = await sbUpdate(
-      'orders',
-      `epic_id=eq.${orderNo}`,
-      { status: 'invoiced', actual_ship_date: row.ShippedDate || null, updated_at: new Date().toISOString() }
-    )
-    if (ok) updated++
-  }
-  console.log(`  Updated ${updated} orders to invoiced`)
-
-  if (orderType === 'roller') {
-    const dayMap = {}
-    for (const row of rows) {
-      const date = (row.ShippedDate || '').trim().slice(0, 10)
-      if (!date) continue
-      if (!dayMap[date]) dayMap[date] = { orders: 0, units: 0, revenue: 0 }
-      dayMap[date].orders++
-      dayMap[date].units   += parseInt(row.TotalUnits || 0) || 0
-      dayMap[date].revenue += parseFloat(row.TotalSales || 0) || 0
-    }
-
-    for (const [ship_date, totals] of Object.entries(dayMap)) {
-      const ok = await sbUpdate(
-        'roller_shipments_daily',
-        `ship_date=eq.${ship_date}`,
-        { orders: totals.orders, units: totals.units, revenue: totals.revenue, updated_at: new Date().toISOString() }
-      )
-      if (!ok) {
-        await sbUpsert('roller_shipments_daily', [{
-          ship_date,
-          orders:   totals.orders,
-          units:    totals.units,
-          revenue:  totals.revenue,
-          updated_at: new Date().toISOString(),
-        }])
-      }
-    }
-    console.log(`  Updated roller_shipments_daily for ${Object.keys(dayMap).length} dates`)
-  }
-
-  await relieveCommittedForShippedOrders(rows)
-  return updated
-}
-
-async function relieveCommittedForShippedOrders(rows) {
-  const woNumbers = [...new Set(rows.map(r => (r.OrderNo || r.Wo || '').trim()).filter(Boolean))]
-  if (!woNumbers.length) return
-
-  console.log(`  Relieving committed stock for ${woNumbers.length} shipped work orders`)
-  let relieved = 0
-
-  for (const wo of woNumbers) {
-    const committedLines = await sbQuery(
-      'epic_committed_stock',
-      `work_order=eq.${wo}&relieved=eq.false&part_id=not.is.null&select=id,part_id,required_qty`
-    )
-    if (!Array.isArray(committedLines) || !committedLines.length) continue
-
-    const partTotals = {}
-    for (const line of committedLines) {
-      if (!partTotals[line.part_id]) partTotals[line.part_id] = 0
-      partTotals[line.part_id] += parseFloat(line.required_qty || 0)
-    }
-
-    for (const [partId, qty] of Object.entries(partTotals)) {
-      const parts = await sbQuery('parts', `id=eq.${partId}&select=qty_on_hand,qty_committed`)
-      if (!Array.isArray(parts) || !parts[0]) continue
-      const part = parts[0]
-      const newOnHand    = Math.max(0, (parseFloat(part.qty_on_hand) || 0) - qty)
-      const newCommitted = Math.max(0, (parseFloat(part.qty_committed) || 0) - qty)
-      await sbUpdate('parts', `id=eq.${partId}`, {
-        qty_on_hand:    newOnHand,
-        qty_committed:  newCommitted,
-        updated_at:     new Date().toISOString(),
-      })
-    }
-
-    await sbUpdate('epic_committed_stock', `work_order=eq.${wo}&relieved=eq.false`, {
-      relieved:      true,
-      relieved_date: new Date().toISOString().slice(0, 10),
-    })
-    relieved += committedLines.length
-  }
-
-  console.log(`  Relieved ${relieved} committed stock lines`)
-}
-
 // Map ProductType from CSV → product_line in DB
 function productTypeToLine(productType) {
   if (!productType) return null
@@ -344,148 +246,6 @@ function normalizeRepName(s) {
     return v.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
   }
   return v
-}
-
-async function processPrinted(csvText, orderType) {
-  const rows = parseCSV(csvText)
-  console.log(`  ${orderType.toUpperCase()} PRINTED: ${rows.length} rows`)
-  let updated = 0
-
-  // Track faux order numbers seen in this report — used for purge step below
-  const fauxOrdersInReport = new Set()
-
-  // Customer name → customer_id map. Auto-create missing customers so new orders
-  // never land orphaned (Customer 360 broken the way it was for BLINDSTER).
-  const norm = (s) => (s || '').trim().toUpperCase()
-  const customerMap = {}
-  {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/customers?select=id,account_name`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
-    )
-    if (res.ok) {
-      const data = await res.json()
-      data.forEach(c => {
-        const key = norm(c.account_name)
-        if (key) customerMap[key] = c.id
-      })
-    }
-  }
-  // Auto-create any missing real customers from this report
-  const reportNames = new Set()
-  for (const row of rows) {
-    const n = (row.Customer || row.CustomerName || '').trim()
-    if (n) reportNames.add(norm(n))
-  }
-  const missingCustomers = []
-  for (const key of reportNames) {
-    if (customerMap[key]) continue
-    if (key.includes('TEST CUSTOMER') || key.includes('TEST ACCOUNT') || key.startsWith('TEST ')) continue
-    // Find original casing + sales rep from the report
-    const sample = rows.find(r => norm(r.Customer || r.CustomerName) === key)
-    missingCustomers.push({
-      account_name: (sample?.Customer || sample?.CustomerName || key).trim(),
-      sales_rep:    normalizeRepName(sample?.Salesperson) || null,
-      status:       'active',
-      active:       true,
-      created_at:   new Date().toISOString(),
-      updated_at:   new Date().toISOString(),
-    })
-  }
-  if (missingCustomers.length > 0) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/customers`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
-      body: JSON.stringify(missingCustomers),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      created.forEach(c => { customerMap[norm(c.account_name)] = c.id })
-      console.log(`  Auto-created ${created.length} new customer record(s) from PRINTED report`)
-    } else {
-      console.error(`  Customer auto-create failed: ${res.status} ${await res.text()}`)
-    }
-  }
-
-  for (const row of rows) {
-    const orderNo = (row.OrderNo || row.Wo || '').trim()
-    if (!orderNo) continue
-
-    // Determine product line: from CSV ProductType column if present, else from orderType arg
-    const csvLine = productTypeToLine(row.ProductType)
-    const productLine = csvLine || (orderType === 'faux' ? 'faux' : orderType === 'roller' ? 'roller' : null)
-
-    if (productLine === 'faux') fauxOrdersInReport.add(orderNo)
-
-    const existing = await sbQuery('orders', `epic_id=eq.${orderNo}&select=id,status&limit=1`)
-    if (!Array.isArray(existing) || !existing[0]) {
-      const customerName = row.Customer || row.CustomerName || ''
-      await sbUpsert('orders', [{
-        epic_id:         orderNo,
-        order_number:    orderNo,
-        customer_name:   customerName,
-        customer_id:     customerMap[norm(customerName)] || null,
-        sidemark:        row.Sidemark || null,
-        status:          'printed',
-        product_line:    productLine,
-        epic_status_date: row.PrintedDate || null,
-        order_date:      row.PrintedDate || row.OrderDate || null,
-        total_units:     row.TotalUnits ? parseInt(row.TotalUnits) : null,
-        order_amount:    row.TotalSales ? parseFloat(row.TotalSales) : null,
-        sales_rep:       normalizeRepName(row.Salesperson) || null,
-        source:          'epic',
-        read_only:       true,
-      }])
-      updated++
-      continue
-    }
-
-    const current = existing[0].status
-    if (['draft', 'submitted'].includes(current)) {
-      await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        status:           'printed',
-        product_line:     productLine,
-        epic_status_date: row.PrintedDate || null,
-        updated_at:       new Date().toISOString(),
-      })
-      updated++
-    } else {
-      // Even if status is unchanged, still backfill product_line + printed date if missing
-      await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        product_line:     productLine,
-        epic_status_date: row.PrintedDate || null,
-        updated_at:       new Date().toISOString(),
-      })
-    }
-  }
-
-  // ── PURGE stale faux printed orders ────────────────────────────────────────
-  // Any faux order currently in 'printed' status that was NOT in today's report
-  // has moved on (invoiced/shipped). Mirror how roller_wip works — snapshot replacement.
-  if ((orderType === 'faux' || orderType === 'combined') && fauxOrdersInReport.size > 0) {
-    const inList = [...fauxOrdersInReport].join(',')
-    const purged = await sbUpdate(
-      'orders',
-      `status=eq.printed&product_line=eq.faux&order_number=not.in.(${inList})`,
-      { status: 'invoiced', updated_at: new Date().toISOString() }
-    )
-    console.log(`  Purged stale faux printed orders not in today's report (${fauxOrdersInReport.size} kept)`)
-
-    // Also clean up null-customer / null-product_line orphan printed rows
-    await sbUpdate(
-      'orders',
-      `status=eq.printed&product_line=is.null&customer_name=is.null`,
-      { status: 'invoiced', updated_at: new Date().toISOString() }
-    )
-  }
-
-  console.log(`  Updated ${updated} orders to printed`)
-  return updated
 }
 
 function parseCurrency(str) {
@@ -555,43 +315,6 @@ async function processCombinedCSV(csvText) {
   }
 
   return shipped.length
-}
-
-async function processRollerWIP(csvText) {
-  const rows = parseCSV(csvText)
-  console.log(`  ROLLER SHADE WIP: ${rows.length} rows`)
-
-  await fetch(`${SUPABASE_URL}/rest/v1/roller_wip?id=neq.00000000-0000-0000-0000-000000000000`, {
-    method:  'DELETE',
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  })
-
-  const toInsert = []
-  for (const row of rows) {
-    const wo = (row.Wo || '').trim()
-    if (!wo) continue
-    toInsert.push({
-      wo,
-      order_no:       (row.OrderNo || '').trim(),
-      order_date:     row.OrderDate || null,
-      sidemark:       (row.Sidemark || '').trim(),
-      order_status:   (row.OrderStatus || '').trim(),
-      days_in_status: parseInt(row.DaysInStatus || 0) || 0,
-      customer:       (row.Customer || '').trim(),
-      total_units:    parseInt(row.TotalUnits || 0) || 0,
-      total_sales:    parseCurrency(row.TotalSales || 0),
-      updated_at:     new Date().toISOString(),
-    })
-  }
-
-  if (toInsert.length) await sbUpsert('roller_wip', toInsert)
-
-  const creditOK     = toInsert.filter(r => r.order_status === 'CREDIT OK')
-  const printed      = toInsert.filter(r => r.order_status === 'PRINTED')
-  const creditUnits  = creditOK.reduce((s, r) => s + r.total_units, 0)
-  const printedUnits = printed.reduce((s, r) => s + r.total_units, 0)
-  console.log(`  WIP loaded — Credit OK: ${creditOK.length} orders / ${creditUnits} units | Printed: ${printed.length} orders / ${printedUnits} units`)
-  return toInsert.length
 }
 
 // ─── PromptAnswers decoder ────────────────────────────────────────────────
@@ -1129,56 +852,6 @@ async function processSalesReport(csvText) {
 
   console.log(`  Sales report done — upserted: ${upserted}, transitions: ${transitions}, skipped: ${skipped}`)
   return upserted
-}
-
-async function processCreditOk(csvText) {
-  const rows = parseCSV(csvText)
-  console.log(`  CREDIT HOLD/OK ORDERS: ${rows.length} rows total`)
-
-  await fetch(`${SUPABASE_URL}/rest/v1/credit_ok_orders?order_no=neq.__never__`, {
-    method:  'DELETE',
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  })
-
-  const toInsert = []
-  let okCount = 0, holdCount = 0
-  for (const row of rows) {
-    const status = (row.OrderStatus || '').trim().toUpperCase()
-    if (status !== 'CREDIT OK' && status !== 'CREDIT HOLD') continue
-
-    const orderNo = (row.OrderNo || '').trim()
-    if (!orderNo) continue
-
-    const productLine = productTypeToLine(row.ProductType)
-
-    toInsert.push({
-      order_no:      orderNo,
-      salesperson:   normalizeRepName(row.Salesperson),
-      customer_name: (row.CustomerName || '').trim(),
-      order_amount:  parseCurrency(row.OrderAmount || 0),
-      entered_date:  row.EnteredDate || null,
-      order_status:  status,
-      product_line:  productLine,
-      imported_at:   new Date().toISOString(),
-    })
-
-    if (status === 'CREDIT OK') okCount++
-    else holdCount++
-
-    // Also tag the corresponding row in `orders` with product_line if missing
-    if (productLine) {
-      await sbUpdate('orders', `epic_id=eq.${orderNo}`, {
-        product_line: productLine,
-        updated_at:   new Date().toISOString(),
-      })
-    }
-  }
-
-  if (toInsert.length) await sbUpsert('credit_ok_orders', toInsert)
-
-  const totalAmount = toInsert.reduce((s, r) => s + r.order_amount, 0)
-  console.log(`  Credit loaded: ${okCount} OK + ${holdCount} HOLD / $${totalAmount.toFixed(2)}`)
-  return toInsert.length
 }
 
 // ── Parts/Faux Shipped processor ─────────────────────────────────────────────
@@ -2396,17 +2069,11 @@ exports.handler = async function(event, context) {
       try {
         let count = 0
 
-        // ── DEPRECATED handlers (May 18 cutover to MASTER SALES REPORT) ────────
-        // These reports used to populate orders.status, roller_wip, and
-        // credit_ok_orders. Their functionality has been folded into the
-        // MASTER SALES REPORT handler below. The ePIC subscriptions for these
-        // reports should be turned off; this block is a belt-and-suspenders
-        // catch so any straggler emails get acknowledged but not processed.
-        //
-        // Handler functions (processFullShip, processPrinted, processRollerWIP,
-        // processCreditOk) are intentionally left in the file. If something
-        // breaks and we need to revert, comment out this block and re-enable
-        // the original handlers below.
+        // ── DEPRECATED reports (folded into MASTER SALES REPORT; ePIC
+        // subscriptions turned off 2026-05-29) ────────────────────────────────
+        // Their handlers have been removed. This block stays as a
+        // belt-and-suspenders catch so any straggler emails get acknowledged
+        // (marked processed) but not acted on.
         const DEPRECATED_SUBJECTS = [
           'ROLLER SHADE FULL SHIP',
           'FAUX FULL SHIP',
@@ -2426,57 +2093,20 @@ exports.handler = async function(event, context) {
           continue
         }
 
-        if (subject.includes('ROLLER SHADE FULL SHIP')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processFullShip(csvText, 'roller')
-          await markProcessed(messageId, 'roller_full_ship', count)
-          results.processed++
-
-        } else if (subject.includes('FAUX FULL SHIP')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processFullShip(csvText, 'faux')
-          await markProcessed(messageId, 'faux_full_ship', count)
-          results.processed++
-
-        } else if (subject.includes('ROLLER SHADE PRINTED')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processPrinted(csvText, 'roller')
-          await markProcessed(messageId, 'roller_printed', count)
-          results.processed++
-
-        } else if (subject.includes('FAUX COMMITTED')) {
-          // ── NEW: Faux wood committed stock (FW stock class → blind parts)
+        if (subject.includes('FAUX COMMITTED')) {
+          // Faux wood committed stock (FW stock class → blind parts)
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCommittedByClass(csvText, 'FW', 'blind', 'committed_faux')
           await markProcessed(messageId, 'committed_faux', count)
           results.processed++
 
-        } else if (subject.includes('FAUX PRINTED')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processPrinted(csvText, 'faux')
-          await markProcessed(messageId, 'faux_printed', count)
-          results.processed++
-
-        } else if (subject.includes('PRINTED ORDERS')) {
-          // Combined Roller + Faux printed report — line determined by ProductType column
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processPrinted(csvText, 'combined')
-          await markProcessed(messageId, 'printed_orders_combined', count)
-          results.processed++
-
         } else if (subject.includes('ROLLER SHADE INVOICE BY PRODUCT')) {
-          if (hasCSV) {
-            const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-            count = await processRollerSalesCSV(csvText)
-          } else {
-            count = await processCombinedReport(msg)
-          }
+          // Roller product-line sales → roller_product_breakdown (read by ExecutiveHome).
+          // Report always carries a CSV; no inline fallback.
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processRollerSalesCSV(csvText)
           await markProcessed(messageId, 'roller_sales', count)
           results.processed++
 
@@ -2485,13 +2115,6 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processCombinedCSV(csvText)
           await markProcessed(messageId, 'combined_report', count)
-          results.processed++
-
-        } else if (subject.includes('ROLLER SHADE WIP')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processRollerWIP(csvText)
-          await markProcessed(messageId, 'roller_wip', count)
           results.processed++
 
         } else if (subject.includes('QUOTE DETAIL') || subject.includes('QUOTE_DETAIL')) {
@@ -2513,13 +2136,6 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processSalesReport(csvText)
           await markProcessed(messageId, 'sales_report', count)
-          results.processed++
-
-        } else if (subject.includes('CREDIT HOLD/OK ORDERS') || subject.includes('CREDIT HOLD') || subject.includes('CREDIT OK ORDERS')) {
-          if (!hasCSV) { console.log('  No CSV attachment'); continue }
-          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
-          count = await processCreditOk(csvText)
-          await markProcessed(messageId, 'credit_ok_orders', count)
           results.processed++
 
         } else if (subject.includes('ROLLER PARTS/EXTRUSIONS SHIPPED') || subject.includes('PARTS SHIPPED') || subject.includes('PARTS_SHIPPED')) {
