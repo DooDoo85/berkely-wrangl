@@ -26,8 +26,19 @@ export default function ReceiveAgainstPO() {
       .from('purchase_orders').select('*').eq('id', id).single()
     const { data: itemsData } = await supabase
       .from('purchase_order_items').select('*').eq('po_id', id).order('id')
+
+    // Attach part_type so fabric (ordered in rolls) can be converted to inches on receive.
+    let withType = itemsData || []
+    const partIds = [...new Set(withType.filter(i => i.part_id).map(i => i.part_id))]
+    if (partIds.length) {
+      const { data: parts } = await supabase
+        .from('parts').select('id, part_type').in('id', partIds)
+      const typeById = Object.fromEntries((parts || []).map(p => [p.id, p.part_type]))
+      withType = withType.map(i => ({ ...i, part_type: typeById[i.part_id] || null }))
+    }
+
     setPO(poData)
-    setItems(itemsData || [])
+    setItems(withType)
     setLoading(false)
   }
 
@@ -77,19 +88,27 @@ export default function ReceiveAgainstPO() {
 
         // 2. Log inventory transaction (if part is linked)
         if (item.part_id) {
+          // Fabric is ordered in rolls but stocked in inches (1 roll = 33 yd = 1188").
+          // Convert on the inventory side only; the PO line (qty_received) stays in rolls.
+          const ROLL_INCHES = 1188
+          const isFabric = item.part_type === 'fabric'
+          const invQty   = isFabric ? qty * ROLL_INCHES : qty
+
           await supabase.from('inventory_transactions').insert({
             transaction_type: 'receive',
             part_id:          item.part_id,
-            quantity:         qty,
+            quantity:         invQty,
             po_id:            id,
             po_item_id:       itemId,
-            notes:            `Received against ${po.wrangl_po_number}`,
+            notes:            isFabric
+              ? `Received against ${po.wrangl_po_number} (${qty} roll${qty !== 1 ? 's' : ''} × 1188")`
+              : `Received against ${po.wrangl_po_number}`,
             user_id:          profile?.id,
           })
 
-          // 3. Update parts.qty_on_hand
+          // 3. Update parts.qty_on_hand (inches for fabric, units otherwise)
           await supabase.rpc('increment_part_qty', {
-            p_id: item.part_id, p_qty: qty,
+            p_id: item.part_id, p_qty: invQty,
           })
         }
 
@@ -249,16 +268,21 @@ export default function ReceiveAgainstPO() {
                     {fullyReceived ? (
                       <span className="text-stone-300">—</span>
                     ) : (
-                      <input
-                        type="number"
-                        min="0"
-                        max={remaining}
-                        step="1"
-                        placeholder="0"
-                        value={receiveQty[item.id] || ''}
-                        onChange={e => setReceiveQty({ ...receiveQty, [item.id]: e.target.value })}
-                        className="w-20 text-center border border-stone-300 rounded px-2 py-1 text-sm"
-                      />
+                      <div className="flex flex-col items-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max={remaining}
+                          step="1"
+                          placeholder="0"
+                          value={receiveQty[item.id] || ''}
+                          onChange={e => setReceiveQty({ ...receiveQty, [item.id]: e.target.value })}
+                          className="w-20 text-center border border-stone-300 rounded px-2 py-1 text-sm"
+                        />
+                        {item.part_type === 'fabric' && (
+                          <span className="text-[9px] text-stone-400 mt-0.5">rolls · 1 = 1,188"</span>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
