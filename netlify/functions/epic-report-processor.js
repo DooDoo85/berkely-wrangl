@@ -18,7 +18,7 @@
 //   PARTS SHIPPED (daily)           → inventory_transactions (consume), qty_on_hand decrement
 //   FAUX SHIPPED (daily)            → inventory_transactions (consume), qty_on_hand decrement
 //   FABRIC COMPLETED (daily)        → inventory_transactions (consume), qty_on_hand decrement on fabrics (NEW)
-//   DAILY INVENTORY SNAPSHOT (daily) → parts.qty_on_hand + qty_committed (FW + RS PART), epic_inventory_snapshot (NEW)
+//   DAILY INVENTORY SNAPSHOT (daily) → parts.qty_on_hand + qty_committed (FW only), epic_inventory_snapshot
 //   OPEN PO SNAPSHOT (daily)         → epic_open_pos, parts.qty_on_order (NEW)
 
 const GMAIL_CLIENT_ID     = process.env.GMAIL_CLIENT_ID
@@ -1951,11 +1951,13 @@ async function processCommittedStock(csvText) {
 // ── Inventory snapshot processor ─────────────────────────────────────────────
 // Ingests the daily DAILY_INVENTORY_SNAPSHOT report from ePIC.
 // This is the authoritative source for qty_on_hand and qty_committed
-// for FW (faux blinds) and RS PART (components).
+// for FW (faux blinds) ONLY.
 //
 // INTENTIONALLY SKIPPED stock classes:
 //   RS FABRIC — fabric tracked independently in Wrangl (inconsistent ePIC units)
 //   RS COMP   — extrusions tracked independently in Wrangl (bundles vs pcs)
+//   RS PART   — components Wrangl-owned as of 2026-05-29 (PIC on-hand inaccurate);
+//               driven by Wrangl PO receipts + PARTS SHIPPED consumption instead
 //
 // Match strategy (three-pass):
 //   1. epic_stock_code exact match  — fastest, most reliable
@@ -1970,8 +1972,11 @@ async function processCommittedStock(csvText) {
 // unit_cost are overwritten with ePIC's authoritative values for the
 // matched part types. This eliminates event-replay drift.
 
-const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP'])
-const SNAPSHOT_WRITE_CLASSES = new Set(['FW', 'RS PART'])
+// RS PART (components) moved to SKIP on 2026-05-29: PIC's component on-hand is
+// not accurate, so Wrangl now owns component qty_on_hand via PO receipts +
+// PARTS SHIPPED consumption. Snapshot is authoritative for FW (faux) only.
+const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP', 'RS PART'])
+const SNAPSHOT_WRITE_CLASSES = new Set(['FW'])
 
 // Strip accents, normalize whitespace, uppercase — used for name-based fallback
 function normalizeSnapName(s) {
@@ -2178,7 +2183,7 @@ async function processInventorySnapshot(csvText) {
     records_skipped:        stats.skipped_class,
     records_auto_matched:   stats.matched,
     records_unmatched:      stats.unmatched,
-    notes: `Wrote ${partsUpdated} parts via code/vpn/name match. Skipped ${stats.skipped_class} (RS FABRIC+RS COMP). ${failures.length} unmatched.`,
+    notes: `Wrote ${partsUpdated} parts via code/vpn/name match. Skipped ${stats.skipped_class} (RS FABRIC+RS COMP+RS PART). ${failures.length} unmatched.`,
   }])
 
   console.log(`  INVENTORY_SNAPSHOT done — code: ${stats.matched_code}, vpn: ${stats.matched_vpn}, name: ${stats.matched_name}, unmatched: ${stats.unmatched}, skipped: ${stats.skipped_class}`)
@@ -2590,7 +2595,7 @@ exports.handler = async function(event, context) {
 
         } else if (subject.includes('DAILY INVENTORY SNAPSHOT') || subject.includes('DAILY_INVENTORY_SNAPSHOT')) {
           // Authoritative daily inventory snapshot — overwrites qty_on_hand + qty_committed
-          // for FW and RS PART. Skips RS FABRIC and RS COMP (Wrangl maintains independently).
+          // for FW only. Skips RS FABRIC, RS COMP, and RS PART (Wrangl maintains independently).
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processInventorySnapshot(csvText)
