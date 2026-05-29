@@ -109,13 +109,24 @@ export default function CalendarPage() {
   const saveTask = async () => {
     if (!form.title.trim()) return
     setSaving(true)
-    const payload = { ...form, user_id: profile.id, customer_id: form.customer_id || null, updated_at: new Date().toISOString() }
-    if (editTask) {
-      await supabase.from('tasks').update(payload).eq('id', editTask.id)
-    } else {
-      await supabase.from('tasks').insert(payload)
+    // Typed columns (date/time) reject empty strings — coerce blanks to null.
+    const payload = {
+      ...form,
+      user_id:     profile.id,
+      customer_id: form.customer_id || null,
+      due_date:    form.due_date || null,
+      due_time:    form.due_time || null,
+      updated_at:  new Date().toISOString(),
     }
+    const { error } = editTask
+      ? await supabase.from('tasks').update(payload).eq('id', editTask.id)
+      : await supabase.from('tasks').insert(payload)
     setSaving(false)
+    if (error) {
+      console.error('Task save failed:', error)
+      alert('Could not save the task: ' + error.message)
+      return   // keep the modal open so the entry isn't lost
+    }
     setShowModal(false)
     loadTasks()
   }
