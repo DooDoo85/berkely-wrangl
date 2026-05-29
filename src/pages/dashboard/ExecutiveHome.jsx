@@ -447,67 +447,6 @@ function OperationsStatusTable({
         ))}
       </div>
 
-      {/* Operational footer — Total in Production, Started Today, Invoiced Today */}
-      <div className="mt-3 rounded-md bg-stone-50/80 ring-1 ring-stone-200 px-3 py-2.5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-x divide-stone-200">
-          {/* Total in Production */}
-          <div className="flex items-center gap-2 md:px-1">
-            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-stone-600 flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Total in production</p>
-              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
-                {loading ? "—" : totalInProduction}
-                <span className="text-[10.5px] font-normal text-ink-mid ml-1">orders</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Started Today */}
-          <div className="flex items-center gap-2 px-3 md:px-3">
-            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-amber-700 flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Started today</p>
-              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
-                {loading ? "—" : startedToday}
-                <span className="text-[10.5px] font-normal text-ink-mid ml-1">
-                  orders{startedTodayUnits > 0 ? ` · ${startedTodayUnits.toLocaleString()}u` : ''}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Invoiced Today */}
-          <div className="flex items-center gap-2 px-3 md:px-3">
-            <span className="w-8 h-8 rounded-md bg-white ring-1 ring-stone-200 text-emerald-700 flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted leading-tight">Invoiced today</p>
-              <p className="text-[15px] font-semibold text-ink-strong tabular-nums leading-tight mt-0.5">
-                {loading ? "—" : invoicedToday}
-                <span className="text-[10.5px] font-normal text-ink-mid ml-1">
-                  orders{invoicedTodayUnits > 0 ? ` · ${invoicedTodayUnits.toLocaleString()}u` : ''}
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -2304,34 +2243,8 @@ export default function ExecutiveHome() {
             onInProdFauxClick={() => setInProductionModal('faux')}
           />
 
-          {/* ── Needs Attention header (spans both columns below) ── */}
-          <div className="flex items-center justify-between mt-5 mb-3 pt-4 pb-3 border-t border-b border-stone-200">
-            <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                     strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-              </span>
-              <h3 className="font-display font-bold text-ink-strong text-lg leading-none">Needs Attention</h3>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {stuckTotal > 0 && (
-                <button onClick={() => setOnHoldModal(true)}
-                  className="pill-warning hover:opacity-80 transition-opacity cursor-pointer">
-                  {stuckTotal} on hold
-                </button>
-              )}
-              {overdueTotal > 0 && (
-                <button onClick={() => setWipModal("PRINTED")}
-                  className="pill-critical hover:opacity-80 transition-opacity cursor-pointer">
-                  {overdueTotal} past SLA
-                </button>
-              )}
-            </div>
-          </div>
+          {/* ── Divider between Operations bands and the alert columns ── */}
+          <div className="mt-4 mb-3 border-t border-stone-200" />
 
           {/* Empty state — both clear */}
           {stuckTotal === 0 && overdueTotal === 0 && (
