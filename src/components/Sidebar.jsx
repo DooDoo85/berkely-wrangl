@@ -55,6 +55,7 @@ const EXEC_NAV = [
         children: [
           { to: '/reports/sales-activity', label: 'Sales Activity' },
           { to: '/reports/remakes',        label: 'Remakes' },
+          { to: '/reports/parts-cost',     label: 'Parts Cost Quote' },
         ],
       },
     ],
