@@ -44,6 +44,7 @@ import ProductionDashboard from './pages/reports/ProductionDashboard'
 import InventoryHealth from './pages/reports/InventoryHealth'
 import OrderStatusDashboard from './pages/reports/OrderStatusDashboard'
 import SalesActivityReport from './pages/reports/SalesActivityReport'
+import RemakesReport from './pages/reports/RemakesReport'
 
 // Quotes (feature hidden — Quote Builder not yet active; routes removed from production nav)
 // import QuotesList from './pages/quotes/QuotesList'
@@ -156,6 +157,7 @@ function AppRoutes() {
         <Route path="/reports" element={<Navigate to="/reports/sales-activity" replace />} />
         <Route path="/reports/production"       element={<ProductionDashboard />} />
         <Route path="/reports/sales-activity"   element={<SalesActivityReport />} />
+        <Route path="/reports/remakes"          element={<RemakesReport />} />
         <Route path="/reports/inventory-health" element={<InventoryHealth />} />
         <Route path="/reports/order-status"     element={<OrderStatusDashboard />} />
 
