@@ -385,24 +385,13 @@ function OperationsStatusTable({
       {/* Horizontal pipeline — three stages flow left→right (Credit OK → Printed →
           In Production), each a column with a chevron-connected header band on top
           and a Roller / Faux two-up beneath. */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
         {stages.map((s, i) => {
           const isFirst = i === 0;
-          const isLast  = i === stages.length - 1;
-          // Chevron notch via clip-path: each header points right into the next.
-          // First stage is flat on the left; last is flat on the right.
-          const clip = isLast
-            ? (isFirst ? 'none' : 'polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%)')
-            : (isFirst
-                ? 'polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%)'
-                : 'polygon(18px 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 18px 100%, 0 50%)');
           return (
-            <div key={s.key} className={`min-w-0 ${i > 0 ? 'md:-ml-2' : ''}`}>
-              {/* Stage header band — chevron-shaped flow segment */}
-              <div
-                className={`${s.bandBg} ring-1 ring-stone-200 flex items-center gap-2.5 py-2.5 ${isFirst ? 'pl-3' : 'pl-7'} ${isLast ? 'pr-3' : 'pr-7'}`}
-                style={{ clipPath: clip === 'none' ? undefined : clip, borderRadius: isFirst ? '6px 0 0 6px' : isLast ? '0 6px 6px 0' : 0 }}
-              >
+            <div key={s.key} className={`min-w-0 relative ${!isFirst ? 'md:pl-4 md:border-l md:border-stone-200' : ''}`}>
+              {/* Stage header band — centered icon + label + sub */}
+              <div className={`${s.bandBg} ring-1 ring-stone-200 rounded-md flex flex-col items-center justify-center text-center gap-1 py-2.5 px-3`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
                   {s.iconSvg}
                 </div>
@@ -413,7 +402,7 @@ function OperationsStatusTable({
               </div>
 
               {/* Roller / Faux two-up beneath the stage */}
-              <div className="grid grid-cols-2 gap-1.5 mt-1.5 px-1">
+              <div className="grid grid-cols-2 gap-1.5 mt-1.5">
                 <button onClick={s.roller.onClick}
                   className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2.5 px-2 text-center hover:bg-white transition-colors">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] mb-1 truncate" style={{ color: ROLLER }}>
