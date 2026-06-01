@@ -2025,6 +2025,65 @@ async function processOpenPOSnapshot(csvText) {
 }
 
 
+// ── REMAKES ────────────────────────────────────────────────────────────────────
+// Parses the ePIC "ROLLER REMAKES" report and upserts into the `remakes` table.
+// Keyed on remake_wo; uses merge-duplicates so re-imports refresh the ePIC-sourced
+// fields without clobbering the human-entered fault_stage/fault_reason/notes.
+//
+// Report columns: RemakeWO, OriginalWO, RemakeDate, DateCreditOK, Customer,
+//                 Sidemark, UnitCount, CustomerCharge, InternalCost, NetImpact,
+//                 CostPerUnit
+async function processRemakes(csvText) {
+  const rows = parseCSV(csvText)
+  if (!rows.length) { console.log('  REMAKES — no rows'); return 0 }
+
+  // ePIC sends 0000-00-00 for an unset DateCreditOK → store as null.
+  const cleanDate = (s) => {
+    const v = (s || '').trim()
+    if (!v || v.startsWith('0000')) return null
+    return v
+  }
+  const num = (s) => {
+    const n = parseFloat(String(s ?? '').replace(/[$,]/g, ''))
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null   // round to cents
+  }
+
+  const out = []
+  for (const r of rows) {
+    const remakeWo = (r.RemakeWO || '').trim()
+    if (!remakeWo) continue   // skip blank/total rows
+
+    const net = num(r.NetImpact)
+
+    out.push({
+      remake_wo:       remakeWo,
+      original_wo:     (r.OriginalWO || '').trim() || null,
+      product_line:    'roller',
+      remake_date:     cleanDate(r.RemakeDate),
+      date_credit_ok:  cleanDate(r.DateCreditOK),
+      customer:        (r.Customer || '').trim() || null,
+      sidemark:        (r.Sidemark || '').trim() || null,
+      unit_count:      parseInt(r.UnitCount, 10) || null,
+      customer_charge: num(r.CustomerCharge),
+      internal_cost:   num(r.InternalCost),
+      net_impact:      net,
+      cost_per_unit:   num(r.CostPerUnit),
+      // Auto-derived hint only — the human fault_reason is the source of truth,
+      // and we deliberately DON'T send fault_stage/fault_reason/notes/reviewed_*
+      // so merge-duplicates never overwrites what someone entered on the report page.
+      fault_bucket:    net === null ? null : (net < 0 ? 'absorbed' : 'recovered'),
+      updated_at:      new Date().toISOString(),
+    })
+  }
+
+  if (!out.length) { console.log('  REMAKES — no valid rows'); return 0 }
+
+  const ok = await sbUpsert('remakes', out)
+  console.log(`  REMAKES — upserted ${out.length} rows (ok=${ok})`)
+  return out.length
+}
+
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 exports.handler = async function(event, context) {
   console.log('\n🤠 Berkely Wrangl — ePIC Report Processor')
@@ -2093,7 +2152,15 @@ exports.handler = async function(event, context) {
           continue
         }
 
-        if (subject.includes('FAUX COMMITTED')) {
+        if (subject.includes('REMAKE')) {
+          // ROLLER REMAKES report → upsert into remakes table (keyed on remake_wo).
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processRemakes(csvText)
+          await markProcessed(messageId, 'remakes', count)
+          results.processed++
+
+        } else if (subject.includes('FAUX COMMITTED')) {
           // Faux wood committed stock (FW stock class → blind parts)
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
