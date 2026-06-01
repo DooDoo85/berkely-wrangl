@@ -54,6 +54,7 @@ const EXEC_NAV = [
         type: 'group', label: 'Reports', icon: '📊',
         children: [
           { to: '/reports/sales-activity', label: 'Sales Activity' },
+          { to: '/reports/remakes',        label: 'Remakes' },
         ],
       },
     ],
