@@ -10,9 +10,10 @@ const TABS = [
 
 const usd = (n) => (n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n))
 
-// Fabric is bought/quoted by the roll: 1 roll = 33 yd = 1188". unit_cost is per-inch.
-const ROLL_INCHES = 1188
-const rollCost = (unitCostPerInch) => (unitCostPerInch == null ? null : unitCostPerInch * ROLL_INCHES)
+// Fabric is bought/quoted by the roll: 1 roll = 33 linear yards.
+// Fabric unit_cost is stored per LINEAR YARD.
+const ROLL_YARDS = 33
+const rollCost = (unitCostPerYard) => (unitCostPerYard == null ? null : unitCostPerYard * ROLL_YARDS)
 
 export default function PartsCostQuote() {
   const { profile } = useAuth()
