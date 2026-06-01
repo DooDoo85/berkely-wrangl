@@ -154,6 +154,18 @@ async function sbInsert(table, rows) {
   return res.ok
 }
 
+async function sbDelete(table, match) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${match}`, {
+    method:  'DELETE',
+    headers: {
+      apikey:        SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Prefer:        'return=minimal',
+    },
+  })
+  return res.ok
+}
+
 async function alreadyProcessed(messageId) {
   const rows = await sbQuery('epic_sync_log', `message_id=eq.${messageId}&select=id&limit=1`)
   return Array.isArray(rows) && rows.length > 0
@@ -2084,6 +2096,71 @@ async function processRemakes(csvText) {
 }
 
 
+// ── PURCHASING ──────────────────────────────────────────────────────────────────
+// Parses the ePIC "FACTORY PURCHASING DASHBOARD" report into purchasing_lines.
+// Strategy: REPLACE-BY-PO — delete all existing lines for the PO numbers present
+// in the file, then insert the file's lines fresh. Robust against ePIC line
+// renumbering and removed lines. No human-entered fields, so wholesale replace
+// is safe.
+//
+// Columns: VendorNumber, Vendor, PONumber, PODate, LineNo, StockCode,
+//          Description, QtyOrdered, UnitCost, ExtendedCost
+async function processPurchasing(csvText) {
+  const rows = parseCSV(csvText)
+  if (!rows.length) { console.log('  PURCHASING — no rows'); return 0 }
+
+  const num = (s) => {
+    const n = parseFloat(String(s ?? '').replace(/[$,]/g, ''))
+    return Number.isFinite(n) ? n : null
+  }
+  const cleanDate = (s) => {
+    const v = (s || '').trim()
+    if (!v || v.startsWith('0000')) return null
+    return v
+  }
+
+  const out = []
+  const poSet = new Set()
+  for (const r of rows) {
+    const po = (r.PONumber || '').trim()
+    if (!po) continue
+    poSet.add(po)
+    out.push({
+      vendor_number: (r.VendorNumber || '').trim() || null,
+      vendor:        (r.Vendor || '').trim() || null,
+      po_number:     po,
+      po_date:       cleanDate(r.PODate),
+      line_no:       parseInt(r.LineNo, 10) || null,
+      stock_code:    (r.StockCode || '').trim() || null,
+      description:   (r.Description || '').trim() || null,
+      qty_ordered:   num(r.QtyOrdered),
+      unit_cost:     num(r.UnitCost),
+      extended_cost: num(r.ExtendedCost),
+    })
+  }
+
+  if (!out.length) { console.log('  PURCHASING — no valid rows'); return 0 }
+
+  // Replace-by-PO: clear existing lines for these POs, then insert fresh.
+  // PostgREST in-filter: po_number=in.("205644","205645",...)
+  const poList = [...poSet]
+  // Chunk the delete to keep the URL length sane.
+  for (let i = 0; i < poList.length; i += 50) {
+    const chunk = poList.slice(i, i + 50)
+    const inClause = chunk.map(p => `"${p.replace(/"/g, '')}"`).join(',')
+    await sbDelete('purchasing_lines', `po_number=in.(${inClause})`)
+  }
+
+  // Insert in batches.
+  for (let i = 0; i < out.length; i += 200) {
+    await sbInsert('purchasing_lines', out.slice(i, i + 200))
+  }
+
+  console.log(`  PURCHASING — replaced ${poList.length} POs, inserted ${out.length} lines`)
+  return out.length
+}
+
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 exports.handler = async function(event, context) {
   console.log('\n🤠 Berkely Wrangl — ePIC Report Processor')
@@ -2158,6 +2235,14 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processRemakes(csvText)
           await markProcessed(messageId, 'remakes', count)
+          results.processed++
+
+        } else if (subject.includes('PURCHASING')) {
+          // FACTORY PURCHASING DASHBOARD → replace-by-PO into purchasing_lines.
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processPurchasing(csvText)
+          await markProcessed(messageId, 'purchasing', count)
           results.processed++
 
         } else if (subject.includes('FAUX COMMITTED')) {
