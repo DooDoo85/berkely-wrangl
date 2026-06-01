@@ -57,6 +57,7 @@ const EXEC_NAV = [
           { to: '/reports/remakes',        label: 'Remakes' },
           { to: '/reports/parts-cost',     label: 'Parts Cost Quote' },
           { to: '/reports/vendor-pricing', label: 'Vendor Pricing' },
+          { to: '/reports/vendor-purchasing', label: 'Vendor Purchasing' },
         ],
       },
     ],
