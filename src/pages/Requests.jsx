@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../components/AuthProvider'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../components/AuthProvider'
 
 const STATUSES = [
   { key: 'new',     label: 'New',     color: 'bg-blue-100 text-blue-700' },
