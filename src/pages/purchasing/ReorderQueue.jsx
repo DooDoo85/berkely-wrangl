@@ -48,6 +48,13 @@ export default function ReorderQueue() {
   const [addNote, setAddNote] = useState('')
   const [addSaving, setAddSaving] = useState(false)
   const [addSuccess, setAddSuccess] = useState(null)
+
+  // Misc (non-catalog) item entry — for things that aren't in the parts list
+  const [miscMode, setMiscMode] = useState(false)
+  const [miscName, setMiscName] = useState('')
+  const [miscQty, setMiscQty] = useState('')
+  const [miscVendor, setMiscVendor] = useState('')
+  const [miscNote, setMiscNote] = useState('')
   const searchRef = useRef(null)
   const debounceRef = useRef(null)
 
@@ -311,6 +318,32 @@ export default function ReorderQueue() {
     setAddResults([])
   }
 
+  async function handleAddMisc() {
+    if (!miscName.trim()) return
+    setAddSaving(true)
+    try {
+      await supabase.from('reorder_queue').insert({
+        part_id:       null,                       // non-catalog item
+        part_name:     miscName.trim(),            // NOT NULL — required
+        is_misc:       true,
+        vendor_name:   miscVendor.trim() || 'Misc / Non-catalog',
+        qty_requested: miscQty ? parseInt(miscQty) : null,
+        note:          miscNote.trim() || null,
+        added_by:      user?.id || null,
+      })
+      setAddSuccess(miscName.trim())
+      setMiscMode(false)
+      setMiscName(''); setMiscQty(''); setMiscVendor(''); setMiscNote('')
+      setAddSearch('')
+      loadQueue()
+      setTimeout(() => setAddSuccess(null), 2000)
+    } catch (e) {
+      alert('Could not add misc item: ' + (e.message || e))
+    } finally {
+      setAddSaving(false)
+    }
+  }
+
   async function handleQuickAdd() {
     if (!addingPart || !addQty) return
     setAddSaving(true)
@@ -540,7 +573,7 @@ export default function ReorderQueue() {
             </div>
           )}
 
-          {!addingPart ? (
+          {!addingPart && !miscMode ? (
             <>
               {/* Search */}
               <input
@@ -555,7 +588,15 @@ export default function ReorderQueue() {
               {/* Results */}
               {addSearching && <p className="text-xs text-stone-400 py-2">Searching...</p>}
               {!addSearching && addSearch && addResults.length === 0 && (
-                <p className="text-xs text-stone-400 py-2">No parts found for "{addSearch}"</p>
+                <div className="py-2">
+                  <p className="text-xs text-stone-400 mb-2">No parts found for "{addSearch}"</p>
+                  <button
+                    onClick={() => { setMiscName(addSearch.trim()); setMiscMode(true) }}
+                    className="text-xs font-semibold text-brand-dark underline underline-offset-2 hover:opacity-80"
+                  >
+                    + Add "{addSearch.trim()}" as a misc item
+                  </button>
+                </div>
               )}
               {addResults.length > 0 && (
                 <div className="border border-stone-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
@@ -584,7 +625,55 @@ export default function ReorderQueue() {
                   ))}
                 </div>
               )}
+
+              {/* Always-available misc entry point */}
+              <button
+                onClick={() => { setMiscName(addSearch.trim()); setMiscMode(true) }}
+                className="mt-3 text-xs text-stone-400 hover:text-brand-dark transition-colors"
+              >
+                Need something not in the parts list? <span className="underline underline-offset-2 font-semibold">Add a misc item</span>
+              </button>
             </>
+          ) : miscMode ? (
+            /* Misc (non-catalog) item form */
+            <div className="bg-amber-50/50 ring-1 ring-amber-200/60 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-semibold text-stone-800 text-sm">Add misc item <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded ml-1">NON-CATALOG</span></p>
+                <button onClick={() => { setMiscMode(false); setMiscName(''); setMiscQty(''); setMiscVendor(''); setMiscNote('') }}
+                  className="text-stone-400 hover:text-stone-600 text-xs">← Back</button>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-wide mb-1">What's needed</label>
+                  <input type="text" value={miscName} onChange={e => setMiscName(e.target.value)}
+                    placeholder="e.g. shrink wrap, box cutters, packing tape"
+                    className="input w-full" autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter' && miscName.trim()) handleAddMisc() }} />
+                </div>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-wide mb-1">Qty <span className="font-normal normal-case text-stone-300">(opt)</span></label>
+                    <input type="number" min="1" value={miscQty} onChange={e => setMiscQty(e.target.value)}
+                      className="input w-20 text-center" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-wide mb-1">Vendor <span className="font-normal normal-case text-stone-300">(opt)</span></label>
+                    <input type="text" value={miscVendor} onChange={e => setMiscVendor(e.target.value)}
+                      placeholder="where to get it" className="input w-full" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-wide mb-1">Note <span className="font-normal normal-case text-stone-300">(optional)</span></label>
+                  <input type="text" value={miscNote} onChange={e => setMiscNote(e.target.value)}
+                    placeholder="e.g. running low, need by Friday" className="input w-full"
+                    onKeyDown={e => { if (e.key === 'Enter' && miscName.trim()) handleAddMisc() }} />
+                </div>
+                <button onClick={handleAddMisc} disabled={addSaving || !miscName.trim()}
+                  className="w-full px-5 py-2 bg-brand-dark text-white text-sm font-semibold rounded-xl hover:bg-brand-dark/90 disabled:opacity-40 transition-colors">
+                  {addSaving ? 'Adding...' : 'Add misc item to queue'}
+                </button>
+              </div>
+            </div>
           ) : (
             /* Adding a specific part — show qty + note inline */
             <div className="bg-stone-50 rounded-xl p-4">
@@ -722,7 +811,10 @@ export default function ReorderQueue() {
                             className="w-4 h-4 rounded border-stone-300 text-brand-dark cursor-pointer"
                           />
                         </td>
-                        <td className="px-5 py-3 text-stone-800 font-medium">{item.part_name}</td>
+                        <td className="px-5 py-3 text-stone-800 font-medium">
+                          {item.part_name}
+                          {item.is_misc && <span className="ml-2 text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full align-middle">MISC</span>}
+                        </td>
                         <td className="px-5 py-3 text-stone-500 font-mono text-xs">{item.stock_number || '—'}</td>
                         <td className="px-5 py-3 text-center" onClick={e => e.stopPropagation()}>
                           {editingQty[item.id] !== undefined ? (
