@@ -48,6 +48,7 @@ import RemakesReport from './pages/reports/RemakesReport'
 import PartsCostQuote from './pages/reports/PartsCostQuote'
 import VendorPricing from './pages/reports/VendorPricing'
 import VendorPurchasing from './pages/reports/VendorPurchasing'
+import Requests from './pages/Requests'
 
 // Quotes (feature hidden — Quote Builder not yet active; routes removed from production nav)
 // import QuotesList from './pages/quotes/QuotesList'
@@ -180,6 +181,7 @@ function AppRoutes() {
 
         {/* Calendar */}
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/requests" element={<Requests />} />
 
         {/* System */}
         <Route path="/system/tickets" element={<FeedbackTickets />} />
