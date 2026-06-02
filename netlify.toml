@@ -33,3 +33,11 @@
 # becomes 14:00 UTC. Re-check in Nov along with send-weekly-recap.
 [functions."send-usage-digest"]
   schedule = "0 13 * * 5"
+
+# Thrice-daily open-request digest (Requests board → David's inbox).
+# Runs 8am, 12pm, 4pm CDT = 13:00, 17:00, 21:00 UTC.
+# Skips sending entirely when there are no open requests.
+# DST note: when clocks fall back to CST (UTC-6) these arrive at
+# 7am/11am/3pm local — accepted one-hour drift. Re-check in Nov.
+[functions."send-request-digest"]
+  schedule = "0 13,17,21 * * *"
