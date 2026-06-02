@@ -15,6 +15,7 @@ const EXEC_NAV = [
   { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
   { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
   { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
+  { type: 'link', to: '/requests',   icon: '📥', label: 'Requests'   },
   {
     type: 'group', label: 'Orders', icon: '📋',
     children: [
