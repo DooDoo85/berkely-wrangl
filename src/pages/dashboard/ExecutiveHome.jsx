@@ -92,7 +92,28 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall =
 // Revenue-focused card. Shows WTD sales, units, WoW% change, a 30-day sparkline,
 // and a 2-col MTD/YTD footer for at-a-glance period totals.
 //
-function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onClick }) {
+// ─── Weekday units bar chart (Mon–Fri completed/invoiced units) ─────────────
+function WeekdayBars({ data, color }) {
+  const max = Math.max(1, ...data.map(d => d.units));
+  return (
+    <div className="flex items-end justify-between gap-1.5" style={{ height: 56 }}>
+      {data.map((d, i) => {
+        const h = d.units > 0 ? Math.max(3, (d.units / max) * 44) : 2;
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1">
+            <span className="text-[9px] tabular-nums leading-none" style={{ color: d.units > 0 ? color : 'transparent', minHeight: 9 }}>
+              {d.units > 0 ? d.units : ''}
+            </span>
+            <div className="w-full rounded-sm" style={{ height: h, background: d.units > 0 ? color : '#e7e5e4', opacity: d.units > 0 ? 0.85 : 1 }} />
+            <span className="text-[9px] text-ink-muted leading-none">{d.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HeroCard({ label, accent, fill, data, sparkData, weekData, wowPct, loading, onClick }) {
   const wowPositive = wowPct !== null && wowPct >= 0;
   return (
     <div onClick={onClick}
@@ -128,9 +149,10 @@ function HeroCard({ label, accent, fill, data, sparkData, wowPct, loading, onCli
         )}
       </div>
 
-      {/* 30-day sparkline */}
+      {/* Mon–Fri units completed (invoiced) this week */}
       <div className="mb-2.5">
-        <Sparkline data={sparkData} color={accent} fillColor={fill} />
+        <p className="text-[10px] text-ink-muted uppercase tracking-wide mb-1">Units completed · this week</p>
+        <WeekdayBars data={weekData || []} color={accent} />
       </div>
 
       {/* MTD / YTD footer */}
@@ -1327,6 +1349,7 @@ export default function ExecutiveHome() {
     overdueOrders: [],
     faux: {}, roller: {},
     fauxSpark: [], rollerSpark: [],
+    rollerWeek: [], fauxWeek: [],
     wip: { creditOK: [], printed: [] },
     creditOk: { count: 0, total: 0 },
     creditOkRoller: { count: 0, total: 0 },
@@ -1986,6 +2009,42 @@ export default function ExecutiveHome() {
         return rollerSparkMap[d.toISOString().slice(0, 10)] || 0;
       });
 
+      // ── Mon–Fri units COMPLETED (invoiced) this week, by product line ──
+      // "Completed" = invoiced (epic_status PAID/INVOICED), the only fully
+      // populated, current completion signal. Bucketed by epic_status_date,
+      // summing total_units. Monday→Friday of the current week.
+      const mondayThisWeek = new Date(weekStart); // weekStart is Monday (computed above)
+      const fridayThisWeek = new Date(mondayThisWeek);
+      fridayThisWeek.setDate(fridayThisWeek.getDate() + 4);
+      const monStr = mondayThisWeek.toISOString().slice(0, 10);
+      const friNextStr = new Date(fridayThisWeek.getTime() + 86400000).toISOString().slice(0, 10); // exclusive upper bound (Sat)
+
+      const { data: wkUnitRows } = await supabase
+        .from("orders")
+        .select("epic_status_date, total_units, product_line, epic_status")
+        .in("epic_status", ["PAID", "INVOICED"])
+        .gte("epic_status_date", monStr)
+        .lt("epic_status_date", friNextStr)
+        .not("epic_status_date", "is", null);
+
+      const rollerDayMap = {};
+      const fauxDayMap = {};
+      (wkUnitRows ?? []).forEach(r => {
+        const u = Number(r.total_units || 0);
+        if (r.product_line === 'roller') rollerDayMap[r.epic_status_date] = (rollerDayMap[r.epic_status_date] || 0) + u;
+        if (r.product_line === 'faux')   fauxDayMap[r.epic_status_date]   = (fauxDayMap[r.epic_status_date]   || 0) + u;
+      });
+      // Build Mon–Fri arrays of {label, units}
+      const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      const rollerWeek = WD.map((label, i) => {
+        const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
+        return { label, units: rollerDayMap[d.toISOString().slice(0, 10)] || 0 };
+      });
+      const fauxWeek = WD.map((label, i) => {
+        const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
+        return { label, units: fauxDayMap[d.toISOString().slice(0, 10)] || 0 };
+      });
+
       // Monthly avg roller-shade order value — pulled from same sparkRows
       // (30 days, all products with order_amount + product_line). Sum roller
       // amounts, divide by count of roller orders.
@@ -2091,6 +2150,7 @@ export default function ExecutiveHome() {
         stuckOrders, heldOrdersAll, avgDays, repOrders, faux, roller,
         overdueOrders,
         fauxSpark, rollerSpark,
+        rollerWeek, fauxWeek,
         wip: { creditOK, printed: printedForModal },
         creditOk, creditOkRoller, creditOkFaux,
         printedTotal, fauxPrintedTotal,
@@ -2183,6 +2243,7 @@ export default function ExecutiveHome() {
             fill={ROLLER_FILL}
             data={data.roller}
             sparkData={data.rollerSpark}
+            weekData={data.rollerWeek}
             wowPct={data.rollerWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=roller")}
@@ -2193,6 +2254,7 @@ export default function ExecutiveHome() {
             fill={FAUX_FILL}
             data={data.faux}
             sparkData={data.fauxSpark}
+            weekData={data.fauxWeek}
             wowPct={data.fauxWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=faux")}
