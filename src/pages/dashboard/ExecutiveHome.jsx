@@ -92,20 +92,25 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall =
 // Revenue-focused card. Shows WTD sales, units, WoW% change, a 30-day sparkline,
 // and a 2-col MTD/YTD footer for at-a-glance period totals.
 //
-// ─── Weekday units bar chart (Mon–Fri completed/invoiced units) ─────────────
+// ─── Weekday units bar chart (Mon–Fri shipped units) ────────────────────────
 function WeekdayBars({ data, color }) {
   const max = Math.max(1, ...data.map(d => d.units));
+  const CHART_H = 88;   // overall component height
+  const BAR_MAX = 60;   // tallest a bar can be, leaving room for the number + label
   return (
-    <div className="flex items-end justify-between gap-1.5" style={{ height: 56 }}>
+    <div className="flex items-end justify-between gap-2.5" style={{ height: CHART_H }}>
       {data.map((d, i) => {
-        const h = d.units > 0 ? Math.max(3, (d.units / max) * 44) : 2;
+        const h = d.units > 0 ? Math.max(4, (d.units / max) * BAR_MAX) : 3;
+        const empty = d.units === 0;
         return (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1">
-            <span className="text-[9px] tabular-nums leading-none" style={{ color: d.units > 0 ? color : 'transparent', minHeight: 9 }}>
-              {d.units > 0 ? d.units : ''}
+          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+            <span className="text-[11px] font-semibold tabular-nums leading-none"
+                  style={{ color: empty ? '#d6d3d1' : color }}>
+              {empty ? '·' : d.units}
             </span>
-            <div className="w-full rounded-sm" style={{ height: h, background: d.units > 0 ? color : '#e7e5e4', opacity: d.units > 0 ? 0.85 : 1 }} />
-            <span className="text-[9px] text-ink-muted leading-none">{d.label}</span>
+            <div className="w-full rounded"
+                 style={{ height: h, background: empty ? '#ede9e3' : color, opacity: empty ? 1 : 0.9 }} />
+            <span className="text-[10px] text-ink-muted leading-none">{d.label}</span>
           </div>
         );
       })}
@@ -149,9 +154,8 @@ function HeroCard({ label, accent, fill, data, sparkData, weekData, wowPct, load
         )}
       </div>
 
-      {/* Mon–Fri units completed (invoiced) this week */}
+      {/* Mon–Fri units shipped this week */}
       <div className="mb-2.5">
-        <p className="text-[10px] text-ink-muted uppercase tracking-wide mb-1">Units completed · this week</p>
         <WeekdayBars data={weekData || []} color={accent} />
       </div>
 
@@ -2009,40 +2013,34 @@ export default function ExecutiveHome() {
         return rollerSparkMap[d.toISOString().slice(0, 10)] || 0;
       });
 
-      // ── Mon–Fri units COMPLETED (invoiced) this week, by product line ──
-      // "Completed" = invoiced (epic_status PAID/INVOICED), the only fully
-      // populated, current completion signal. Bucketed by epic_status_date,
-      // summing total_units. Monday→Friday of the current week.
+      // ── Mon–Fri units SHIPPED this week, by product line ──────────────
+      // Authoritative daily source: daily_shipments table, fed by the ePIC
+      // "DAILY SHIPMENT SUMMARY" reports (roller + faux). This is separate
+      // from WTD/MTD/YTD totals, which come from product_line_sales (below).
       const mondayThisWeek = new Date(weekStart); // weekStart is Monday (computed above)
-      const fridayThisWeek = new Date(mondayThisWeek);
-      fridayThisWeek.setDate(fridayThisWeek.getDate() + 4);
       const monStr = mondayThisWeek.toISOString().slice(0, 10);
-      const friNextStr = new Date(fridayThisWeek.getTime() + 86400000).toISOString().slice(0, 10); // exclusive upper bound (Sat)
+      const satStr = new Date(mondayThisWeek.getTime() + 5 * 86400000).toISOString().slice(0, 10); // exclusive (Sat)
 
-      const { data: wkUnitRows } = await supabase
-        .from("orders")
-        .select("epic_status_date, total_units, product_line, epic_status")
-        .in("epic_status", ["PAID", "INVOICED"])
-        .gte("epic_status_date", monStr)
-        .lt("epic_status_date", friNextStr)
-        .not("epic_status_date", "is", null);
+      const { data: shipRows } = await supabase
+        .from("daily_shipments")
+        .select("product_line, ship_date, units_shipped")
+        .gte("ship_date", monStr)
+        .lt("ship_date", satStr);
 
-      const rollerDayMap = {};
-      const fauxDayMap = {};
-      (wkUnitRows ?? []).forEach(r => {
-        const u = Number(r.total_units || 0);
-        if (r.product_line === 'roller') rollerDayMap[r.epic_status_date] = (rollerDayMap[r.epic_status_date] || 0) + u;
-        if (r.product_line === 'faux')   fauxDayMap[r.epic_status_date]   = (fauxDayMap[r.epic_status_date]   || 0) + u;
+      const rollerShipMap = {};
+      const fauxShipMap = {};
+      (shipRows ?? []).forEach(r => {
+        if (r.product_line === 'roller') rollerShipMap[r.ship_date] = r.units_shipped || 0;
+        if (r.product_line === 'faux')   fauxShipMap[r.ship_date]   = r.units_shipped || 0;
       });
-      // Build Mon–Fri arrays of {label, units}
       const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       const rollerWeek = WD.map((label, i) => {
         const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
-        return { label, units: rollerDayMap[d.toISOString().slice(0, 10)] || 0 };
+        return { label, units: rollerShipMap[d.toISOString().slice(0, 10)] || 0 };
       });
       const fauxWeek = WD.map((label, i) => {
         const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
-        return { label, units: fauxDayMap[d.toISOString().slice(0, 10)] || 0 };
+        return { label, units: fauxShipMap[d.toISOString().slice(0, 10)] || 0 };
       });
 
       // Monthly avg roller-shade order value — pulled from same sparkRows
