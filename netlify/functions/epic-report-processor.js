@@ -2161,6 +2161,49 @@ async function processPurchasing(csvText) {
 }
 
 
+// ── DAILY SHIPMENTS ─────────────────────────────────────────────────────────────
+// Parses the ePIC daily shipment summary (roller + forthcoming faux) into
+// daily_shipments. One row per (product_line, ship_date). Upserts on the
+// composite PK so the report re-sending the current week's days just refreshes
+// them. Product line is passed in by the router based on the report subject.
+//
+// Columns: ShipDate, DayOfWeek, UnitsFullyShipped, RevenueFullyShipped
+async function processDailyShipments(csvText, productLine) {
+  const rows = parseCSV(csvText)
+  if (!rows.length) { console.log('  DAILY SHIPMENTS — no rows'); return 0 }
+
+  const num = (s) => {
+    const n = parseFloat(String(s ?? '').replace(/[$,]/g, ''))
+    return Number.isFinite(n) ? n : 0
+  }
+  const cleanDate = (s) => {
+    const v = (s || '').trim()
+    if (!v || v.startsWith('0000')) return null
+    return v
+  }
+
+  const out = []
+  for (const r of rows) {
+    const date = cleanDate(r.ShipDate)
+    if (!date) continue
+    out.push({
+      product_line:    productLine,
+      ship_date:       date,
+      day_of_week:     (r.DayOfWeek || '').trim() || null,
+      units_shipped:   parseInt(r.UnitsFullyShipped, 10) || 0,
+      revenue_shipped: Math.round(num(r.RevenueFullyShipped) * 100) / 100,
+      updated_at:      new Date().toISOString(),
+    })
+  }
+
+  if (!out.length) { console.log('  DAILY SHIPMENTS — no valid rows'); return 0 }
+
+  const ok = await sbUpsert('daily_shipments', out)
+  console.log(`  DAILY SHIPMENTS (${productLine}) — upserted ${out.length} day rows (ok=${ok})`)
+  return out.length
+}
+
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 exports.handler = async function(event, context) {
   console.log('\n🤠 Berkely Wrangl — ePIC Report Processor')
@@ -2229,7 +2272,17 @@ exports.handler = async function(event, context) {
           continue
         }
 
-        if (subject.includes('REMAKE')) {
+        if (subject.includes('DAILY SHIPMENT')) {
+          // ROLLERSHADE / FAUX DAILY SHIPMENT SUMMARY → daily_shipments.
+          // Product line inferred from subject (default roller).
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          const pl = subject.includes('FAUX') ? 'faux' : 'roller'
+          count = await processDailyShipments(csvText, pl)
+          await markProcessed(messageId, `daily_shipments_${pl}`, count)
+          results.processed++
+
+        } else if (subject.includes('REMAKE')) {
           // ROLLER REMAKES report → upsert into remakes table (keyed on remake_wo).
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
