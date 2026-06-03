@@ -92,30 +92,65 @@ function Sparkline({ data = [], color = "#7c3aed", fillColor = "#ede9fe", tall =
 // Revenue-focused card. Shows WTD sales, units, WoW% change, a 30-day sparkline,
 // and a 2-col MTD/YTD footer for at-a-glance period totals.
 //
-// ─── Weekday units bar chart (Mon–Fri shipped units) ────────────────────────
-function WeekdayBars({ data, color }) {
+// ─── Weekday units trend line (Mon–Fri shipped units) ───────────────────────
+// SVG line-with-dots. Only days that have data are connected; days with no
+// shipment yet (later in the week) render as faint hollow markers on the
+// baseline so the week's shape is visible without implying zero shipped.
+function WeekdayTrend({ data, color }) {
+  const W = 280, H = 88;
+  const padX = 18, padTop = 20, padBot = 22;       // room for value labels + day labels
+  const n = data.length;
   const max = Math.max(1, ...data.map(d => d.units));
-  const CHART_H = 88;   // overall component height
-  const BAR_MAX = 60;   // tallest a bar can be, leaving room for the number + label
+  const stepX = (W - padX * 2) / (n - 1);
+  const x = (i) => padX + i * stepX;
+  const y = (u) => {
+    const plotH = H - padTop - padBot;
+    return padTop + plotH - (u / max) * plotH;
+  };
+
+  // Points that actually have data (units > 0) form the line.
+  const active = data.map((d, i) => ({ ...d, i })).filter(d => d.units > 0);
+  const linePts = active.map(d => `${x(d.i)},${y(d.units)}`).join(' ');
+
   return (
-    <div className="flex items-end justify-between gap-2.5" style={{ height: CHART_H }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
+      {/* baseline */}
+      <line x1={padX} y1={H - padBot} x2={W - padX} y2={H - padBot}
+            stroke="#e7e5e4" strokeWidth="1" />
+
+      {/* connecting line through active points */}
+      {active.length > 1 && (
+        <polyline points={linePts} fill="none" stroke={color} strokeWidth="2"
+                  strokeLinejoin="round" strokeLinecap="round" />
+      )}
+
       {data.map((d, i) => {
-        const h = d.units > 0 ? Math.max(4, (d.units / max) * BAR_MAX) : 3;
         const empty = d.units === 0;
+        const cx = x(i), cy = empty ? (H - padBot) : y(d.units);
         return (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5">
-            <span className="text-[11px] font-semibold tabular-nums leading-none"
-                  style={{ color: empty ? '#d6d3d1' : color }}>
-              {empty ? '·' : d.units}
-            </span>
-            <div className="w-full rounded"
-                 style={{ height: h, background: empty ? '#ede9e3' : color, opacity: empty ? 1 : 0.9 }} />
-            <span className="text-[10px] text-ink-muted leading-none">{d.label}</span>
-          </div>
+          <g key={i}>
+            {/* value label above active points */}
+            {!empty && (
+              <text x={cx} y={cy - 8} textAnchor="middle"
+                    fontSize="11" fontWeight="600" fill={color}>{d.units}</text>
+            )}
+            {/* marker: filled for data, hollow faint for empty days */}
+            <circle cx={cx} cy={cy} r={empty ? 3 : 4}
+                    fill={empty ? '#ffffff' : color}
+                    stroke={empty ? '#d6d3d1' : color} strokeWidth="2" />
+            {/* day label */}
+            <text x={cx} y={H - 6} textAnchor="middle"
+                  fontSize="10" fill="#8c7758">{d.label}</text>
+          </g>
         );
       })}
-    </div>
+    </svg>
   );
+}
+
+function WeekdayBars({ data, color }) {
+  // Kept as a thin wrapper so existing call sites work; renders the trend line.
+  return <WeekdayTrend data={data} color={color} />;
 }
 
 function HeroCard({ label, accent, fill, data, sparkData, weekData, wowPct, loading, onClick }) {
