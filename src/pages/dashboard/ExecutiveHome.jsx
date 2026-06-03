@@ -153,8 +153,7 @@ function WeekdayBars({ data, color }) {
   return <WeekdayTrend data={data} color={color} />;
 }
 
-function HeroCard({ label, accent, fill, data, sparkData, weekData, wowPct, loading, onClick }) {
-  const wowPositive = wowPct !== null && wowPct >= 0;
+function HeroCard({ label, accent, fill, data, sparkData, weekData, loading, onClick }) {
   return (
     <div onClick={onClick}
       className="card card-hover p-3 md:p-4 cursor-pointer h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
@@ -176,17 +175,9 @@ function HeroCard({ label, accent, fill, data, sparkData, weekData, wowPct, load
         </div>
       </div>
 
-      {/* Units + WoW% — one compact line */}
+      {/* Units this week */}
       <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-2">
         <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
-        {wowPct !== null && !loading && (
-          <>
-            <span className="text-ink-muted">·</span>
-            <span className={wowPositive ? "text-emerald-700" : "text-red-700"}>
-              {wowPositive ? "↑" : "↓"} {Math.abs(wowPct)}% vs last week
-            </span>
-          </>
-        )}
       </div>
 
       {/* Mon–Fri units shipped this week */}
@@ -2277,7 +2268,6 @@ export default function ExecutiveHome() {
             data={data.roller}
             sparkData={data.rollerSpark}
             weekData={data.rollerWeek}
-            wowPct={data.rollerWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=roller")}
           />
@@ -2288,7 +2278,6 @@ export default function ExecutiveHome() {
             data={data.faux}
             sparkData={data.fauxSpark}
             weekData={data.fauxWeek}
-            wowPct={data.fauxWoW}
             loading={loading}
             onClick={() => navigate("/orders?product=faux")}
           />
