@@ -120,53 +120,51 @@ export default function CooCockpit() {
         remakeCount = count
       } catch { remakeCount = null }
 
-      // ── LABOR — per-line cost + per-line efficiency (MTD) ────────────
-      // Per-line labor cost from v_labor_summary (reliable employee→line map),
-      // since go-live (2026-04-06 floor).
-      // Per-line EFFICIENCY = MTD units ÷ MTD labor hours, both this month so
-      // the windows align. Units come from product_line_sales (units_mtd),
-      // which is correctly product-tagged — unlike orders.product_line, which
-      // undercounts roller. product_line_sales labels: "Roller Shades" /
-      // "Faux Wood Blinds".
+      // ── LABOR — per-line cost + per-line efficiency (since go-live) ──
+      // Cost: v_labor_summary since go-live (2026-04-06).
+      // Efficiency: per-line units ÷ per-line labor hours, BOTH since go-live.
+      //   Units = backfill (Apr 6–May 31, ePIC completion report, correctly
+      //   tagged) + daily_shipments (Jun 1 onward). This is the correct
+      //   per-line count — orders.product_line undercounts roller, so we use
+      //   the backfill+daily bridge instead.
       const LABOR_GO_LIVE = '2026-04-06'
-      const costStart = monthStart > LABOR_GO_LIVE ? monthStart : LABOR_GO_LIVE
+      const DAILY_SHIP_START = '2026-06-01'  // daily_shipments owns this date forward
       const labor = {
-        faux:   { costHours: 0, cost: 0, mtdHours: 0, mtdUnits: 0 },
-        roller: { costHours: 0, cost: 0, mtdHours: 0, mtdUnits: 0 },
+        faux:   { hours: 0, cost: 0, units: 0 },
+        roller: { hours: 0, cost: 0, units: 0 },
       }
       try {
-        // Labor cost since go-live (per line)
-        const { data: costRows } = await supabase
+        // Labor hours + cost since go-live (per line) — same window as units
+        const { data: labRows } = await supabase
           .from('v_labor_summary')
           .select('product_line, hours, labor_cost, date')
-          .gte('date', costStart)
-        ;(costRows ?? []).forEach(r => {
+          .gte('date', LABOR_GO_LIVE)
+        ;(labRows ?? []).forEach(r => {
           const pl = r.product_line === 'faux' ? 'faux' : (r.product_line === 'roller' ? 'roller' : null)
           if (!pl) return
-          labor[pl].costHours += Number(r.hours) || 0
-          labor[pl].cost      += Number(r.labor_cost) || 0
+          labor[pl].hours += Number(r.hours) || 0
+          labor[pl].cost  += Number(r.labor_cost) || 0
         })
-        // MTD labor hours per line (for the efficiency denominator)
-        const { data: mtdRows } = await supabase
-          .from('v_labor_summary')
-          .select('product_line, hours, date')
-          .gte('date', monthStart)
-        ;(mtdRows ?? []).forEach(r => {
-          const pl = r.product_line === 'faux' ? 'faux' : (r.product_line === 'roller' ? 'roller' : null)
-          if (!pl) return
-          labor[pl].mtdHours += Number(r.hours) || 0
+        // Units part 1: backfill (Apr 6 – May 31)
+        const { data: bf } = await supabase
+          .from('labor_unit_backfill')
+          .select('product_line, units')
+        ;(bf ?? []).forEach(r => {
+          if (r.product_line === 'faux')   labor.faux.units   += Number(r.units) || 0
+          if (r.product_line === 'roller') labor.roller.units += Number(r.units) || 0
         })
-        // MTD units per line from product_line_sales (correct tagging)
-        const { data: pls } = await supabase
-          .from('product_line_sales')
-          .select('product_line, units_mtd')
-        ;(pls ?? []).forEach(r => {
-          if (r.product_line === 'Roller Shades')    labor.roller.mtdUnits = Number(r.units_mtd) || 0
-          if (r.product_line === 'Faux Wood Blinds') labor.faux.mtdUnits   = Number(r.units_mtd) || 0
+        // Units part 2: daily_shipments from June 1 onward (no overlap with backfill)
+        const { data: ds } = await supabase
+          .from('daily_shipments')
+          .select('product_line, units_shipped, ship_date')
+          .gte('ship_date', DAILY_SHIP_START)
+        ;(ds ?? []).forEach(r => {
+          if (r.product_line === 'faux')   labor.faux.units   += Number(r.units_shipped) || 0
+          if (r.product_line === 'roller') labor.roller.units += Number(r.units_shipped) || 0
         })
       } catch { /* views/tables may not exist yet */ }
 
-      const eff = (l) => l.mtdHours > 0 ? (l.mtdUnits / l.mtdHours) : null
+      const eff = (l) => l.hours > 0 ? (l.units / l.hours) : null
 
       setD({
         rcvWeek, rcvMonth, backlog,
@@ -237,12 +235,12 @@ export default function CooCockpit() {
 
             {/* ── LABOR ── */}
             <div>
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted mb-2">Labor · cost since go-live (Apr 6) · efficiency this month</p>
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted mb-2">Labor · since go-live (Apr 6)</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Tile label="Faux Labor Cost" value={usd(d.labor?.faux.cost)} sub={`${num(Math.round(d.labor?.faux.costHours || 0))} hrs since Apr 6`} />
-                <Tile label="Faux Units/Hour" value={d.fauxEff == null ? '—' : d.fauxEff.toFixed(1)} sub={`MTD · ${num(d.labor?.faux.mtdUnits || 0)} units`} />
-                <Tile label="Roller Labor Cost" value={usd(d.labor?.roller.cost)} sub={`${num(Math.round(d.labor?.roller.costHours || 0))} hrs since Apr 6`} />
-                <Tile label="Roller Units/Hour" value={d.rollerEff == null ? '—' : d.rollerEff.toFixed(1)} sub={`MTD · ${num(d.labor?.roller.mtdUnits || 0)} units`} />
+                <Tile label="Faux Labor Cost" value={usd(d.labor?.faux.cost)} sub={`${num(Math.round(d.labor?.faux.hours || 0))} hrs`} />
+                <Tile label="Faux Units/Hour" value={d.fauxEff == null ? '—' : d.fauxEff.toFixed(1)} sub={`${num(d.labor?.faux.units || 0)} units`} />
+                <Tile label="Roller Labor Cost" value={usd(d.labor?.roller.cost)} sub={`${num(Math.round(d.labor?.roller.hours || 0))} hrs`} />
+                <Tile label="Roller Units/Hour" value={d.rollerEff == null ? '—' : d.rollerEff.toFixed(1)} sub={`${num(d.labor?.roller.units || 0)} units`} />
               </div>
             </div>
 
