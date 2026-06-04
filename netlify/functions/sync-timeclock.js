@@ -1,5 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════
-// TIMECLOCK SYNC — Shadeflow → Wrangl
+// TIMECLOCK SYNC — Shadeflow → Wrangl   [CORRECTED ENV NAMES — v2]
+// Uses VITE_SUPABASE_URL + SUPABASE_SERVICE_KEY (matches the ePIC processor).
+// If a deploy errors with "SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY", that is
+// the OLD file — this v2 reads VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY.
 //
 // Scheduled Netlify function. Reads timeclock_employees + timeclock_entries
 // from the Shadeflow Supabase project and upserts them into Wrangl's
@@ -11,16 +14,16 @@
 // Env vars (set in Wrangl's Netlify):
 //   SHADEFLOW_URL          — Shadeflow project URL
 //   SHADEFLOW_SERVICE_KEY  — Shadeflow service_role key (read)
-//   SUPABASE_URL           — Wrangl project URL (existing)
-//   SUPABASE_SERVICE_ROLE_KEY — Wrangl service key (existing)
+//   VITE_SUPABASE_URL      — Wrangl project URL (existing)
+//   SUPABASE_SERVICE_KEY   — Wrangl service key (existing)
 //
 // Schedule registered in netlify.toml under [functions."sync-timeclock"].
 // ═══════════════════════════════════════════════════════════════════════
 
 const SF_URL = process.env.SHADEFLOW_URL
 const SF_KEY = process.env.SHADEFLOW_SERVICE_KEY
-const W_URL  = process.env.SUPABASE_URL
-const W_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
+const W_URL  = process.env.VITE_SUPABASE_URL
+const W_KEY  = process.env.SUPABASE_SERVICE_KEY
 
 // Read all rows from a Shadeflow table
 async function sfSelect(table, cols) {
@@ -53,8 +56,8 @@ export default async function handler() {
     const missing = []
     if (!SF_URL) missing.push('SHADEFLOW_URL')
     if (!SF_KEY) missing.push('SHADEFLOW_SERVICE_KEY')
-    if (!W_URL)  missing.push('SUPABASE_URL')
-    if (!W_KEY)  missing.push('SUPABASE_SERVICE_ROLE_KEY')
+    if (!W_URL)  missing.push('VITE_SUPABASE_URL')
+    if (!W_KEY)  missing.push('SUPABASE_SERVICE_KEY')
     if (missing.length) {
       throw new Error('Missing env vars: ' + missing.join(', '))
     }
