@@ -10,6 +10,7 @@ import WranglBadge from './WranglBadge'
 
 const EXEC_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
+  { type: 'link', to: '/cockpit', icon: '🎛️', label: 'COO Cockpit' },
 
   { type: 'section', label: 'Sales' },
   { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
