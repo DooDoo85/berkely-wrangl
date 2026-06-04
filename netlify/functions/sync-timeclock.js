@@ -50,8 +50,13 @@ async function wUpsert(table, rows) {
 
 export default async function handler() {
   try {
-    if (!SF_URL || !SF_KEY || !W_URL || !W_KEY) {
-      throw new Error('Missing env vars (SHADEFLOW_URL / SHADEFLOW_SERVICE_KEY / SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)')
+    const missing = []
+    if (!SF_URL) missing.push('SHADEFLOW_URL')
+    if (!SF_KEY) missing.push('SHADEFLOW_SERVICE_KEY')
+    if (!W_URL)  missing.push('SUPABASE_URL')
+    if (!W_KEY)  missing.push('SUPABASE_SERVICE_ROLE_KEY')
+    if (missing.length) {
+      throw new Error('Missing env vars: ' + missing.join(', '))
     }
 
     // Employees
