@@ -41,3 +41,9 @@
 # 7am/11am/3pm local — accepted one-hour drift. Re-check in Nov.
 [functions."send-request-digest"]
   schedule = "0 13,17,21 * * *"
+
+# Timeclock sync (Shadeflow → Wrangl). Pulls hours into Wrangl for labor
+# cost + efficiency reporting. Reads Shadeflow only; the timeclock app is
+# untouched. Hourly is plenty for labor reporting.
+[functions."sync-timeclock"]
+  schedule = "0 * * * *"
