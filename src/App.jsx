@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Placeholder from './components/Placeholder'
 import SignIn from './pages/SignIn'
 import Home from './pages/Home'
+import CooCockpit from './pages/CooCockpit'
 
 // Activities
 import ActivityLog from './pages/activities/ActivityLog'
@@ -94,6 +95,7 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/dashboard" element={<Home />} />
+        <Route path="/cockpit" element={<CooCockpit />} />
 
         {/* Customers */}
         <Route path="/customers" element={<CustomerList />} />
