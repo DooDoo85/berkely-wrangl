@@ -22,6 +22,9 @@ const C_AMBER = '#d9a441'
 const C_CLAY = '#c2682f'
 const C_RED = '#b3503e'
 const C_ACCENT = '#c2682f' // chart line accent
+// Printed-pipeline aging palettes — line = color family, age = shade (light→dark)
+const R_AGE = ['#e7b48c', '#d98a4f', '#c2682f', '#9e4a28'] // Roller Shades
+const F_AGE = ['#bcd6c4', '#86bd9b', '#5f9e7e', '#3f6e55'] // Faux Wood Blinds
 
 function startOfWeekISO() {
   const d = new Date(); d.setHours(0, 0, 0, 0)
@@ -265,34 +268,28 @@ export default function CooCockpit() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'in_production')
 
-      // Backlog aging — TRUE days-since-printed. Only orders that have actually
-      // been printed (printed / in_production) carry a real printed date in
-      // epic_status_date, so we age only those. Pre-print stages (credit_ok,
-      // po_sent, credit_hold, on_hold) have no printed date and are counted
-      // separately as "pre-production" rather than miscounted as aged.
-      const PRINTED_STATUSES = ['printed', 'in_production']
-      const PREPROD_STATUSES = ['credit_ok', 'po_sent', 'credit_hold', 'on_hold']
-      const { data: printedRows } = await supabase.from('orders')
-        .select('epic_status_date')
-        .in('status', PRINTED_STATUSES)
+      // Printed pipeline aging — orders that have been printed (Printed +
+      // In Production), split BY PRODUCT LINE and bucketed by days since printed
+      // (epic_status_date). Totals tie to the Printed + In-Production tiles
+      // (Roller 19+10, Faux 164+0). Null print date defaults to fresh so the
+      // per-line totals stay whole.
+      const { data: prodRows } = await supabase.from('orders')
+        .select('epic_status_date, product_line')
+        .in('status', ['printed', 'in_production'])
       const today0 = new Date(); today0.setHours(0, 0, 0, 0)
-      const aging = { b0_3: 0, b4_7: 0, b8_14: 0, b15: 0 }
-      ;(printedRows ?? []).forEach((r) => {
-        if (!r.epic_status_date) return
-        const od = new Date(r.epic_status_date + 'T00:00:00')
-        if (isNaN(od)) return
-        let age = Math.floor((today0 - od) / 86400000)
-        if (age < 0) age = 0
-        if (age <= 3) aging.b0_3++
-        else if (age <= 7) aging.b4_7++
-        else if (age <= 14) aging.b8_14++
-        else aging.b15++
+      const mkB = () => ({ b0_3: 0, b4_7: 0, b8_14: 0, b15: 0, total: 0 })
+      const aging = { roller: mkB(), faux: mkB() }
+      ;(prodRows ?? []).forEach((r) => {
+        const line = r.product_line === 'roller' ? 'roller' : (r.product_line === 'faux' ? 'faux' : null)
+        if (!line) return
+        let age = 0
+        if (r.epic_status_date) {
+          const od = new Date(r.epic_status_date + 'T00:00:00')
+          if (!isNaN(od)) age = Math.max(0, Math.floor((today0 - od) / 86400000))
+        }
+        const b = age <= 3 ? 'b0_3' : age <= 7 ? 'b4_7' : age <= 14 ? 'b8_14' : 'b15'
+        aging[line][b]++; aging[line].total++
       })
-      // Pre-production count (credit / PO / hold) — shown beside the donut so
-      // nothing disappears; these simply aren't part of print-aging.
-      const { count: preProd } = await supabase.from('orders')
-        .select('id', { count: 'exact', head: true })
-        .in('status', PREPROD_STATUSES)
 
       // Shipped this week (units) — from daily_shipments (both product lines)
       const { data: shipRows } = await supabase.from('daily_shipments')
@@ -361,7 +358,7 @@ export default function CooCockpit() {
       setD({
         rcvWeek, rcvMonth, backlog,
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
-        aging, series, preProd,
+        aging, series,
         shippedUnitsWeek, shippedToday,
         salesYTD, remakeCount,
         labor,
@@ -470,37 +467,47 @@ export default function CooCockpit() {
 
               {/* Backlog aging */}
               <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                <SectionLabel>Backlog aging · printed orders</SectionLabel>
+                <SectionLabel>Printed pipeline · by line &amp; age</SectionLabel>
                 <div className="flex items-center gap-5 mt-1">
                   <Donut segments={[
-                    { value: d.aging.b0_3, color: C_SAGE },
-                    { value: d.aging.b4_7, color: C_AMBER },
-                    { value: d.aging.b8_14, color: C_CLAY },
-                    { value: d.aging.b15, color: C_RED },
+                    { value: d.aging.roller.b0_3, color: R_AGE[0] },
+                    { value: d.aging.roller.b4_7, color: R_AGE[1] },
+                    { value: d.aging.roller.b8_14, color: R_AGE[2] },
+                    { value: d.aging.roller.b15, color: R_AGE[3] },
+                    { value: d.aging.faux.b0_3, color: F_AGE[0] },
+                    { value: d.aging.faux.b4_7, color: F_AGE[1] },
+                    { value: d.aging.faux.b8_14, color: F_AGE[2] },
+                    { value: d.aging.faux.b15, color: F_AGE[3] },
                   ]} />
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 space-y-3">
                     {[
-                      { c: C_SAGE, label: '0 – 3 days', v: d.aging.b0_3 },
-                      { c: C_AMBER, label: '4 – 7 days', v: d.aging.b4_7 },
-                      { c: C_CLAY, label: '8 – 14 days', v: d.aging.b8_14 },
-                      { c: C_RED, label: '15+ days', v: d.aging.b15 },
-                    ].map((row) => {
-                      const tot = d.aging.b0_3 + d.aging.b4_7 + d.aging.b8_14 + d.aging.b15
-                      const pct = tot > 0 ? Math.round((row.v / tot) * 100) : 0
+                      { name: 'Roller Shades', key: 'roller', palette: R_AGE },
+                      { name: 'Faux Wood Blinds', key: 'faux', palette: F_AGE },
+                    ].map((line) => {
+                      const a = d.aging[line.key]
+                      const rows = [['0–3d', a.b0_3], ['4–7d', a.b4_7], ['8–14d', a.b8_14], ['15+d', a.b15]]
                       return (
-                        <div key={row.label} className="flex items-center gap-2 text-sm">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: row.c }} />
-                          <span className="text-ink-mid flex-1">{row.label}</span>
-                          <span className="font-display font-semibold text-ink-strong">{num(row.v)}</span>
-                          <span className="text-[11px] text-ink-muted w-9 text-right">{pct}%</span>
+                        <div key={line.key}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-display font-semibold text-ink-strong text-sm">{line.name}</span>
+                            <span className="font-display font-semibold text-ink-strong text-sm">{num(a.total)}</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
+                            {rows.map(([lbl, v], i) => (
+                              <div key={lbl} className="flex items-center gap-1.5 text-[11px]">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: line.palette[i] }} />
+                                <span className="text-ink-muted">{lbl}</span>
+                                <span className="font-semibold text-ink-strong ml-auto">{num(v)}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )
                     })}
                   </div>
                 </div>
                 <p className="text-[10px] text-ink-muted mt-3">
-                  Days since printed · printed &amp; in-production orders
-                  {d.preProd > 0 && <span> · +{num(d.preProd)} pre-production (credit / PO / hold)</span>}
+                  Printed + in-production orders · shade = days since printed (light → dark)
                 </p>
               </div>
 
