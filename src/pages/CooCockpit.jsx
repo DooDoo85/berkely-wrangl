@@ -22,10 +22,9 @@ const C_AMBER = '#d9a441'
 const C_CLAY = '#c2682f'
 const C_RED = '#b3503e'
 const C_ACCENT = '#c2682f' // chart line accent
-// Printed-pipeline aging palettes — line = color family, age = shade.
-// Tuned so even the freshest bucket is clearly visible on the ring (not washed out).
-const R_AGE = ['#e59a5b', '#cf7333', '#b0531f', '#803714'] // Roller Shades (fresh → old)
-const F_AGE = ['#6fae8b', '#4e8e6c', '#356e4f', '#1f4f36'] // Faux Wood Blinds (fresh → old)
+// Age ramp for the printed pipeline — fresh → old, shared by both lines
+// (lines are separated into their own sections, so color encodes age only).
+const AGE = ['#6f9e7e', '#d9a441', '#c2682f', '#b3503e'] // 0–3 / 4–7 / 8–14 / 15+
 
 function startOfWeekISO() {
   const d = new Date(); d.setHours(0, 0, 0, 0)
@@ -155,14 +154,17 @@ function Sparkline({ values, labels, color = C_ACCENT }) {
 }
 
 // ── Donut (backlog aging) ──
-function Donut({ segments }) {
+function Donut({ segments, size = 140 }) {
   const total = segments.reduce((s, x) => s + x.value, 0)
-  const r = 52, cx = 70, cy = 70, sw = 20
+  const sw = Math.round(size * 0.143)
+  const cx = size / 2, cy = size / 2
+  const r = size / 2 - sw / 2 - 8
   const C = 2 * Math.PI * r
   let offset = 0
+  const valueClass = size >= 140 ? 'text-2xl' : 'text-xl'
   return (
-    <div className="relative w-[140px] h-[140px]">
-      <svg viewBox="0 0 140 140" className="w-[140px] h-[140px]">
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#efe9df" strokeWidth={sw} />
         {total > 0 && segments.map((s, i) => {
           const frac = s.value / total
@@ -180,7 +182,7 @@ function Donut({ segments }) {
       </svg>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center">
-          <p className="font-display font-bold text-2xl text-ink-strong leading-none">{num(total)}</p>
+          <p className={`font-display font-bold ${valueClass} text-ink-strong leading-none`}>{num(total)}</p>
           <p className="text-[10px] uppercase tracking-wide text-ink-muted mt-0.5">orders</p>
         </div>
       </div>
@@ -463,57 +465,71 @@ export default function CooCockpit() {
               </div>
             </div>
 
-            {/* ── BACKLOG AGING  +  ORDERS ON HOLD ── */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/* ── PRINTED PIPELINE (by line & age) ── */}
+            <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-5">
+              <SectionLabel>Printed pipeline by line &amp; age</SectionLabel>
+              <p className="text-[11px] text-ink-muted -mt-1 mb-1">Orders by days since printed</p>
 
-              {/* Backlog aging */}
-              <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                <SectionLabel>Printed pipeline · by line &amp; age</SectionLabel>
-                <div className="flex items-center gap-5 mt-1">
-                  <Donut segments={[
-                    { value: d.aging.roller.b0_3, color: R_AGE[0] },
-                    { value: d.aging.roller.b4_7, color: R_AGE[1] },
-                    { value: d.aging.roller.b8_14, color: R_AGE[2] },
-                    { value: d.aging.roller.b15, color: R_AGE[3] },
-                    { value: d.aging.faux.b0_3, color: F_AGE[0] },
-                    { value: d.aging.faux.b4_7, color: F_AGE[1] },
-                    { value: d.aging.faux.b8_14, color: F_AGE[2] },
-                    { value: d.aging.faux.b15, color: F_AGE[3] },
-                  ]} />
-                  <div className="flex-1 space-y-3">
-                    {[
-                      { name: 'Roller Shades', key: 'roller', palette: R_AGE },
-                      { name: 'Faux Wood Blinds', key: 'faux', palette: F_AGE },
-                    ].map((line) => {
-                      const a = d.aging[line.key]
-                      const rows = [['0–3d', a.b0_3], ['4–7d', a.b4_7], ['8–14d', a.b8_14], ['15+d', a.b15]]
-                      return (
-                        <div key={line.key}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-display font-semibold text-ink-strong text-sm">{line.name}</span>
-                            <span className="font-display font-semibold text-ink-strong text-sm">{num(a.total)}</span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
-                            {rows.map(([lbl, v], i) => (
-                              <div key={lbl} className="flex items-center gap-1.5 text-[11px]">
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: line.palette[i] }} />
-                                <span className="text-ink-muted">{lbl}</span>
-                                <span className="font-semibold text-ink-strong ml-auto">{num(v)}</span>
+              {[
+                { name: 'Roller Shades', key: 'roller' },
+                { name: 'Faux Wood Blinds', key: 'faux' },
+              ].map((line, li) => {
+                const a = d.aging[line.key]
+                const buckets = [
+                  { label: '0 – 3 days', v: a.b0_3, c: AGE[0] },
+                  { label: '4 – 7 days', v: a.b4_7, c: AGE[1] },
+                  { label: '8 – 14 days', v: a.b8_14, c: AGE[2] },
+                  { label: '15+ days', v: a.b15, c: AGE[3] },
+                ]
+                return (
+                  <div key={line.key}
+                    className={`flex flex-col lg:flex-row lg:items-center gap-5 py-5 ${li > 0 ? 'border-t border-stone-200/70' : ''}`}>
+                    <Donut size={120} segments={buckets.map((b) => ({ value: b.v, color: b.c }))} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-display font-bold text-lg text-ink-strong mb-3">{line.name}</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {buckets.map((b) => {
+                          const pct = a.total > 0 ? Math.round((b.v / a.total) * 100) : 0
+                          return (
+                            <div key={b.label} className="rounded-lg ring-1 ring-stone-200/70 bg-stone-50/60 px-3 py-2.5">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: b.c }} />
+                                <span className="text-[11px] text-ink-mid">{b.label}</span>
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
+                              <p className="font-display font-bold text-2xl text-ink-strong leading-none">{num(b.v)}</p>
+                              <p className="text-[11px] mt-1.5 font-medium" style={{ color: b.c }}>{pct}%</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-stone-100/70 ring-1 ring-stone-200/70 px-4 py-3 text-center shrink-0 self-stretch lg:self-center lg:w-[104px] flex flex-col justify-center">
+                      <p className="text-[10px] uppercase tracking-wider text-ink-muted leading-tight">Total orders</p>
+                      <p className="font-display font-bold text-3xl text-ink-strong mt-1 leading-none">{num(a.total)}</p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-[10px] text-ink-muted mt-3">
-                  Printed + in-production orders · shade = days since printed (light → dark)
-                </p>
-              </div>
+                )
+              })}
 
-              {/* Orders on hold */}
-              <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
+              {/* shared age legend */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 border-t border-stone-200/70">
+                {[
+                  { label: '0 – 3 days', c: AGE[0] },
+                  { label: '4 – 7 days', c: AGE[1] },
+                  { label: '8 – 14 days', c: AGE[2] },
+                  { label: '15+ days', c: AGE[3] },
+                ].map((x) => (
+                  <div key={x.label} className="flex items-center gap-1.5 text-[11px] text-ink-mid">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: x.c }} />
+                    {x.label} since printed
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-ink-muted mt-3">Printed + in-production orders · color = days since printed (fresh → old)</p>
+            </div>
+
+            {/* ── ORDERS ON HOLD ── */}
+            <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
                 <SectionLabel>Orders needing attention</SectionLabel>
                 {d.holdRows.length === 0 ? (
                   <div className="flex items-center gap-2 text-sm text-emerald-700 py-6 justify-center">
@@ -544,7 +560,6 @@ export default function CooCockpit() {
                   </div>
                 )}
               </div>
-            </div>
 
             {/* ── LABOR ── */}
             <div>
