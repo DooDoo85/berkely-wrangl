@@ -265,19 +265,22 @@ export default function CooCockpit() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'in_production')
 
-      // Backlog aging — bucket in-flight orders by age from order_date.
-      // (order_date is the only consistently-populated date on orders;
-      // wrangl_status_set_at is null on ~97% of rows, so it can't drive this.)
+      // Backlog aging — bucket in-flight orders by days in their CURRENT status.
+      // Basis is epic_status_date (the date an order entered its current ePIC
+      // status), which is what the Exec dashboard uses for order age post-cutover.
+      // Falls back to order_date, then created_at, so no in-flight order is
+      // dropped and the donut total reconciles with Open Backlog.
       const { data: flightRows } = await supabase.from('orders')
-        .select('order_date')
+        .select('epic_status_date, order_date, created_at')
         .in('status', OPEN_STATUSES)
       const today0 = new Date(); today0.setHours(0, 0, 0, 0)
       const aging = { b0_3: 0, b4_7: 0, b8_14: 0, b15: 0 }
       ;(flightRows ?? []).forEach((r) => {
-        if (!r.order_date) return
-        const od = new Date(r.order_date + 'T00:00:00')
-        if (isNaN(od)) return
-        const age = Math.floor((today0 - od) / 86400000)
+        const dateStr = r.epic_status_date || r.order_date
+        let od = dateStr ? new Date(dateStr + 'T00:00:00') : (r.created_at ? new Date(r.created_at) : null)
+        if (!od || isNaN(od)) return
+        let age = Math.floor((today0 - od) / 86400000)
+        if (age < 0) age = 0
         if (age <= 3) aging.b0_3++
         else if (age <= 7) aging.b4_7++
         else if (age <= 14) aging.b8_14++
@@ -305,59 +308,6 @@ export default function CooCockpit() {
           .gte('remake_date', isoDaysAgo(30))
         remakeCount = count
       } catch { remakeCount = null }
-
-      // ── LEAD TIME — avg days printed → invoiced, per product line ──
-      // Mirrors the Executive Dashboard calc, which sources from
-      // order_status_history (the only table that RETAINS the printed date
-      // after an order advances — the live status fields overwrite it).
-      // We then join each invoiced order to orders.product_line to split
-      // roller vs faux. 90-day window for per-line sample stability.
-      let shipDays = { faux: { avg: null, n: 0 }, roller: { avg: null, n: 0 }, all: { avg: null, n: 0 } }
-      try {
-        const leadStart = isoDaysAgo(90)
-        const { data: printedHist } = await supabase.from('order_status_history')
-          .select('order_number, status_date').eq('to_status', 'printed').gte('status_date', leadStart)
-        const { data: invoicedHist } = await supabase.from('order_status_history')
-          .select('order_number, status_date').eq('to_status', 'invoiced').gte('status_date', leadStart)
-
-        // Earliest printed date per order
-        const printedMap = {}
-        ;(printedHist ?? []).forEach(r => {
-          if (!printedMap[r.order_number] || r.status_date < printedMap[r.order_number]) {
-            printedMap[r.order_number] = r.status_date
-          }
-        })
-
-        // product_line lookup for the invoiced orders (chunked to respect query limits)
-        const invNums = [...new Set((invoicedHist ?? []).map(r => r.order_number).filter(Boolean))]
-        const plMap = {}
-        for (let i = 0; i < invNums.length; i += 150) {
-          const chunk = invNums.slice(i, i + 150)
-          const { data: plRows } = await supabase.from('orders')
-            .select('order_number, product_line').in('order_number', chunk)
-          ;(plRows ?? []).forEach(r => { plMap[r.order_number] = r.product_line })
-        }
-
-        // Bucket printed→invoiced deltas by line (same outlier guard as Exec: 0–60 days)
-        const dFaux = [], dRoller = [], dAll = []
-        ;(invoicedHist ?? []).forEach(r => {
-          const pd = printedMap[r.order_number]
-          if (!pd || r.status_date < pd) return
-          const days = Math.round((new Date(r.status_date) - new Date(pd)) / 86400000)
-          if (days < 0 || days > 60) return
-          dAll.push(days)
-          const pl = plMap[r.order_number]
-          if (pl === 'faux') dFaux.push(days)
-          else if (pl === 'roller') dRoller.push(days)
-        })
-        const avg = (arr) => arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)) : null
-        // Require 3+ samples before trusting a per-line average
-        shipDays = {
-          faux:   { avg: dFaux.length   >= 3 ? avg(dFaux)   : null, n: dFaux.length },
-          roller: { avg: dRoller.length >= 3 ? avg(dRoller) : null, n: dRoller.length },
-          all:    { avg: dAll.length    >= 1 ? avg(dAll)    : null, n: dAll.length },
-        }
-      } catch { /* order_status_history may not exist yet */ }
 
       // ── LABOR — per-line cost + per-line efficiency (since go-live) ──
       // Cost: v_labor_summary since go-live (2026-04-06).
@@ -407,7 +357,6 @@ export default function CooCockpit() {
         aging, series,
         shippedUnitsWeek, shippedToday,
         salesYTD, remakeCount,
-        shipDays,
         labor,
         fauxEff: eff(labor.faux),
         rollerEff: eff(labor.roller),
@@ -542,7 +491,7 @@ export default function CooCockpit() {
                     })}
                   </div>
                 </div>
-                <p className="text-[10px] text-ink-muted mt-3">Age measured from order received date</p>
+                <p className="text-[10px] text-ink-muted mt-3">Age measured from current-status date (ePIC)</p>
               </div>
 
               {/* Orders on hold */}
@@ -579,29 +528,6 @@ export default function CooCockpit() {
               </div>
             </div>
 
-            {/* ── LEAD TIME (printed → invoiced, per line) ── */}
-            <div>
-              <SectionLabel>Lead time · printed → invoiced (last 90d)</SectionLabel>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Tile
-                  label="Roller · Days to Ship"
-                  value={d.shipDays?.roller.avg == null ? '—' : d.shipDays.roller.avg.toFixed(1)}
-                  sub={d.shipDays?.roller.n >= 3 ? `avg · ${num(d.shipDays.roller.n)} orders` : `${num(d.shipDays?.roller.n || 0)} orders (need ≥3)`}
-                />
-                <Tile
-                  label="Faux · Days to Ship"
-                  value={d.shipDays?.faux.avg == null ? '—' : d.shipDays.faux.avg.toFixed(1)}
-                  sub={d.shipDays?.faux.n >= 3 ? `avg · ${num(d.shipDays.faux.n)} orders` : `${num(d.shipDays?.faux.n || 0)} orders (need ≥3)`}
-                />
-                <Tile
-                  label="All Lines · Days to Ship"
-                  value={d.shipDays?.all.avg == null ? '—' : d.shipDays.all.avg.toFixed(1)}
-                  sub={`avg · ${num(d.shipDays?.all.n || 0)} orders`}
-                />
-                <GapTile label="On-Time Delivery %" needs="requested_ship_date populated from ePIC" />
-              </div>
-            </div>
-
             {/* ── LABOR ── */}
             <div>
               <SectionLabel>Labor · since go-live (Apr 6)</SectionLabel>
@@ -628,7 +554,8 @@ export default function CooCockpit() {
             <div>
               <SectionLabel>Not yet tracked — instrumentation gaps</SectionLabel>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <GapTile label="Past Due Orders" needs="requested/promised ship date from ePIC" />
+                <GapTile label="Avg Days to Ship" needs="printed & invoiced captured as separate dated events (today they import same-batch)" />
+                <GapTile label="On-Time Delivery %" needs="requested_ship_date populated from ePIC" />
                 <GapTile label="Capacity Utilization" needs="work-center capacity + hours feed" />
                 <GapTile label="Material Stockouts" needs="on-hand vs. demand stockout events" />
               </div>
