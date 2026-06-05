@@ -265,20 +265,22 @@ export default function CooCockpit() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'in_production')
 
-      // Backlog aging — bucket in-flight orders by days in their CURRENT status.
-      // Basis is epic_status_date (the date an order entered its current ePIC
-      // status), which is what the Exec dashboard uses for order age post-cutover.
-      // Falls back to order_date, then created_at, so no in-flight order is
-      // dropped and the donut total reconciles with Open Backlog.
-      const { data: flightRows } = await supabase.from('orders')
-        .select('epic_status_date, order_date, created_at')
-        .in('status', OPEN_STATUSES)
+      // Backlog aging — TRUE days-since-printed. Only orders that have actually
+      // been printed (printed / in_production) carry a real printed date in
+      // epic_status_date, so we age only those. Pre-print stages (credit_ok,
+      // po_sent, credit_hold, on_hold) have no printed date and are counted
+      // separately as "pre-production" rather than miscounted as aged.
+      const PRINTED_STATUSES = ['printed', 'in_production']
+      const PREPROD_STATUSES = ['credit_ok', 'po_sent', 'credit_hold', 'on_hold']
+      const { data: printedRows } = await supabase.from('orders')
+        .select('epic_status_date')
+        .in('status', PRINTED_STATUSES)
       const today0 = new Date(); today0.setHours(0, 0, 0, 0)
       const aging = { b0_3: 0, b4_7: 0, b8_14: 0, b15: 0 }
-      ;(flightRows ?? []).forEach((r) => {
-        const dateStr = r.epic_status_date || r.order_date
-        let od = dateStr ? new Date(dateStr + 'T00:00:00') : (r.created_at ? new Date(r.created_at) : null)
-        if (!od || isNaN(od)) return
+      ;(printedRows ?? []).forEach((r) => {
+        if (!r.epic_status_date) return
+        const od = new Date(r.epic_status_date + 'T00:00:00')
+        if (isNaN(od)) return
         let age = Math.floor((today0 - od) / 86400000)
         if (age < 0) age = 0
         if (age <= 3) aging.b0_3++
@@ -286,6 +288,11 @@ export default function CooCockpit() {
         else if (age <= 14) aging.b8_14++
         else aging.b15++
       })
+      // Pre-production count (credit / PO / hold) — shown beside the donut so
+      // nothing disappears; these simply aren't part of print-aging.
+      const { count: preProd } = await supabase.from('orders')
+        .select('id', { count: 'exact', head: true })
+        .in('status', PREPROD_STATUSES)
 
       // Shipped this week (units) — from daily_shipments (both product lines)
       const { data: shipRows } = await supabase.from('daily_shipments')
@@ -354,7 +361,7 @@ export default function CooCockpit() {
       setD({
         rcvWeek, rcvMonth, backlog,
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
-        aging, series,
+        aging, series, preProd,
         shippedUnitsWeek, shippedToday,
         salesYTD, remakeCount,
         labor,
@@ -463,7 +470,7 @@ export default function CooCockpit() {
 
               {/* Backlog aging */}
               <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                <SectionLabel>Backlog aging</SectionLabel>
+                <SectionLabel>Backlog aging · printed orders</SectionLabel>
                 <div className="flex items-center gap-5 mt-1">
                   <Donut segments={[
                     { value: d.aging.b0_3, color: C_SAGE },
@@ -491,7 +498,10 @@ export default function CooCockpit() {
                     })}
                   </div>
                 </div>
-                <p className="text-[10px] text-ink-muted mt-3">Age measured from current-status date (ePIC)</p>
+                <p className="text-[10px] text-ink-muted mt-3">
+                  Days since printed · printed &amp; in-production orders
+                  {d.preProd > 0 && <span> · +{num(d.preProd)} pre-production (credit / PO / hold)</span>}
+                </p>
               </div>
 
               {/* Orders on hold */}
