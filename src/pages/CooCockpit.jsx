@@ -22,9 +22,10 @@ const C_AMBER = '#d9a441'
 const C_CLAY = '#c2682f'
 const C_RED = '#b3503e'
 const C_ACCENT = '#c2682f' // chart line accent
-// Printed-pipeline aging palettes — line = color family, age = shade (light→dark)
-const R_AGE = ['#e7b48c', '#d98a4f', '#c2682f', '#9e4a28'] // Roller Shades
-const F_AGE = ['#bcd6c4', '#86bd9b', '#5f9e7e', '#3f6e55'] // Faux Wood Blinds
+// Printed-pipeline aging palettes — line = color family, age = shade.
+// Tuned so even the freshest bucket is clearly visible on the ring (not washed out).
+const R_AGE = ['#e59a5b', '#cf7333', '#b0531f', '#803714'] // Roller Shades (fresh → old)
+const F_AGE = ['#6fae8b', '#4e8e6c', '#356e4f', '#1f4f36'] // Faux Wood Blinds (fresh → old)
 
 function startOfWeekISO() {
   const d = new Date(); d.setHours(0, 0, 0, 0)
