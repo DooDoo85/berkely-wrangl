@@ -265,15 +265,21 @@ export default function CooCockpit() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'in_production')
 
-      // Backlog aging — pull in-flight order_dates and bucket by age
+      // Backlog aging — bucket in-flight orders by time since they entered their
+      // current status (wrangl_status_set_at). For orders currently in Printed,
+      // that timestamp IS the printed date; for orders further along it measures
+      // time-in-current-stage. Falls back to order_date when the stamp is null.
       const { data: flightRows } = await supabase.from('orders')
-        .select('order_date')
+        .select('wrangl_status_set_at, order_date')
         .in('status', OPEN_STATUSES)
       const today0 = new Date(); today0.setHours(0, 0, 0, 0)
       const aging = { b0_3: 0, b4_7: 0, b8_14: 0, b15: 0 }
       ;(flightRows ?? []).forEach((r) => {
-        if (!r.order_date) return
-        const od = new Date(r.order_date + 'T00:00:00')
+        // Prefer the status-set timestamp; fall back to order_date
+        const raw = r.wrangl_status_set_at || (r.order_date ? r.order_date + 'T00:00:00' : null)
+        if (!raw) return
+        const od = new Date(raw)
+        if (isNaN(od)) return
         const age = Math.floor((today0 - od) / 86400000)
         if (age <= 3) aging.b0_3++
         else if (age <= 7) aging.b4_7++
@@ -485,7 +491,7 @@ export default function CooCockpit() {
                     })}
                   </div>
                 </div>
-                <p className="text-[10px] text-ink-muted mt-3">Age measured from order received date</p>
+                <p className="text-[10px] text-ink-muted mt-3">Age measured from printed / current-status date</p>
               </div>
 
               {/* Orders on hold */}
