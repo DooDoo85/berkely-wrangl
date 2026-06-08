@@ -489,8 +489,10 @@ async function processMasterSalesReport(csvText) {
 
   const mapProductLine = (pt) => {
     const upper = (pt || '').trim().toUpperCase()
-    if (upper === 'FAUX')   return 'faux'
-    if (upper === 'ROLLER') return 'roller'
+    // Match on CONTAINS so descriptive product labels resolve correctly
+    // (e.g. "ROLLER SHADE", "FAUX WOOD", "EXPRESS FAUX", "BERKELY ROLLER SHADES").
+    if (upper.includes('FAUX'))   return 'faux'
+    if (upper.includes('ROLLER')) return 'roller'
     return null
   }
 
@@ -623,7 +625,11 @@ async function processMasterSalesReport(csvText) {
     const upsertRow = {
       order_number:     orderNo,
       epic_status:      inc.epicStatus,
-      epic_status_date: inc.statusDate,
+      // Age basis for "days since printed": use the real PrintedDate when the
+      // order has been printed (printed & beyond carry it); fall back to
+      // StatusDate for pre-print stages (quote / credit / PO sent). This is the
+      // fix that makes the printed-pipeline donut correct without manual repairs.
+      epic_status_date: inc.printedDate || inc.statusDate,
       status:           inc.wranglStatus,
       product_line:     inc.productLine,
       total_units:      inc.totalUnits,
