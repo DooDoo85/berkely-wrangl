@@ -90,7 +90,8 @@ export default function RackLocations() {
   const totals = useMemo(() => ({
     pieces: rows.reduce((s, r) => s + r.qty, 0),
     main:   rows.filter(r => r.warehouse === 'MAIN').reduce((s, r) => s + r.qty, 0),
-    sep:    rows.filter(r => r.warehouse === 'SEPARATE').reduce((s, r) => s + r.qty, 0),
+    whA:    rows.filter(r => r.warehouse === 'A').reduce((s, r) => s + r.qty, 0),
+    whB:    rows.filter(r => r.warehouse === 'B').reduce((s, r) => s + r.qty, 0),
     racks:  new Set(rows.filter(r => r.rack).map(r => r.rack)).size,
     sizes:  new Set(rows.map(r => r.size)).size,
   }), [rows])
@@ -114,7 +115,8 @@ export default function RackLocations() {
           [totals.sizes,  'sizes'],
           [totals.racks,  'racks'],
           [totals.main.toLocaleString(),   'pcs · main WH'],
-          [totals.sep.toLocaleString(),    'pcs · separate WH'],
+          [totals.whA.toLocaleString(),    'pcs · warehouse A'],
+          [totals.whB.toLocaleString(),    'pcs · warehouse B (est.)'],
           [totals.pieces.toLocaleString(), 'pcs · total'],
         ].map(([v, l]) => (
           <div key={l} className="bg-white border border-stone-200 rounded-xl px-4 py-2">
@@ -159,13 +161,16 @@ export default function RackLocations() {
               <div className="flex flex-wrap gap-1.5 flex-1">
                 {g.locs.map((l, i) => (
                   <button key={i} type="button"
-                    onClick={() => { if (l.rack) { setView('rack'); setSearch(l.rack) } }}
+                    onClick={() => { if (l.warehouse === 'MAIN' && l.rack) { setView('rack'); setSearch(l.rack) } }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                      l.warehouse === 'SEPARATE'
-                        ? 'bg-violet-50 text-violet-700 border-violet-200 cursor-default'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                    }`}>
-                    {l.warehouse === 'SEPARATE' ? 'Separate WH' : l.rack || 'no rack'} · {l.qty.toLocaleString()}
+                      l.warehouse === 'A' ? 'bg-violet-50 text-violet-700 border-violet-200 cursor-default'
+                      : l.warehouse === 'B' ? 'bg-amber-50 text-amber-700 border-amber-200 cursor-default'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    }`}
+                    title={l.warehouse === 'B' ? 'Estimated from ePIC — warehouse B not physically counted' : undefined}>
+                    {l.warehouse === 'A' ? 'Warehouse A'
+                      : l.warehouse === 'B' ? 'Warehouse B (est.)'
+                      : l.rack || 'no rack'} · {l.qty.toLocaleString()}
                   </button>
                 ))}
               </div>
