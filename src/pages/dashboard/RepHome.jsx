@@ -281,7 +281,7 @@ export default function RepHome() {
           .eq("user_id", profile.id).eq("activity_type", "scheduled_meeting").gte("activity_date", weekStartDate),
 
         supabase.from("activities").select("id", { count: "exact", head: true })
-          .eq("user_id", profile.id).eq("activity_type", "cold_call").gte("activity_date", weekStartDate),
+          .eq("user_id", profile.id).in("activity_type", ["cold_call", "cold_call_dropin"]).gte("activity_date", weekStartDate),
 
         supabase.from("activities").select("id", { count: "exact", head: true })
           .eq("user_id", profile.id).eq("activity_type", "sample_book").gte("activity_date", weekStartDate),
