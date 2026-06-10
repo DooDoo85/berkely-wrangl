@@ -1666,8 +1666,13 @@ async function processCommittedStock(csvText) {
 // RS PART (components) moved to SKIP on 2026-05-29: PIC's component on-hand is
 // not accurate, so Wrangl now owns component qty_on_hand via PO receipts +
 // PARTS SHIPPED consumption. Snapshot is authoritative for FW (faux) only.
-const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP', 'RS PART'])
-const SNAPSHOT_WRITE_CLASSES = new Set(['FW'])
+// FW (faux blinds) moved to SKIP on 2026-06-10: physical count loaded as the
+// Wrangl-owned baseline; maintained by FAUX SHIPPED consumption + receipts.
+// PIC's FW on-hand verified ~2x overstated vs physical count. Snapshot no
+// longer writes qty_on_hand/qty_committed for ANY class — it only archives
+// rows to epic_inventory_snapshot for audit/reference.
+const SNAPSHOT_SKIP_CLASSES = new Set(['RS FABRIC', 'RS COMP', 'RS PART', 'FW'])
+const SNAPSHOT_WRITE_CLASSES = new Set([])
 
 // Strip accents, normalize whitespace, uppercase — used for name-based fallback
 function normalizeSnapName(s) {
