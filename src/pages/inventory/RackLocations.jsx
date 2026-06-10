@@ -83,6 +83,52 @@ export default function RackLocations() {
     })
   }, [rows])
 
+  const [sel, setSel] = useState(null)   // {aisle, bay, level} selected map cell
+
+  // ── Warehouse map structure ──────────────────────────────────────────
+  // Rack codes encode position: E4b = rack E, bay 4, level b.
+  // Levels per the building: c = top, b = middle, a = floor.
+  // Racks run 1, E, F, G, H, I left→right; non-coded spots (WC, Back
+  // Aisle, "1") render as standalone blocks.
+  const AISLE_ORDER = ['E', 'F', 'G', 'H', 'I']
+  const mapData = useMemo(() => {
+    const aisles = new Map()   // aisle → { bays:Set, cells: Map("bay|lvl" → {qty, sizes[]}) , total }
+    const misc   = new Map()   // label → { qty, sizes[] }
+    for (const r of rows) {
+      if (r.warehouse !== 'MAIN') continue
+      const m = (r.rack || '').match(/^([A-Za-z])(\d+)([abc])$/)
+      if (m && AISLE_ORDER.includes(m[1].toUpperCase())) {
+        const aisle = m[1].toUpperCase(), bay = parseInt(m[2], 10), lvl = m[3].toLowerCase()
+        if (!aisles.has(aisle)) aisles.set(aisle, { bays: new Set(), cells: new Map(), total: 0 })
+        const A = aisles.get(aisle)
+        A.bays.add(bay); A.total += r.qty
+        const key = `${bay}|${lvl}`
+        if (!A.cells.has(key)) A.cells.set(key, { qty: 0, sizes: [] })
+        const c = A.cells.get(key)
+        c.qty += r.qty; c.sizes.push(r)
+      } else {
+        const label = r.rack || 'No rack'
+        if (!misc.has(label)) misc.set(label, { qty: 0, sizes: [] })
+        const g = misc.get(label)
+        g.qty += r.qty; g.sizes.push(r)
+      }
+    }
+    aisles.forEach(A => { A.bayList = [...A.bays].sort((x, y) => x - y) })
+    const maxCell = Math.max(1, ...[...aisles.values()].flatMap(A => [...A.cells.values()].map(c => c.qty)))
+    return { aisles, misc, maxCell }
+  }, [rows])
+
+  const heat = (qty) =>
+    qty === 0   ? 'bg-white text-stone-300'
+    : qty < 40  ? 'bg-emerald-50 text-emerald-800'
+    : qty < 90  ? 'bg-emerald-100 text-emerald-800'
+    : qty < 160 ? 'bg-emerald-200 text-emerald-900'
+    : qty < 280 ? 'bg-emerald-300 text-emerald-900'
+    :             'bg-emerald-400 text-white'
+
+  const selCell = sel ? mapData.aisles.get(sel.aisle)?.cells.get(`${sel.bay}|${sel.level}`) : null
+  const selMisc = sel?.misc ? mapData.misc.get(sel.misc) : null
+
   const q = search.trim().toUpperCase()
   const sizeList = q ? bySize.filter(g => g.size.includes(q)) : bySize
   const rackList = q ? byRack.filter(g => g.rack.toUpperCase().includes(q)) : byRack
@@ -129,7 +175,7 @@ export default function RackLocations() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="flex rounded-xl border border-stone-200 overflow-hidden">
-          {[['size', 'By Size'], ['rack', 'By Rack']].map(([v, l]) => (
+          {[['size', 'By Size'], ['rack', 'By Rack'], ['map', 'Map']].map(([v, l]) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-4 py-2 text-sm font-semibold transition-colors ${
                 view === v ? 'bg-brand-dark text-white' : 'bg-white text-stone-500 hover:bg-stone-50'
@@ -201,6 +247,102 @@ export default function RackLocations() {
             </div>
           ))}
           {rackList.length === 0 && <div className="text-stone-400 text-sm p-6">No racks match "{search}"</div>}
+        </div>
+      )}
+
+      {/* MAP — warehouse layout: racks 1,E,F,G,H,I; levels c top / b mid / a floor */}
+      {view === 'map' && (
+        <div className="space-y-6">
+          {AISLE_ORDER.filter(a => mapData.aisles.has(a)).map(aisle => {
+            const A = mapData.aisles.get(aisle)
+            return (
+              <div key={aisle} className="bg-white border border-stone-200 rounded-xl p-4 overflow-x-auto">
+                <div className="flex items-baseline justify-between mb-3">
+                  <span className="font-display font-bold text-stone-800 text-lg">Rack {aisle}</span>
+                  <span className="text-xs text-stone-400">{A.total.toLocaleString()} pcs</span>
+                </div>
+                <table className="border-separate" style={{ borderSpacing: 3 }}>
+                  <thead>
+                    <tr>
+                      <th className="text-[10px] text-stone-400 font-medium pr-2 text-right">level</th>
+                      {A.bayList.map(b => (
+                        <th key={b} className="text-[10px] text-stone-400 font-medium px-1">{aisle}{b}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['c', 'b', 'a'].map(lvl => (
+                      <tr key={lvl}>
+                        <td className="text-[10px] text-stone-400 pr-2 text-right whitespace-nowrap">
+                          {lvl === 'c' ? 'top · c' : lvl === 'b' ? 'mid · b' : 'floor · a'}
+                        </td>
+                        {A.bayList.map(b => {
+                          const cell = A.cells.get(`${b}|${lvl}`)
+                          const qty = cell?.qty || 0
+                          const active = sel && !sel.misc && sel.aisle === aisle && sel.bay === b && sel.level === lvl
+                          return (
+                            <td key={b}>
+                              <button type="button"
+                                onClick={() => setSel(active ? null : { aisle, bay: b, level: lvl })}
+                                className={`w-14 h-10 rounded-md border text-[11px] font-semibold transition-all ${heat(qty)} ${
+                                  active ? 'border-stone-800 ring-1 ring-stone-800' : 'border-stone-200 hover:border-stone-400'
+                                }`}>
+                                {qty > 0 ? qty.toLocaleString() : '·'}
+                              </button>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+
+          {/* Non-grid locations: Rack 1, WC, Back Aisle, etc. */}
+          {mapData.misc.size > 0 && (
+            <div className="bg-white border border-stone-200 rounded-xl p-4">
+              <div className="font-display font-bold text-stone-800 text-lg mb-3">Other locations</div>
+              <div className="flex flex-wrap gap-2">
+                {[...mapData.misc.entries()].sort((a, b) => b[1].qty - a[1].qty).map(([label, g]) => {
+                  const active = sel?.misc === label
+                  return (
+                    <button key={label} type="button"
+                      onClick={() => setSel(active ? null : { misc: label })}
+                      className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${heat(g.qty)} ${
+                        active ? 'border-stone-800 ring-1 ring-stone-800' : 'border-stone-200 hover:border-stone-400'
+                      }`}>
+                      {label} · {g.qty.toLocaleString()}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Selected cell contents */}
+          {(selCell || selMisc) && (
+            <div className="bg-white border-2 border-stone-800 rounded-xl p-4">
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="font-display font-bold text-stone-800">
+                  {sel.misc ? sel.misc : `${sel.aisle}${sel.bay}${sel.level}`}
+                </span>
+                <span className="text-xs text-stone-400">
+                  {(selCell || selMisc).qty.toLocaleString()} pcs · {(selCell || selMisc).sizes.length} size{(selCell || selMisc).sizes.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(selCell || selMisc).sizes.sort((a, b) => b.qty - a.qty).map((s, i) => (
+                  <button key={i} type="button"
+                    onClick={() => { setView('size'); setSearch(s.size) }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-50 text-stone-600 border border-stone-200 hover:bg-stone-100 transition-colors">
+                    {s.size} · {s.qty.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
