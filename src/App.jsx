@@ -23,6 +23,7 @@ import MatchReview from './pages/inventory/MatchReview'
 import CommittedOrders from './pages/inventory/CommittedOrders'
 import AdjustOnHand from './pages/inventory/AdjustOnHand'
 import { ContainerList, ContainerDetail } from './pages/inventory/Containers'
+import RackLocations from './pages/inventory/RackLocations'
 
 // Ops
 import OpsHub from './pages/ops/OpsHub'
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="/inventory/components" element={<InventoryList partType="component" />} />
         <Route path="/inventory/extrusions" element={<InventoryList partType="extrusion" />} />
         <Route path="/inventory/faux-blinds" element={<InventoryList partType="blind" />} />
+        <Route path="/inventory/locations" element={<RackLocations />} />
         <Route path="/inventory/committed-import" element={<CommittedStockImport />} />
         <Route path="/inventory/match-review" element={<MatchReview />} />
         <Route path="/inventory/committed" element={<CommittedOrders />} />
