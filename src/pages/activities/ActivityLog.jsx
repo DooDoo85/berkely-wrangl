@@ -6,7 +6,9 @@ import ActivityForm from './ActivityForm'
 
 const TYPE_STYLES = {
   call:              { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '☎️', label: 'Customer Call' },
-  cold_call:         { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞', label: 'Cold Call' },
+  cold_call:         { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   icon: '📞', label: 'Cold Call (Phone)' },
+  cold_call_dropin:  { bg: 'bg-teal-50',   text: 'text-teal-700',   border: 'border-teal-200',   icon: '🚗', label: 'Cold Call (Drop In)' },
+  customer_call:     { bg: 'bg-sky-50',    text: 'text-sky-700',    border: 'border-sky-200',    icon: '☎️', label: 'Customer Call' },
   email:             { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  icon: '✉️', label: 'Email' },
   note:              { bg: 'bg-stone-50',  text: 'text-stone-600',  border: 'border-stone-200',  icon: '📝', label: 'Note' },
   scheduled_meeting: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '🤝', label: 'Scheduled Meeting' },
@@ -295,7 +297,7 @@ export default function ActivityLog() {
           full_name: r.full_name,
           email: r.email,
           scheduled_meetings: userActs.filter(a => a.activity_type === 'scheduled_meeting').length,
-          cold_calls:         userActs.filter(a => a.activity_type === 'cold_call').length,
+          cold_calls:         userActs.filter(a => a.activity_type === 'cold_call' || a.activity_type === 'cold_call_dropin').length,
           sample_books:       userActs.filter(a => a.activity_type === 'sample_book').length,
           new_accounts:       newAccountsCount,
         }
@@ -366,7 +368,7 @@ export default function ActivityLog() {
       setKpis({
         scheduled_meetings: acts.filter(a => a.activity_type === 'scheduled_meeting').length,
         sample_books:       acts.filter(a => a.activity_type === 'sample_book').length,
-        cold_calls:         acts.filter(a => a.activity_type === 'cold_call').length,
+        cold_calls:         acts.filter(a => a.activity_type === 'cold_call' || a.activity_type === 'cold_call_dropin').length,
         new_accounts:       (customersRes.data || []).length,
       })
     } catch (err) {
@@ -478,7 +480,7 @@ export default function ActivityLog() {
       {/* Filters */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="flex gap-1 flex-wrap">
-          {['all', 'scheduled_meeting', 'cold_call', 'sample_book', 'call', 'email', 'note'].map(t => (
+          {['all', 'scheduled_meeting', 'cold_call', 'cold_call_dropin', 'sample_book', 'customer_call', 'email', 'note'].map(t => (
             <button
               key={t}
               onClick={() => setFilter(t)}
