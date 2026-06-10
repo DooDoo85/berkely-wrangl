@@ -3,9 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../components/AuthProvider'
 
 const TYPES = [
-  { value: 'scheduled_meeting', label: 'Scheduled Meeting', icon: '🤝' },
-  { value: 'cold_call',         label: 'Cold Call',         icon: '📞' },
-  { value: 'sample_book',       label: 'Sample Book',       icon: '📚' },
+  { value: 'scheduled_meeting', label: 'Scheduled Meeting',   icon: '🤝' },
+  { value: 'cold_call',         label: 'Cold Call (Phone)',   icon: '📞' },
+  { value: 'cold_call_dropin',  label: 'Cold Call (Drop In)', icon: '🚗' },
+  { value: 'sample_book',       label: 'Sample Book',         icon: '📚' },
   { value: 'customer_call',    label: 'Customer Call',     icon: '☎️' },
   { value: 'email',             label: 'Email',             icon: '✉️' },
   { value: 'note',              label: 'Note',              icon: '📝' },
