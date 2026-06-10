@@ -285,25 +285,30 @@ export default function RackLocations() {
                               {bays.map(b => {
                                 const cell = A.cells.get(`${b}|${lvl}`)
                                 const qty = cell?.qty || 0
-                                const fill = Math.max(qty > 0 ? 12 : 0, Math.min(100, (qty / mapData.maxCell) * 100))
                                 const active = sel && !sel.misc && sel.aisle === aisle && sel.bay === b && sel.level === lvl
+                                const sizesDesc = (cell?.sizes || []).slice().sort((x, y) => y.qty - x.qty)
+                                const shown = sizesDesc.slice(0, 3)
+                                const extra = sizesDesc.length - shown.length
                                 return (
                                   <div key={b} className="flex items-stretch">
                                     <button type="button"
-                                      title={`${aisle}${b}${lvl}${qty ? ` · ${qty} pcs` : ' · empty'}`}
+                                      title={`${aisle}${b}${lvl}${qty ? ` · ${qty} pcs · ${sizesDesc.length} size${sizesDesc.length !== 1 ? 's' : ''}` : ' · empty'}`}
                                       onClick={() => setSel(active ? null : { aisle, bay: b, level: lvl })}
-                                      className={`relative w-16 h-14 bg-stone-50 overflow-hidden transition-all ${
+                                      className={`relative w-28 h-[5.5rem] bg-stone-50 overflow-hidden transition-all flex flex-col justify-end p-0.5 gap-0.5 ${
                                         active ? 'ring-2 ring-inset ring-stone-800' : 'hover:bg-stone-100'
                                       }`}>
                                       {qty > 0 && (
-                                        <span className="absolute inset-x-0 bottom-0 border-t border-[#a87c44]"
-                                              style={{ height: `${fill}%`, background: STACK_BG }} />
+                                        <span className="absolute top-0.5 right-1 text-[9px] font-bold text-stone-400">
+                                          {qty.toLocaleString()}{extra > 0 ? ` · +${extra}` : ''}
+                                        </span>
                                       )}
-                                      <span className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold ${
-                                        qty > 0 ? 'text-stone-800' : 'text-stone-300'
-                                      }`} style={qty > 0 ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : undefined}>
-                                        {qty > 0 ? qty.toLocaleString() : ''}
-                                      </span>
+                                      {shown.slice().reverse().map((s, i) => (
+                                        <span key={i}
+                                          className="w-full rounded-[2px] border border-[#a87c44] px-1 py-[1px] text-[9px] font-semibold text-stone-800 text-left leading-tight truncate"
+                                          style={{ background: STACK_BG }}>
+                                          {s.size.replace(' X ', 'x')} · {s.qty.toLocaleString()}
+                                        </span>
+                                      ))}
                                     </button>
                                     <Post />
                                   </div>
@@ -318,13 +323,13 @@ export default function RackLocations() {
                       {/* concrete floor + bay labels */}
                       <div className="flex">
                         <div className="w-16" />
-                        <div className="flex flex-col" style={{ width: bays.length * 64 + (bays.length + 1) * 7 }}>
+                        <div className="flex flex-col" style={{ width: bays.length * 112 + (bays.length + 1) * 7 }}>
                           <div className="h-1.5 w-full bg-stone-300 rounded-b-sm" />
                           <div className="flex">
                             <div style={{ width: 7 }} />
                             {bays.map(b => (
                               <div key={b} className="flex">
-                                <div className="w-16 text-center text-[10px] text-stone-400 pt-1 font-medium">{aisle}{b}</div>
+                                <div className="w-28 text-center text-[10px] text-stone-400 pt-1 font-medium">{aisle}{b}</div>
                                 <div style={{ width: 7 }} />
                               </div>
                             ))}
