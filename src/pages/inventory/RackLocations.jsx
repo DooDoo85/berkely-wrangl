@@ -91,6 +91,7 @@ export default function RackLocations() {
   // Racks run 1, E, F, G, H, I left→right; non-coded spots (WC, Back
   // Aisle, "1") render as standalone blocks.
   const AISLE_ORDER = ['E', 'F', 'G', 'H', 'I']
+  const RACK_BAYS   = { E: 8, F: 8, G: 11, H: 9, I: 8 }   // physical bays per rack (from layout)
   const mapData = useMemo(() => {
     const aisles = new Map()   // aisle → { bays:Set, cells: Map("bay|lvl" → {qty, sizes[]}) , total }
     const misc   = new Map()   // label → { qty, sizes[] }
@@ -120,11 +121,16 @@ export default function RackLocations() {
 
   const heat = (qty) =>
     qty === 0   ? 'bg-white text-stone-300'
-    : qty < 40  ? 'bg-emerald-50 text-emerald-800'
-    : qty < 90  ? 'bg-emerald-100 text-emerald-800'
-    : qty < 160 ? 'bg-emerald-200 text-emerald-900'
-    : qty < 280 ? 'bg-emerald-300 text-emerald-900'
-    :             'bg-emerald-400 text-white'
+    : qty < 40  ? 'bg-amber-50 text-amber-900'
+    : qty < 90  ? 'bg-amber-100 text-amber-900'
+    : qty < 160 ? 'bg-amber-200 text-amber-950'
+    : qty < 280 ? 'bg-amber-300 text-amber-950'
+    :             'bg-amber-400 text-amber-950'
+
+  // cardboard "stack" fill — looks like boxes piling up in the slot
+  const STACK_BG = 'repeating-linear-gradient(180deg,#d6ae74 0px,#d6ae74 7px,#c2945a 7px,#c2945a 8px)'
+  const BEAM = '#2f8f74'      // teal beam color (matches the racking)
+  const POST = '#e0561e'      // orange upright color
 
   const selCell = sel ? mapData.aisles.get(sel.aisle)?.cells.get(`${sel.bay}|${sel.level}`) : null
   const selMisc = sel?.misc ? mapData.misc.get(sel.misc) : null
@@ -261,41 +267,73 @@ export default function RackLocations() {
                   <span className="font-display font-bold text-stone-800 text-lg">Rack {aisle}</span>
                   <span className="text-xs text-stone-400">{A.total.toLocaleString()} pcs</span>
                 </div>
-                <table className="border-separate" style={{ borderSpacing: 3 }}>
-                  <thead>
-                    <tr>
-                      <th className="text-[10px] text-stone-400 font-medium pr-2 text-right">level</th>
-                      {A.bayList.map(b => (
-                        <th key={b} className="text-[10px] text-stone-400 font-medium px-1">{aisle}{b}</th>
+                {(() => {
+                  const maxBay = Math.max(RACK_BAYS[aisle] || 0, ...A.bayList)
+                  const bays = Array.from({ length: maxBay }, (_, i) => i + 1)
+                  const Post = () => <div className="self-stretch rounded-[1px]" style={{ width: 7, background: POST }} />
+                  return (
+                    <div className="inline-block">
+                      {['c', 'b', 'a'].map(lvl => (
+                        <div key={lvl} className="flex">
+                          <div className="w-16 flex items-end justify-end pr-2 pb-1 text-[10px] text-stone-400 whitespace-nowrap">
+                            {lvl === 'c' ? 'top · c' : lvl === 'b' ? 'mid · b' : 'floor · a'}
+                          </div>
+                          <div className="flex flex-col">
+                            {/* level shelf contents framed by uprights */}
+                            <div className="flex items-stretch">
+                              <Post />
+                              {bays.map(b => {
+                                const cell = A.cells.get(`${b}|${lvl}`)
+                                const qty = cell?.qty || 0
+                                const fill = Math.max(qty > 0 ? 12 : 0, Math.min(100, (qty / mapData.maxCell) * 100))
+                                const active = sel && !sel.misc && sel.aisle === aisle && sel.bay === b && sel.level === lvl
+                                return (
+                                  <div key={b} className="flex items-stretch">
+                                    <button type="button"
+                                      title={`${aisle}${b}${lvl}${qty ? ` · ${qty} pcs` : ' · empty'}`}
+                                      onClick={() => setSel(active ? null : { aisle, bay: b, level: lvl })}
+                                      className={`relative w-16 h-14 bg-stone-50 overflow-hidden transition-all ${
+                                        active ? 'ring-2 ring-inset ring-stone-800' : 'hover:bg-stone-100'
+                                      }`}>
+                                      {qty > 0 && (
+                                        <span className="absolute inset-x-0 bottom-0 border-t border-[#a87c44]"
+                                              style={{ height: `${fill}%`, background: STACK_BG }} />
+                                      )}
+                                      <span className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold ${
+                                        qty > 0 ? 'text-stone-800' : 'text-stone-300'
+                                      }`} style={qty > 0 ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : undefined}>
+                                        {qty > 0 ? qty.toLocaleString() : ''}
+                                      </span>
+                                    </button>
+                                    <Post />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {/* teal beam under this level */}
+                            <div className="rounded-[1px]" style={{ height: 6, background: BEAM }} />
+                          </div>
+                        </div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {['c', 'b', 'a'].map(lvl => (
-                      <tr key={lvl}>
-                        <td className="text-[10px] text-stone-400 pr-2 text-right whitespace-nowrap">
-                          {lvl === 'c' ? 'top · c' : lvl === 'b' ? 'mid · b' : 'floor · a'}
-                        </td>
-                        {A.bayList.map(b => {
-                          const cell = A.cells.get(`${b}|${lvl}`)
-                          const qty = cell?.qty || 0
-                          const active = sel && !sel.misc && sel.aisle === aisle && sel.bay === b && sel.level === lvl
-                          return (
-                            <td key={b}>
-                              <button type="button"
-                                onClick={() => setSel(active ? null : { aisle, bay: b, level: lvl })}
-                                className={`w-14 h-10 rounded-md border text-[11px] font-semibold transition-all ${heat(qty)} ${
-                                  active ? 'border-stone-800 ring-1 ring-stone-800' : 'border-stone-200 hover:border-stone-400'
-                                }`}>
-                                {qty > 0 ? qty.toLocaleString() : '·'}
-                              </button>
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      {/* concrete floor + bay labels */}
+                      <div className="flex">
+                        <div className="w-16" />
+                        <div className="flex flex-col" style={{ width: bays.length * 64 + (bays.length + 1) * 7 }}>
+                          <div className="h-1.5 w-full bg-stone-300 rounded-b-sm" />
+                          <div className="flex">
+                            <div style={{ width: 7 }} />
+                            {bays.map(b => (
+                              <div key={b} className="flex">
+                                <div className="w-16 text-center text-[10px] text-stone-400 pt-1 font-medium">{aisle}{b}</div>
+                                <div style={{ width: 7 }} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
