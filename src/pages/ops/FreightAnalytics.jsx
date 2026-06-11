@@ -266,7 +266,7 @@ export default function FreightAnalytics() {
       byMonth.set(m, cur)
     }
     const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month))
-    const maxMonthCost = Math.max(1, ...months.map(m => m.cost))
+    const maxMonthCost = Math.max(1, ...months.map(mo => Math.max(mo.cost, mo.charged)))
 
     // by service (ship_via)
     const byVia = new Map()
