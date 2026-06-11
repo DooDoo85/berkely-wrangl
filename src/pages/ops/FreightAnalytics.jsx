@@ -148,6 +148,7 @@ function mapFedexInvoiceRows(records) {
 export default function FreightAnalytics() {
   const [shipments, setShipments] = useState([])
   const [invoices, setInvoices]   = useState([])
+  const [programCustomers, setProgramCustomers] = useState(new Set())
   const [loading, setLoading]     = useState(true)
   const [importing, setImporting] = useState(null)   // 'shipments' | 'invoices'
   const [importMsg, setImportMsg] = useState(null)   // { ok, text }
@@ -164,6 +165,11 @@ export default function FreightAnalytics() {
         fetchAll('freight_invoices',  'invoice_number, tracking_id, carrier, invoice_date, order_ref, net_charge, service_type, shipment_date'),
       ])
       setShipments(s); setInvoices(i)
+      // Freight-in-price customers — excluded from recovery, shown as program freight
+      try {
+        const { data: pc } = await supabase.from('freight_program_customers').select('customer_name')
+        setProgramCustomers(new Set((pc ?? []).map(r => (r.customer_name || '').toUpperCase())))
+      } catch { setProgramCustomers(new Set()) }
     } catch (e) {
       setImportMsg({ ok: false, text: `Load failed: ${e.message}. Has freight_analytics_setup.sql been run?` })
     }
@@ -223,7 +229,18 @@ export default function FreightAnalytics() {
       cost: costByOrder.get(s.order_number) || 0,
     }))
     const carriers = [...new Set(rows.map(r => r.carrier).filter(Boolean))].sort()
-    const inScope = carrierFilter === 'all' ? rows : rows.filter(r => r.carrier === carrierFilter)
+    const carrierScoped = carrierFilter === 'all' ? rows : rows.filter(r => r.carrier === carrierFilter)
+
+    // Freight-in-price program customers: excluded from recovery metrics,
+    // their carrier cost shown separately as "Program freight".
+    const isProgram = (r) => programCustomers.has((r.customer_name || '').toUpperCase())
+    const programRows = carrierScoped.filter(isProgram)
+    const inScope = carrierScoped.filter(r => !isProgram(r))
+    const program = {
+      cost: programRows.reduce((a, r) => a + r.cost, 0),
+      pkgs: programRows.reduce((a, r) => a + r.n_shipments, 0),
+      customers: [...new Set(programRows.map(r => r.customer_name))],
+    }
 
     const matched = inScope.filter(r => r.cost > 0)
     const totals = {
@@ -279,8 +296,8 @@ export default function FreightAnalytics() {
       custSort === 'charged' ? b.charged - a.charged :
                                a.margin - b.margin)   // worst recovery first
 
-    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines }
-  }, [shipments, invoices, carrierFilter, custSort])
+    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines, program }
+  }, [shipments, invoices, carrierFilter, custSort, programCustomers])
 
   const m = model
   const hasData = shipments.length > 0 || invoices.length > 0
@@ -351,11 +368,12 @@ export default function FreightAnalytics() {
           )}
 
           {/* KPI band */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
             {[
               ['Carrier cost', fmt$Full(m.totals.cost), `${m.totals.matchedOrders.toLocaleString()} orders matched`],
               ['Freight charged', fmt$Full(m.totals.charged), 'billed to customers'],
               ['Recovery', fmt$Full(m.totals.margin), m.totals.cost > 0 ? `${((m.totals.charged / m.totals.cost) * 100).toFixed(0)}% of cost` : '—', m.totals.margin < 0],
+              ['Program freight', fmt$Full(m.program.cost), m.program.customers.length ? `${m.program.customers.join(', ')} · in pricing` : 'freight-in-price agreements'],
               ['Cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on matched orders'],
               ['Units / package', m.totals.unitsPerPkg.toFixed(2), `${m.totals.pkgs.toLocaleString()} pkgs total`],
               ['Excluded charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · pre-2026 & fees — not in recovery`],
@@ -480,9 +498,10 @@ export default function FreightAnalytics() {
           </div>
 
           <p className="text-[11px] text-ink-muted">
-            Note: customers on free-freight or freight-in-price programs show $0 charged by design — recovery for them
-            reads as the freight absorbed into their pricing, not a billing error. Unmatched charges are account-level
-            fees and shipments for orders outside the imported window.
+            Note: program customers (freight accommodated in their pricing agreement) are excluded from recovery,
+            the chart, and the customer table — their carrier cost shows as Program freight above. Excluded charges
+            are account-level fees and shipments for orders outside the imported window. Manage program customers
+            in the freight_program_customers table.
           </p>
         </>
       )}
