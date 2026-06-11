@@ -33,6 +33,7 @@ import ReceiveAgainstPO from './pages/ops/ReceiveAgainstPO'
 import TransactionLog from './pages/ops/TransactionLog'
 import ProductionHub from './pages/ops/ProductionHub'
 import CycleCounts from './pages/ops/CycleCounts'
+import FreightAnalytics from './pages/ops/FreightAnalytics'
 import OrdersOnHold from './pages/orders/OrdersOnHold'
 
 // Orders
@@ -191,7 +192,7 @@ function AppRoutes() {
         <Route path="/system/usage" element={<UsageAnalytics />} />
 
         {/* Freight / Settings */}
-        <Route path="/freight" element={<Placeholder title="Freight" />} />
+        <Route path="/freight" element={<FreightAnalytics />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />
         <Route path="/settings/email-preferences" element={<EmailPreferences />} />
 
