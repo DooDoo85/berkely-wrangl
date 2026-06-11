@@ -11,6 +11,7 @@ import WranglBadge from './WranglBadge'
 const EXEC_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
   { type: 'link', to: '/cockpit', icon: '🎛️', label: 'COO Cockpit' },
+  { type: 'link', to: '/calendar', icon: '📅', label: 'Calendar' },
 
   { type: 'section', label: 'Inventory' },
   { type: 'link', to: '/inventory',             icon: '📦', label: 'All Parts', exact: true },
@@ -18,7 +19,6 @@ const EXEC_NAV = [
   { type: 'link', to: '/inventory/fabrics',     icon: '🧵', label: 'Fabrics'     },
   { type: 'link', to: '/inventory/components',  icon: '🔩', label: 'Components'  },
   { type: 'link', to: '/inventory/extrusions',  icon: '📏', label: 'Extrusions'  },
-  { type: 'link', to: '/calendar', icon: '📅', label: 'Calendar' },
 
   { type: 'section', label: 'Operations' },
   {
