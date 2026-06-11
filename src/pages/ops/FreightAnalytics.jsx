@@ -358,7 +358,7 @@ export default function FreightAnalytics() {
               ['Recovery', fmt$Full(m.totals.margin), m.totals.cost > 0 ? `${((m.totals.charged / m.totals.cost) * 100).toFixed(0)}% of cost` : '—', m.totals.margin < 0],
               ['Cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on matched orders'],
               ['Units / package', m.totals.unitsPerPkg.toFixed(2), `${m.totals.pkgs.toLocaleString()} pkgs total`],
-              ['Unmatched charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · fees & pre-2026`],
+              ['Excluded charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · pre-2026 & fees — not in recovery`],
             ].map(([label, val, sub, bad]) => (
               <div key={label} className="card p-3.5">
                 <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-1">{label}</p>
