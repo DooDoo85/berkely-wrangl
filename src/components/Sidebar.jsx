@@ -30,9 +30,9 @@ const EXEC_NAV = [
       { to: '/inventory/committed', label: 'Committed Orders' },
       { to: '/inventory/adjust',    label: 'Adjust On-Hand' },
       { to: '/purchasing',       label: 'Purchasing'       },
-      { to: '/freight',          label: 'Freight'          },
     ],
   },
+  { type: 'link', to: '/freight', icon: '🚚', label: 'Freight Costs' },
   { type: 'link', to: '/requests', icon: '📥', label: 'Requests' },
 
   { type: 'section', label: 'Sales' },
