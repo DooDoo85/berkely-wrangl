@@ -326,11 +326,12 @@ export default function CooCockpit() {
       let freight = null
       try {
         const { data: fr } = await supabase.from('v_freight_recovery').select('*').maybeSingle()
-        if (fr && (Number(fr.charged) > 0 || Number(fr.cost) > 0)) {
+        if (fr && (Number(fr.charged) > 0 || Number(fr.cost) > 0 || Number(fr.program_cost) > 0)) {
           freight = {
             charged: Number(fr.charged) || 0,
             cost: Number(fr.cost) || 0,
             recovery: (Number(fr.charged) || 0) - (Number(fr.cost) || 0),
+            programCost: Number(fr.program_cost) || 0,
           }
         }
       } catch { freight = null }
@@ -600,7 +601,7 @@ export default function CooCockpit() {
                   <Tile
                     label="Freight Recovery YTD"
                     value={usd(d.freight.recovery)}
-                    sub={`${usd(d.freight.charged)} charged vs ${usd(d.freight.cost)} cost`}
+                    sub={`${usd(d.freight.charged)} charged vs ${usd(d.freight.cost)} cost${d.freight.programCost > 0 ? ` · ${usd(d.freight.programCost)} program` : ''}`}
                     tone={d.freight.recovery < 0 ? 'bad' : 'good'}
                     onClick={() => navigate('/freight')}
                   />
