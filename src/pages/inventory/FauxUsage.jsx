@@ -40,7 +40,7 @@ export default function FauxUsage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: viewRows }, { data: pls }] = await Promise.all([
+    const [{ data: viewRows }, { data: pls }, { data: timberRows }] = await Promise.all([
       supabase
         .from('v_faux_blind_inventory')
         .select(`
@@ -53,7 +53,19 @@ export default function FauxUsage() {
         .select('units_ytd, sales_ytd, updated_at')
         .eq('product_line', 'Faux Wood Blinds')
         .maybeSingle(),
+      supabase
+        .from('timber_inventory')
+        .select('size_label, qty')
+        .gt('qty', 0),
     ])
+
+    // Timber overflow stock by size — flagged on stockout/at-risk rows so the
+    // fallback is visible right where the shortage is. Edited manually on the
+    // Timber Inventory tab.
+    const timberBySize = {}
+    for (const tr of (timberRows || [])) {
+      timberBySize[(tr.size_label || '').trim().toUpperCase()] = Number(tr.qty) || 0
+    }
 
     const parsed = (viewRows || []).map(r => ({
       id:                       r.part_id,
@@ -67,6 +79,7 @@ export default function FauxUsage() {
       wks_supply_on_hand:       r.wks_supply_on_hand,
       wks_supply_with_incoming: r.wks_supply_with_incoming,
       status:                   r.status,
+      timber_qty:               timberBySize[(r.size || '').split(' E02')[0].trim().toUpperCase()] || 0,
     }))
 
     setRows(parsed)
@@ -286,6 +299,13 @@ export default function FauxUsage() {
                     className="border-b border-surface-border-soft hover:bg-surface-page/40 cursor-pointer transition-colors">
                   <td className="px-3 py-2 font-medium text-ink-strong whitespace-nowrap" title={row.size}>
                     {shortSize(row.size)}
+                    {(row.status === 'stockout' || row.status === 'at_risk') && row.timber_qty > 0 && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold align-middle"
+                            style={{ background: '#f5e7cd', border: '1px solid #c9a16b', color: '#5c432a' }}
+                            title="Older Timber blinds on hand — see the Timber Inventory tab">
+                        Timber · {row.timber_qty.toLocaleString()}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-ink-mid">
                     {row.avg_per_week > 0 ? row.avg_per_week.toFixed(1) : '—'}
