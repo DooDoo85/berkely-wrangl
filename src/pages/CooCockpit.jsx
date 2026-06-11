@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../components/AuthProvider'
 
@@ -191,13 +192,16 @@ function Donut({ segments, size = 140 }) {
 }
 
 // ── Standard live tile ──
-function Tile({ label, value, sub, tone = 'normal', alert = false }) {
+function Tile({ label, value, sub, tone = 'normal', alert = false, onClick }) {
   const toneColor =
     tone === 'good' ? 'text-emerald-700' :
     tone === 'warn' ? 'text-amber-700' :
     tone === 'bad'  ? 'text-red-700' : 'text-ink-strong'
   return (
-    <div className={`card !rounded-xl ring-1 shadow-none p-3.5 ${alert ? 'ring-amber-300 bg-amber-50/30' : 'ring-stone-200/80'}`}>
+    <div
+      onClick={onClick}
+      className={`card !rounded-xl ring-1 shadow-none p-3.5 ${alert ? 'ring-amber-300 bg-amber-50/30' : 'ring-stone-200/80'} ${onClick ? 'cursor-pointer hover:ring-stone-300 transition-shadow' : ''}`}
+    >
       <p className="text-[10px] uppercase tracking-wider text-ink-muted mb-1">{label}</p>
       <p className={`font-display font-bold text-[26px] leading-none ${toneColor}`}>{value}</p>
       {sub && <p className="text-[11px] text-ink-muted mt-1.5">{sub}</p>}
@@ -223,6 +227,7 @@ function SectionLabel({ children }) {
 
 export default function CooCockpit() {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [d, setD] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -316,6 +321,20 @@ export default function CooCockpit() {
         remakeCount = count
       } catch { remakeCount = null }
 
+      // Freight recovery — charged vs carrier cost (v_freight_recovery view,
+      // fed by the Freight Costs page imports). Null if view missing or empty.
+      let freight = null
+      try {
+        const { data: fr } = await supabase.from('v_freight_recovery').select('*').maybeSingle()
+        if (fr && (Number(fr.charged) > 0 || Number(fr.cost) > 0)) {
+          freight = {
+            charged: Number(fr.charged) || 0,
+            cost: Number(fr.cost) || 0,
+            recovery: (Number(fr.charged) || 0) - (Number(fr.cost) || 0),
+          }
+        }
+      } catch { freight = null }
+
       // ── LABOR — per-line cost + per-line efficiency (since go-live) ──
       // Cost: v_labor_summary since go-live (2026-04-06).
       // Efficiency: per-line units ÷ per-line labor hours, BOTH since go-live.
@@ -363,7 +382,7 @@ export default function CooCockpit() {
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
         aging, series,
         shippedUnitsWeek, shippedToday,
-        salesYTD, remakeCount,
+        salesYTD, remakeCount, freight,
         labor,
         fauxEff: eff(labor.faux),
         rollerEff: eff(labor.roller),
@@ -577,9 +596,19 @@ export default function CooCockpit() {
               <SectionLabel>Financial & quality</SectionLabel>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                 <Tile label="Sales YTD" value={usd(d.salesYTD)} sub="from product-line sales" />
+                {d.freight ? (
+                  <Tile
+                    label="Freight Recovery YTD"
+                    value={usd(d.freight.recovery)}
+                    sub={`${usd(d.freight.charged)} charged vs ${usd(d.freight.cost)} cost`}
+                    tone={d.freight.recovery < 0 ? 'bad' : 'good'}
+                    onClick={() => navigate('/freight')}
+                  />
+                ) : (
+                  <GapTile label="Freight Recovery" needs="import invoices on the Freight Costs page" />
+                )}
                 <Tile label="Remakes (30d)" value={d.remakeCount == null ? '—' : num(d.remakeCount)} sub="quality failures" tone={d.remakeCount > 0 ? 'warn' : 'normal'} />
                 <GapTile label="Gross Margin %" needs="cost feed wired to sales (use loaded cost)" />
-                <GapTile label="First Pass Yield %" needs="total production count vs. remakes" />
               </div>
             </div>
 
@@ -591,6 +620,7 @@ export default function CooCockpit() {
                 <GapTile label="On-Time Delivery %" needs="requested_ship_date populated from ePIC" />
                 <GapTile label="Capacity Utilization" needs="work-center capacity + hours feed" />
                 <GapTile label="Material Stockouts" needs="on-hand vs. demand stockout events" />
+                <GapTile label="First Pass Yield %" needs="total production count vs. remakes" />
               </div>
             </div>
 
