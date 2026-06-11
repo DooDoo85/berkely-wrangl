@@ -1683,9 +1683,14 @@ const SNAPSHOT_WRITE_CLASSES = new Set([])
 // Strip accents, normalize whitespace, uppercase — used for name-based fallback
 function normalizeSnapName(s) {
   if (!s) return ''
+  // Quote chars are STRIPPED on both sides of the match: parseCSV removes
+  // them from report values, so part names must drop them too or any name
+  // containing an inch mark (2" FW BLIND, 1.5" TUBE, ...) never matches.
+  // Applied symmetrically, so previously-working matches are unaffected.
+  // Fixed 2026-06-11 — same root cause as the shipped-report matcher.
   return s.normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u201c\u201d\u2018\u2019"']/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase()
