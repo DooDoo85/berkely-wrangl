@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import AddToReorderModal from '../../components/AddToReorderModal'
 import FauxUsage from './FauxUsage'
+import RackLocations from './RackLocations'
+import TimberInventory from './TimberInventory'
 
 // =====================================================================
 // InventoryList — operational page (page-mode = operational)
@@ -50,11 +52,46 @@ function StockBadge({ qty, reorder }) {
   return <span className="text-sm font-semibold text-ink-strong tabular-nums">{Math.ceil(Number(qty)).toLocaleString()}</span>
 }
 
+// ── Faux Blinds hub — three tabs over one page ───────────────────────────
+// Stock & Usage (FauxUsage dashboard) · Rack Locations · Timber Inventory.
+// Each tab is a self-contained component; switching remounts (fresh fetch).
+const FAUX_TABS = [
+  ['stock',  'Stock & Usage'],
+  ['racks',  'Rack Locations'],
+  ['timber', 'Timber Inventory'],
+]
+const HUB_INK = '#2e2014'
+const HUB_BORDER = 'rgba(92,67,42,0.14)'
+
+function FauxBlindsHub() {
+  const [tab, setTab] = useState('stock')
+  return (
+    <div>
+      <div className="px-6 pt-4">
+        <div className="inline-flex rounded-xl overflow-hidden" style={{ border: `1px solid ${HUB_BORDER}` }}>
+          {FAUX_TABS.map(([v, l]) => (
+            <button key={v} onClick={() => setTab(v)}
+              className="px-4 py-2 text-sm font-semibold transition-colors"
+              style={tab === v
+                ? { background: HUB_INK, color: '#f7f0e0' }
+                : { background: '#fff', color: '#8c7758' }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'stock'  && <FauxUsage />}
+      {tab === 'racks'  && <RackLocations />}
+      {tab === 'timber' && <TimberInventory />}
+    </div>
+  )
+}
+
 export default function InventoryList({ partType }) {
-  // Faux Wood Blinds page is now the Faux Usage Dashboard — richer view with
-  // velocity, ETAs, and weeks-of-supply. Bypasses standard inventory list entirely.
+  // Faux Wood Blinds page is the faux hub: Stock & Usage dashboard plus
+  // Rack Locations and Timber Inventory as tabs. Bypasses the standard list.
   if (partType === 'blind') {
-    return <FauxUsage />
+    return <FauxBlindsHub />
   }
 
   const navigate = useNavigate()
