@@ -12,32 +12,22 @@ const EXEC_NAV = [
   { type: 'link', to: '/', icon: '🏠', label: 'Home', exact: true },
   { type: 'link', to: '/cockpit', icon: '🎛️', label: 'COO Cockpit' },
 
-  { type: 'section', label: 'Sales' },
-  { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
-  { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
-  { type: 'link', to: '/calendar',   icon: '📅', label: 'Calendar'   },
-  { type: 'link', to: '/requests',   icon: '📥', label: 'Requests'   },
-  {
-    type: 'group', label: 'Orders', icon: '📋',
-    children: [
-      { to: '/orders',         label: 'All Orders'     },
-      { to: '/orders/on-hold', label: 'Orders on Hold' },
-    ],
-  },
-
-  { type: 'section', label: 'Operations' },
+  { type: 'section', label: 'Inventory' },
   {
     type: 'group', label: 'Inventory', icon: '📦',
     children: [
       { to: '/inventory',             label: 'All Parts'   },
+      { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
       { to: '/inventory/fabrics',     label: 'Fabrics'     },
       { to: '/inventory/components',  label: 'Components'  },
       { to: '/inventory/extrusions',  label: 'Extrusions'  },
-      { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
       { to: '/inventory/committed',   label: 'Committed Orders' },
       { to: '/inventory/adjust',      label: 'Adjust On-Hand' },
     ],
   },
+  { type: 'link', to: '/calendar', icon: '📅', label: 'Calendar' },
+
+  { type: 'section', label: 'Operations' },
   {
     type: 'group', label: 'Production', icon: '🏭',
     children: [
@@ -46,6 +36,18 @@ const EXEC_NAV = [
       { to: '/ops/cycle-counts', label: 'Cycle Counts'     },
       { to: '/purchasing',       label: 'Purchasing'       },
       { to: '/freight',          label: 'Freight'          },
+    ],
+  },
+  { type: 'link', to: '/requests', icon: '📥', label: 'Requests' },
+
+  { type: 'section', label: 'Sales' },
+  { type: 'link', to: '/customers',  icon: '👥', label: 'Customers'  },
+  { type: 'link', to: '/activities', icon: '📝', label: 'Activities' },
+  {
+    type: 'group', label: 'Orders', icon: '📋',
+    children: [
+      { to: '/orders',         label: 'All Orders'     },
+      { to: '/orders/on-hold', label: 'Orders on Hold' },
     ],
   },
 
