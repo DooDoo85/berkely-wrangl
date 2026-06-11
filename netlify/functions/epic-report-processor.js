@@ -904,14 +904,20 @@ async function processPartsShipped(csvText, source) {
   const allParts = await partsRes.json()
 
   // Build lookup: normalized_name → part_id
-  // Each part can be addressed by its primary name OR any pic_alias
+  // Each part can be addressed by its primary name OR any pic_alias.
+  // NOTE: parseCSV strips quote chars from values, so descriptions arrive
+  // WITHOUT inch marks (24 X 48 ... 2 FW BLIND) while part names keep them
+  // (... 2" FW BLIND). Normalize BOTH sides: drop quotes, collapse spaces.
+  // Without this, every part whose name contains an inch mark (all faux
+  // blinds, taped tubes, etc.) silently fails to match. Fixed 2026-06-11.
+  const normKey = (s) => (s || '').replace(/["']/g, '').replace(/\s+/g, ' ').trim().toUpperCase()
   const nameToPartId = new Map()
   for (const p of allParts) {
-    const key = (p.name || '').trim().toUpperCase()
+    const key = normKey(p.name)
     if (key) nameToPartId.set(key, p.id)
     if (Array.isArray(p.pic_aliases)) {
       for (const alias of p.pic_aliases) {
-        const aliasKey = (alias || '').trim().toUpperCase()
+        const aliasKey = normKey(alias)
         if (aliasKey) nameToPartId.set(aliasKey, p.id)
       }
     }
@@ -960,7 +966,7 @@ async function processPartsShipped(csvText, source) {
       continue
     }
 
-    const partId = nameToPartId.get(description.toUpperCase())
+    const partId = nameToPartId.get(normKey(description))
     if (!partId) {
       failures.push({
         source: source,
