@@ -153,7 +153,7 @@ function WeekdayBars({ data, color }) {
   return <WeekdayTrend data={data} color={color} />;
 }
 
-function HeroCard({ label, accent, fill, data, sparkData, weekData, loading, onClick }) {
+function HeroCard({ label, accent, fill, data, shipped, sparkData, weekData, loading, onClick }) {
   return (
     <div onClick={onClick}
       className="card card-hover p-3 md:p-4 cursor-pointer h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
@@ -165,19 +165,20 @@ function HeroCard({ label, accent, fill, data, sparkData, weekData, loading, onC
         <span className="text-xs text-ink-muted flex-shrink-0 ml-2">View →</span>
       </div>
 
-      {/* WTD dollar amount */}
+      {/* WTD shipped dollars — sums the same daily_shipments rows the
+          weekday chart draws, so headline and graph always agree. */}
       <div className="mb-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-xl md:text-2xl font-medium text-ink-strong tabular-nums">
-            {loading ? "—" : fmt$Full(data.sales_wtd)}
+            {loading ? "—" : fmt$Full(shipped?.dollars ?? 0)}
           </span>
-          <span className="text-xs text-ink-muted">WTD</span>
+          <span className="text-xs text-ink-muted">WTD · shipped</span>
         </div>
       </div>
 
-      {/* Units this week */}
+      {/* Units shipped this week */}
       <div className="flex items-center gap-2 text-xs text-ink-mid tabular-nums mb-2">
-        <span>{loading ? "" : `${(data.units_wtd ?? 0).toLocaleString()} units`}</span>
+        <span>{loading ? "" : `${(shipped?.units ?? 0).toLocaleString()} units`}</span>
       </div>
 
       {/* Mon–Fri units shipped this week */}
@@ -185,10 +186,12 @@ function HeroCard({ label, accent, fill, data, sparkData, weekData, loading, onC
         <WeekdayBars data={weekData || []} color={accent} />
       </div>
 
-      {/* MTD / YTD footer */}
+      {/* MTD / YTD footer — these stay on invoiced (product_line_sales)
+          since shipped history only goes back to June 1. Labeled so the
+          shipped-vs-invoiced split is visible rather than confusing. */}
       <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-stone-100">
         <div className="text-center">
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD</p>
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">MTD · invoiced</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_mtd)}
           </p>
@@ -197,7 +200,7 @@ function HeroCard({ label, accent, fill, data, sparkData, weekData, loading, onC
           </p>
         </div>
         <div className="text-center">
-          <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD</p>
+          <p className="text-[10px] text-ink-muted uppercase tracking-wide">YTD · invoiced</p>
           <p className="text-sm font-medium text-ink-strong tabular-nums mt-0.5">
             {loading ? "—" : fmt$(data.sales_ytd)}
           </p>
@@ -1378,6 +1381,7 @@ export default function ExecutiveHome() {
     stuckOrders: [], heldOrdersAll: [], avgDays: null, repOrders: [],
     overdueOrders: [],
     faux: {}, roller: {},
+    rollerShipped: { dollars: 0, units: 0 }, fauxShipped: { dollars: 0, units: 0 },
     fauxSpark: [], rollerSpark: [],
     rollerWeek: [], fauxWeek: [],
     wip: { creditOK: [], printed: [] },
@@ -2049,16 +2053,30 @@ export default function ExecutiveHome() {
 
       const { data: shipRows } = await supabase
         .from("daily_shipments")
-        .select("product_line, ship_date, units_shipped")
+        .select("product_line, ship_date, units_shipped, revenue_shipped")
         .gte("ship_date", monStr)
         .lt("ship_date", satStr);
 
       const rollerShipMap = {};
       const fauxShipMap = {};
+      // Shipped WTD totals — the hero headline now sums the SAME rows the
+      // weekday chart draws, so the number and the graph can never disagree.
+      let rollerShippedWtdDollars = 0, rollerShippedWtdUnits = 0;
+      let fauxShippedWtdDollars = 0,   fauxShippedWtdUnits = 0;
       (shipRows ?? []).forEach(r => {
-        if (r.product_line === 'roller') rollerShipMap[r.ship_date] = r.units_shipped || 0;
-        if (r.product_line === 'faux')   fauxShipMap[r.ship_date]   = r.units_shipped || 0;
+        const u = Number(r.units_shipped || 0);
+        const rev = Number(r.revenue_shipped || 0);
+        if (r.product_line === 'roller') {
+          rollerShipMap[r.ship_date] = u;
+          rollerShippedWtdUnits += u; rollerShippedWtdDollars += rev;
+        }
+        if (r.product_line === 'faux') {
+          fauxShipMap[r.ship_date] = u;
+          fauxShippedWtdUnits += u; fauxShippedWtdDollars += rev;
+        }
       });
+      const rollerShipped = { dollars: rollerShippedWtdDollars, units: rollerShippedWtdUnits };
+      const fauxShipped   = { dollars: fauxShippedWtdDollars,   units: fauxShippedWtdUnits };
       const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       const rollerWeek = WD.map((label, i) => {
         const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
@@ -2172,6 +2190,7 @@ export default function ExecutiveHome() {
 
       setData({
         stuckOrders, heldOrdersAll, avgDays, repOrders, faux, roller,
+        rollerShipped, fauxShipped,
         overdueOrders,
         fauxSpark, rollerSpark,
         rollerWeek, fauxWeek,
@@ -2266,6 +2285,7 @@ export default function ExecutiveHome() {
             accent={ROLLER_ACCENT}
             fill={ROLLER_FILL}
             data={data.roller}
+            shipped={data.rollerShipped}
             sparkData={data.rollerSpark}
             weekData={data.rollerWeek}
             loading={loading}
@@ -2276,6 +2296,7 @@ export default function ExecutiveHome() {
             accent={FAUX_ACCENT}
             fill={FAUX_FILL}
             data={data.faux}
+            shipped={data.fauxShipped}
             sparkData={data.fauxSpark}
             weekData={data.fauxWeek}
             loading={loading}
