@@ -2304,14 +2304,10 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ═══ ROW 2 — Operational view (MERGED) ══════════════════════════
-            Single card: Operations Status as a full-width band on top, then
-            the two alert groups split beneath — On Hold (left) + Past SLA
-            (right). Combines the former two side-by-side cards into one
-            cohesive operational panel. */}
+        {/* ═══ ROW 2 — Operations Status ═══════════════════════════════════
+            Live order flow by stage. Its own card so the stage tiles breathe
+            without the alert tables nested inside. */}
         <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none mb-3">
-
-          {/* ── Top band: Operations Status (full width) ── */}
           <OperationsStatusTable
             embedded
             loading={loading}
@@ -2333,26 +2329,28 @@ export default function ExecutiveHome() {
             onInProdRollerClick={() => setInProductionModal('roller')}
             onInProdFauxClick={() => setInProductionModal('faux')}
           />
+        </div>
 
-          {/* ── Divider between Operations bands and the alert columns ── */}
-          <div className="mt-4 mb-3 border-t border-stone-200" />
+        {/* ═══ ROW 3 — Needs Attention ═════════════════════════════════════
+            The only actionable items on the page, elevated to their own row:
+            On Hold (left) + Past SLA (right) as separate cards. When both are
+            clear, collapses to a slim all-clear strip. */}
 
           {/* Empty state — both clear */}
           {stuckTotal === 0 && overdueTotal === 0 && (
-            <div className="rounded-lg bg-emerald-50/40 border border-emerald-100/60 py-8 px-4 text-center">
-              <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2 text-base">✓</div>
-              <p className="text-sm text-ink-mid">All orders moving cleanly.</p>
-              <p className="text-[11px] text-ink-muted mt-0.5">No holds. No SLA breaches.</p>
+            <div className="rounded-lg bg-emerald-50/40 border border-emerald-100/60 py-3 px-4 flex items-center justify-center gap-2.5 ring-1 ring-stone-200">
+              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs flex-shrink-0">✓</div>
+              <p className="text-sm text-ink-mid">All clear — no holds, no SLA breaches.</p>
             </div>
           )}
 
-          {/* ── Bottom split: On Hold (left) + Past SLA (right) as compact tables ── */}
+          {/* ── Alert cards: On Hold (left) + Past SLA (right) ── */}
           {(stuckTotal > 0 || overdueTotal > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-7">
+            <div className={`grid grid-cols-1 ${stuckTotal > 0 && overdueTotal > 0 ? 'lg:grid-cols-2' : ''} gap-3`}>
 
-              {/* On Hold table */}
+              {/* On Hold card */}
               {stuckTotal > 0 && (
-                <div>
+                <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                       On Hold <span className="text-ink-muted font-medium normal-case tracking-normal">· {stuckTotal}</span>
@@ -2394,9 +2392,9 @@ export default function ExecutiveHome() {
                 </div>
               )}
 
-              {/* Past SLA table */}
+              {/* Past SLA card */}
               {overdueTotal > 0 && (
-                <div className="lg:border-l lg:border-stone-200 lg:pl-7">
+                <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-red-700">
                       Past SLA <span className="text-ink-muted font-medium normal-case tracking-normal">· {overdueTotal}</span>
@@ -2439,156 +2437,6 @@ export default function ExecutiveHome() {
               )}
             </div>
           )}
-        </div>
-
-        {/* ═══ ROW 3 — Daily Sales hero ═══════════════════════════════════
-            2×2 grid layout:
-              TL: Combo chart (orders entered last 5 business days)
-              TR: 2×2 KPI cards (Sales Summary)
-              BL: Sales by Product · YTD (horizontal ranked bars)
-              BR: Insights (auto-generated comparison statements)
-            Card height stays. Internal proportions balanced so chart doesn't
-            dominate and KPIs/secondary row have real presence. */}
-        <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
-
-          {/* HEADER — title + subtitle, stronger divider below */}
-          <div className="flex items-baseline justify-between mb-3 pb-2.5 border-b border-stone-200">
-            <h3 className="font-display font-bold text-ink-strong text-base md:text-lg leading-none">
-              Daily Sales · Last 5 Business Days
-            </h3>
-            <p className="text-[11px] text-ink-muted">
-              Orders entered, ex. quotes
-            </p>
-          </div>
-
-          {/* TOP ROW — Chart (2/3) + KPI cards (1/3) — with vertical divider between */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-4 lg:gap-5 mb-3 pb-3 border-b border-stone-200">
-
-            {/* Combo chart */}
-            <div className="lg:pr-3 lg:border-r lg:border-stone-200">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Orders Entered</p>
-                <p className="text-[10.5px] text-ink-muted">Last 5 business days</p>
-              </div>
-              <ComboChart data={data.dailySales} priorDailyAvg={data.salesKpis.priorDailyAvg} />
-            </div>
-
-            {/* 2×2 KPI cards */}
-            <div className="lg:pl-3">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">Sales Summary</p>
-                <p className="text-[10.5px] text-ink-muted">5-day totals</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {/* 5-day total sales */}
-                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center mb-1.5">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-                      <polyline points="17 6 23 6 23 12" />
-                    </svg>
-                  </span>
-                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : fmt$(data.salesKpis.sumSales)}
-                  </p>
-                  <p className="text-[10.5px] text-ink-mid mt-1">5-day total sales</p>
-                </div>
-
-                {/* Orders entered */}
-                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-md bg-stone-100 text-stone-700 ring-1 ring-stone-200/60 flex items-center justify-center mb-1.5">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                      <circle cx="9" cy="21" r="1" />
-                      <circle cx="20" cy="21" r="1" />
-                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                    </svg>
-                  </span>
-                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : data.salesKpis.sumOrders}
-                  </p>
-                  <p className="text-[10.5px] text-ink-mid mt-1">Orders entered</p>
-                </div>
-
-                {/* Avg roller order — Monthly */}
-                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-md bg-amber-50 text-amber-800 ring-1 ring-amber-100 flex items-center justify-center mb-1.5">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 6v6l4 2" />
-                    </svg>
-                  </span>
-                  <p className="text-lg font-bold text-ink-strong tabular-nums leading-none">
-                    {loading ? "—" : fmt$(data.salesKpis.rollerAovMonthly)}
-                  </p>
-                  <p className="text-[10.5px] text-ink-mid mt-1">Avg roller · Monthly</p>
-                </div>
-
-                {/* Top product */}
-                <div className="rounded-md ring-1 ring-stone-200 bg-white p-2.5 flex flex-col items-center text-center">
-                  <span className="w-7 h-7 rounded-md flex items-center justify-center mb-1.5"
-                        style={{ background: `${data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#d4a574'}20`,
-                                 color: data.salesKpis.topProductLabel === 'Roller' ? '#b85d3a' : '#a07845' }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                         strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                  </span>
-                  <p className="text-lg font-bold text-ink-strong leading-none">
-                    {loading ? "—" : data.salesKpis.topProductLabel}
-                  </p>
-                  <p className="text-[10.5px] text-ink-mid mt-1">
-                    Top product
-                    {!loading && data.salesKpis.topProductPct > 0 && (
-                      <span className="text-ink-muted"> · {data.salesKpis.topProductPct}%</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* BOTTOM ROW — Sales by Product (2/3) + Insights (1/3) — vertical divider between */}
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.1fr] gap-5 lg:gap-6">
-
-            {/* Sales by Product · YTD — horizontal ranked bars */}
-            <div className="lg:pr-3 lg:border-r lg:border-stone-200">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
-                  Sales by Product
-                </p>
-                <p className="text-[10.5px] text-ink-muted">Roller · YTD</p>
-              </div>
-              {data.rollerProductBreakdown && data.rollerProductBreakdown.length > 0 ? (
-                <ProductRankedBars
-                  breakdown={data.rollerProductBreakdown}
-                  total={data.rollerProductTotal}
-                />
-              ) : (
-                <ProductRankedBars
-                  breakdown={[
-                    { label: "Roller Shades",    value: data.roller?.sales_ytd || 0, color: "#b85d3a" },
-                    { label: "Faux Wood Blinds", value: data.faux?.sales_ytd   || 0, color: "#d4a574" },
-                  ]}
-                  total={(data.roller?.sales_ytd || 0) + (data.faux?.sales_ytd || 0)}
-                />
-              )}
-            </div>
-
-            {/* Insights — auto-generated comparison statements */}
-            <div className="lg:pl-3">
-              <div className="flex items-baseline justify-between mb-2.5 pb-1.5 border-b border-stone-200">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-mid">
-                  Insights
-                </p>
-                <p className="text-[10.5px] text-ink-muted">vs prior 5 days</p>
-              </div>
-              <InsightsList kpis={data.salesKpis} loading={loading} />
-            </div>
-          </div>
-        </div>
 
       </div>
 
