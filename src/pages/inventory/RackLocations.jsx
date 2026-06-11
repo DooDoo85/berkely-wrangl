@@ -21,8 +21,8 @@ const POST   = '#e0561e'   // orange upright
 const BEAM   = '#2f8f74'   // teal beam
 const STACK_BG = 'repeating-linear-gradient(180deg,#d6ae74 0px,#d6ae74 7px,#c2945a 7px,#c2945a 8px)'
 
-const AISLE_ORDER = ['E', 'F', 'G', 'H', 'I']
-const RACK_BAYS   = { E: 8, F: 8, G: 11, H: 9, I: 8 }   // physical bays per rack
+const AISLE_ORDER = ['D', 'E', 'F', 'G', 'H', 'I']
+const RACK_BAYS   = { D: 1, E: 8, F: 8, G: 11, H: 9, I: 8 }   // physical bays per rack
 
 export default function RackLocations() {
   const [rows, setRows]       = useState([])
