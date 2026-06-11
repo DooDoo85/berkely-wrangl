@@ -45,6 +45,79 @@ function extractFabricFamily(name) {
   return name
 }
 
+// ─── Fabric rename map (display-only) ───────────────────────────────────
+// Old names stay in the parts table and on existing orders / ePIC feeds —
+// this only overlays the new naming on the Fabrics page. Fabrics NOT listed
+// here keep their old name unchanged (we manage that stock until it runs
+// out). Keyed on the full old "name - color" string, normalized the same
+// way the ePIC fabric matcher does (strip accents, collapse spaces, upper).
+const normFabric = (s) =>
+  (s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // drop accents (é → e)
+    .replace(/\s+/g, ' ').trim().toUpperCase()
+
+// [ old full name, new fabric, new color ]
+const FABRIC_RENAMES = [
+  ['Bordeaux LF - White',  'Coral Harbour L/F', 'Gesso'],
+  ['Bordeaux LF - Beige',  'Coral Harbour L/F', 'Glaze'],
+  ['Bordeaux LF - Gray',   'Coral Harbour L/F', 'Distortion'],
+  ['Bordeaux LF - Shadow', 'Coral Harbour L/F', 'Vignette'],
+  ['Bordeaux BO - White',  'Coral Harbour B/O', 'Dark Gesso'],
+  ['Bordeaux BO - Beige',  'Coral Harbour B/O', 'Dark Glaze'],
+  ['Bordeaux BO - Gray',   'Coral Harbour B/O', 'Dark Distortion'],
+  ['Bordeaux BO - Shadow', 'Coral Harbour B/O', 'Dark Vignette'],
+  ['La Rochelle LF - White', 'West End L/F', 'Angelic'],
+  ['La Rochelle LF - Beige', 'West End L/F', 'Linen Tint'],
+  ['La Rochelle LF - Taupe', 'West End L/F', 'Afterglow'],
+  ['La Rochelle BO - White', 'West End B/O', 'Dark Angelic'],
+  ['La Rochelle BO - Beige', 'West End B/O', 'Dark Linen Tint'],
+  ['La Rochelle BO - Taupe', 'West End B/O', 'Dark Afterglow'],
+  ['Versailles LF - White', 'Georgetown L/F', 'Cloudfall'],
+  ['Versailles LF - Cream', 'Georgetown L/F', 'Winter Oak'],
+  ['Versailles BO - White', 'Georgetown B/O', 'Dark Cloudfall'],
+  ['Versailles BO - Cream', 'Georgetown B/O', 'Dark Winter Oak'],
+  ['Versailles BO - Gray',  'Georgetown B/O', 'Dark Pike Lake'],
+  ['Orléans 1% - Bright White', 'Solar Shade 1%', 'Snow'],
+  ['Orléans 1% - White/White',  'Solar Shade 1%', 'Whtie'],
+  ['Orléans 1% - White/Linen',  'Solar Shade 1%', 'Biege'],
+  ['Orléans 1% - White/Gray',   'Solar Shade 1%', 'Smoke'],
+  ['Orleans 1% - Tan/Tan',      'Solar Shade 1%', 'Dessert'],
+  ['Orléans 1% - Gray/Gray',    'Solar Shade 1%', 'Ash'],
+  ['Orléans 1% - Black/Bronze', 'Solar Shade 1%', 'Taupe'],
+  ['Orléans 1% - Black/Gray',   'Solar Shade 1%', 'Graphite'],
+  ['Orléans 1% - Black/Black',  'Solar Shade 1%', 'Storm'],
+  ['Orléans 3% - Bright White', 'Solar Shade 3%', 'Snow'],
+  ['Orléans 3% - White/White',  'Solar Shade 3%', 'Whtie'],
+  ['Orléans 3% - White/Linen',  'Solar Shade 3%', 'Biege'],
+  ['Orléans 3% - White/Gray',   'Solar Shade 3%', 'Smoke'],
+  ['Orleans 3% - Tan/Tan',      'Solar Shade 3%', 'Dessert'],
+  ['Orleans 3% - Gray/Gray',    'Solar Shade 3%', 'Ash'],
+  ['Orléans 3% - Black/Bronze', 'Solar Shade 3%', 'Taupe'],
+  ['Orléans 3% - Black/Gray',   'Solar Shade 3%', 'Graphite'],
+  ['Orléans 3% - Black/Black',  'Solar Shade 3%', 'Storm'],
+  ['Orléans 5% - Bright White', 'Solar Shade 5%', 'Snow'],
+  ['Orléans 5% - White/White',  'Solar Shade 5%', 'Whtie'],
+  ['Orléans 5% - White/Linen',  'Solar Shade 5%', 'Biege'],
+  ['Orléans 5% - White/Gray',   'Solar Shade 5%', 'Smoke'],
+  ['Orléans 5% - Tan/Tan',      'Solar Shade 5%', 'Dessert'],
+  ['Orleans 5% - Gray/Gray',    'Solar Shade 5%', 'Ash'],
+  ['Orléans 5% - Black/Bronze', 'Solar Shade 5%', 'Taupe'],
+  ['Orléans 5% - Black/Gray',   'Solar Shade 5%', 'Graphite'],
+  ['Orléans 5% - Black/Black',  'Solar Shade 5%', 'Storm'],
+]
+const FABRIC_MAP = new Map(
+  FABRIC_RENAMES.map(([oldName, fab, color]) => [normFabric(oldName), { fab, color, newName: `${fab} - ${color}` }])
+)
+// Returns { newName, fab, color } if mapped, else null.
+const lookupNewFabric = (oldName) => FABRIC_MAP.get(normFabric(oldName)) || null
+
+// Family label for the divider: new fabric family if mapped, else old family.
+function fabricFamilyLabel(name) {
+  const mapped = lookupNewFabric(name)
+  if (mapped) return { newFam: mapped.fab, oldFam: extractFabricFamily(name) }
+  return { newFam: extractFabricFamily(name), oldFam: null }
+}
+
 function StockBadge({ qty, reorder }) {
   if (qty === null || qty === undefined) return <span className="text-ink-muted text-xs">—</span>
   if (qty <= 0) return <span className="pill-critical">OUT</span>
@@ -159,12 +232,16 @@ export default function InventoryList({ partType }) {
 
     if (search) {
       const s = search.toLowerCase()
-      rows = rows.filter(p =>
-        p.name?.toLowerCase().includes(s) ||
-        p.vendor_id?.toLowerCase().includes(s) ||
-        p.vendor_part_name?.toLowerCase().includes(s) ||
-        p.vendor?.toLowerCase().includes(s)
-      )
+      rows = rows.filter(p => {
+        const mapped = p.part_type === 'fabric' ? lookupNewFabric(p.name) : null
+        return (
+          p.name?.toLowerCase().includes(s) ||
+          p.vendor_id?.toLowerCase().includes(s) ||
+          p.vendor_part_name?.toLowerCase().includes(s) ||
+          p.vendor?.toLowerCase().includes(s) ||
+          (mapped && mapped.newName.toLowerCase().includes(s))
+        )
+      })
     }
 
     return rows
@@ -174,18 +251,27 @@ export default function InventoryList({ partType }) {
     if (type !== 'fabric') {
       return filtered.map(p => ({ kind: 'row', part: p }))
     }
+    // Group by the NEW family when a fabric is mapped, else its old family,
+    // so renamed colors cluster under their new fabric name.
+    const famKey = (p) => fabricFamilyLabel(p.name).newFam
     const sorted = [...filtered].sort((a, b) => {
-      const fa = extractFabricFamily(a.name)
-      const fb = extractFabricFamily(b.name)
+      const fa = famKey(a)
+      const fb = famKey(b)
       if (fa !== fb) return fa.localeCompare(fb)
       return a.name.localeCompare(b.name)
     })
     const out = []
     let lastFamily = null
     for (const p of sorted) {
-      const fam = extractFabricFamily(p.name)
+      const fam = famKey(p)
       if (fam !== lastFamily) {
-        out.push({ kind: 'divider', family: fam, count: sorted.filter(x => extractFabricFamily(x.name) === fam).length })
+        const { newFam, oldFam } = fabricFamilyLabel(p.name)
+        out.push({
+          kind: 'divider',
+          family: newFam,
+          oldFamily: oldFam,
+          count: sorted.filter(x => famKey(x) === fam).length,
+        })
         lastFamily = fam
       }
       out.push({ kind: 'row', part: p })
@@ -355,10 +441,15 @@ export default function InventoryList({ partType }) {
               {renderRows.map((item) => {
                 if (item.kind === 'divider') {
                   return (
-                    <tr key={`div-${item.family}`} className="bg-surface-page/30 border-y border-surface-border">
-                      <td colSpan={locked ? 7 : 8} className="px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-ink-strong uppercase tracking-wider">{item.family}</span>
+                    <tr key={`div-${item.family}`} className="bg-accent-gold-soft border-t-2 border-accent-gold/50">
+                      <td colSpan={locked ? 7 : 8} className="px-4 py-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[12px] font-bold text-accent-gold uppercase tracking-wider">{item.family}</span>
+                          {item.oldFamily && (
+                            <span className="text-[10px] text-ink-muted normal-case tracking-normal">
+                              (formerly {item.oldFamily})
+                            </span>
+                          )}
                           <span className="text-[10px] text-ink-muted">· {item.count} color{item.count === 1 ? '' : 's'}</span>
                         </div>
                       </td>
@@ -381,10 +472,25 @@ export default function InventoryList({ partType }) {
                       className="px-4 py-3 cursor-pointer hover:text-accent-clay"
                       onClick={() => navigate(`/inventory/${p.id}`)}
                     >
-                      <div className="font-medium text-ink-strong">{p.name}</div>
-                      {p.vendor_part_name && p.vendor_part_name !== p.name && (
-                        <div className="text-ink-muted mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
-                      )}
+                      {(() => {
+                        const mapped = p.part_type === 'fabric' ? lookupNewFabric(p.name) : null
+                        if (mapped) {
+                          return (
+                            <>
+                              <div className="font-medium text-ink-strong">{mapped.newName}</div>
+                              <div className="text-ink-muted mt-0.5 text-[11px]">was: {p.name}</div>
+                            </>
+                          )
+                        }
+                        return (
+                          <>
+                            <div className="font-medium text-ink-strong">{p.name}</div>
+                            {p.vendor_part_name && p.vendor_part_name !== p.name && (
+                              <div className="text-ink-muted mt-0.5 truncate max-w-xs">{p.vendor_part_name}</div>
+                            )}
+                          </>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/inventory/${p.id}`)}>
                       {p.vendor_id
