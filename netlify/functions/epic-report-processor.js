@@ -2212,8 +2212,10 @@ async function processDailyShipments(csvText, productLine) {
       product_line:    productLine,
       ship_date:       date,
       day_of_week:     (r.DayOfWeek || '').trim() || null,
-      units_shipped:   parseInt(r.UnitsFullyShipped, 10) || 0,
-      revenue_shipped: Math.round(num(r.RevenueFullyShipped) * 100) / 100,
+      // Column aliases: roller summary uses UnitsFullyShipped/RevenueFullyShipped,
+      // the faux summary emits TotalUnitsShipped (+ revenue name TBD). Accept both.
+      units_shipped:   parseInt(r.UnitsFullyShipped ?? r.TotalUnitsShipped, 10) || 0,
+      revenue_shipped: Math.round(num(r.RevenueFullyShipped ?? r.RevenueShipped ?? r.TotalRevenueShipped ?? r.TotalSalesShipped ?? r.TotalSales) * 100) / 100,
       updated_at:      new Date().toISOString(),
     })
   }
@@ -2277,7 +2279,9 @@ exports.handler = async function(event, context) {
         // (marked processed) but not acted on.
         const DEPRECATED_SUBJECTS = [
           'ROLLER SHADE FULL SHIP',
-          'FAUX FULL SHIP',
+          // 'FAUX FULL SHIP' removed 2026-06-11: report repurposed in ePIC as
+          // the faux daily shipment summary (ShipDate/DayOfWeek/units/revenue)
+          // and now routes to processDailyShipments below.,
           'ROLLER SHADE PRINTED',
           'FAUX PRINTED',
           'PRINTED ORDERS',
@@ -2294,8 +2298,9 @@ exports.handler = async function(event, context) {
           continue
         }
 
-        if (subject.includes('DAILY SHIPMENT')) {
-          // ROLLERSHADE / FAUX DAILY SHIPMENT SUMMARY → daily_shipments.
+        if (subject.includes('DAILY SHIPMENT') || subject.includes('FAUX FULL SHIP')) {
+          // ROLLERSHADE DAILY SHIPMENT SUMMARY (roller) and the repurposed
+          // BEREKLY FAUX FULL SHIP summary (faux) → daily_shipments.
           // Product line inferred from subject (default roller).
           if (!hasCSV) { console.log('  No CSV attachment'); continue }
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
