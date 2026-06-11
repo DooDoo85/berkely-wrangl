@@ -13,18 +13,11 @@ const EXEC_NAV = [
   { type: 'link', to: '/cockpit', icon: '🎛️', label: 'COO Cockpit' },
 
   { type: 'section', label: 'Inventory' },
-  {
-    type: 'group', label: 'Inventory', icon: '📦',
-    children: [
-      { to: '/inventory',             label: 'All Parts'   },
-      { to: '/inventory/faux-blinds', label: 'Faux Blinds' },
-      { to: '/inventory/fabrics',     label: 'Fabrics'     },
-      { to: '/inventory/components',  label: 'Components'  },
-      { to: '/inventory/extrusions',  label: 'Extrusions'  },
-      { to: '/inventory/committed',   label: 'Committed Orders' },
-      { to: '/inventory/adjust',      label: 'Adjust On-Hand' },
-    ],
-  },
+  { type: 'link', to: '/inventory',             icon: '📦', label: 'All Parts', exact: true },
+  { type: 'link', to: '/inventory/faux-blinds', icon: '🪟', label: 'Faux Blinds' },
+  { type: 'link', to: '/inventory/fabrics',     icon: '🧵', label: 'Fabrics'     },
+  { type: 'link', to: '/inventory/components',  icon: '🔩', label: 'Components'  },
+  { type: 'link', to: '/inventory/extrusions',  icon: '📏', label: 'Extrusions'  },
   { type: 'link', to: '/calendar', icon: '📅', label: 'Calendar' },
 
   { type: 'section', label: 'Operations' },
@@ -34,6 +27,8 @@ const EXEC_NAV = [
       { to: '/ops/production',   label: 'Start Production' },
       { to: '/ops',              label: 'Warehouse'        },
       { to: '/ops/cycle-counts', label: 'Cycle Counts'     },
+      { to: '/inventory/committed', label: 'Committed Orders' },
+      { to: '/inventory/adjust',    label: 'Adjust On-Hand' },
       { to: '/purchasing',       label: 'Purchasing'       },
       { to: '/freight',          label: 'Freight'          },
     ],
