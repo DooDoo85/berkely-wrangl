@@ -897,8 +897,11 @@ async function processPartsShipped(csvText, source) {
   }
 
   // Step 1: load all active parts (id, name, pic_aliases) once
+  // limit=5000: Supabase REST silently caps un-limited queries at 1,000 rows,
+  // which truncated the lookup once active parts grew past 1,000 — newest
+  // parts (e.g. Bofu motor line) never entered the matcher. Fixed 2026-06-12.
   const partsRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/parts?select=id,name,pic_aliases,qty_on_hand&active=eq.true`,
+    `${SUPABASE_URL}/rest/v1/parts?select=id,name,pic_aliases,qty_on_hand&active=eq.true&limit=5000`,
     { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
   )
   const allParts = await partsRes.json()
@@ -1077,7 +1080,7 @@ async function processCommittedFabric(csvText, orderStatus = 'PRINTED') {
   // Load all active fabric parts once
   const fabricParts = await sbQuery(
     'parts',
-    'select=id,name,pic_aliases&part_type=eq.fabric&active=eq.true&limit=1000'
+    'select=id,name,pic_aliases&part_type=eq.fabric&active=eq.true&limit=2000'
   )
   const fabrics = Array.isArray(fabricParts) ? fabricParts : []
   console.log(`  Loaded ${fabrics.length} active fabric parts for matching`)
@@ -1234,7 +1237,7 @@ async function processFabricCompleted(csvText) {
   // Step 1: load all active fabric parts once
   const fabricParts = await sbQuery(
     'parts',
-    'select=id,name,pic_aliases,qty_on_hand,qty_committed&part_type=eq.fabric&active=eq.true&limit=1000'
+    'select=id,name,pic_aliases,qty_on_hand,qty_committed&part_type=eq.fabric&active=eq.true&limit=2000'
   )
   const fabrics = Array.isArray(fabricParts) ? fabricParts : []
   const nameToFabricId = new Map()
@@ -1462,7 +1465,10 @@ async function processCommittedByClass(csvText, stockClass, partType, reportName
   }
 
   // Load only parts of this type for fuzzy matching
-  const allParts = await sbQuery('parts', `select=id,name&part_type=eq.${partType}&active=eq.true&limit=1000`)
+  // limit=5000: same Supabase 1,000-row cap fix as the consumption lookup —
+  // harmless for blinds today (134 parts) but prevents silent truncation if
+  // any committed part type grows past 1,000. Fixed 2026-06-12.
+  const allParts = await sbQuery('parts', `select=id,name&part_type=eq.${partType}&active=eq.true&limit=5000`)
   const partsList = Array.isArray(allParts) ? allParts : []
   console.log(`  Loaded ${partsList.length} ${partType} parts for matching`)
 
