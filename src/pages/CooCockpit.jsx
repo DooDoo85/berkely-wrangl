@@ -599,9 +599,9 @@ export default function CooCockpit() {
                 <Tile label="Sales YTD" value={usd(d.salesYTD)} sub="from product-line sales" />
                 {d.freight ? (
                   <Tile
-                    label="Freight Recovery YTD"
+                    label="Freight Margin YTD"
                     value={usd(d.freight.recovery)}
-                    sub={`${usd(d.freight.charged)} charged vs ${usd(d.freight.cost)} cost${d.freight.programCost > 0 ? ` · ${usd(d.freight.programCost)} program` : ''}`}
+                    sub={`${usd(d.freight.charged)} assumed @ $14/unit vs ${usd(d.freight.cost)} cost${d.freight.programCost > 0 ? ` · ${usd(d.freight.programCost)} program` : ''}`}
                     tone={d.freight.recovery < 0 ? 'bad' : 'good'}
                     onClick={() => navigate('/freight')}
                   />
