@@ -5,6 +5,7 @@ import AddToReorderModal from '../../components/AddToReorderModal'
 import FauxUsage from './FauxUsage'
 import RackLocations from './RackLocations'
 import TimberInventory from './TimberInventory'
+import OffsiteFabric from './OffsiteFabric'
 
 // =====================================================================
 // InventoryList — operational page (page-mode = operational)
@@ -160,13 +161,44 @@ function FauxBlindsHub() {
   )
 }
 
-export default function InventoryList({ partType }) {
-  // Faux Wood Blinds page is the faux hub: Stock & Usage dashboard plus
-  // Rack Locations and Timber Inventory as tabs. Bypasses the standard list.
-  if (partType === 'blind') {
-    return <FauxBlindsHub />
-  }
+// ── Fabric hub — two tabs: the standard fabric list + Offsite Fabric ─────
+const FABRIC_TABS = [
+  ['stock',   'Fabric Stock'],
+  ['offsite', 'Offsite Fabric'],
+]
 
+function FabricHub({ partType }) {
+  const [tab, setTab] = useState('stock')
+  return (
+    <div>
+      <div className="px-6 pt-4">
+        <div className="inline-flex rounded-xl overflow-hidden" style={{ border: `1px solid ${HUB_BORDER}` }}>
+          {FABRIC_TABS.map(([v, l]) => (
+            <button key={v} onClick={() => setTab(v)}
+              className="px-4 py-2 text-sm font-semibold transition-colors"
+              style={tab === v
+                ? { background: HUB_INK, color: '#f7f0e0' }
+                : { background: '#fff', color: '#8c7758' }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'stock'   && <InventoryListBody partType={partType} />}
+      {tab === 'offsite' && <OffsiteFabric />}
+    </div>
+  )
+}
+
+export default function InventoryList({ partType }) {
+  // Faux Wood Blinds and Fabrics are hubs with tabs; everything else is the
+  // plain list.
+  if (partType === 'blind')  return <FauxBlindsHub />
+  if (partType === 'fabric') return <FabricHub partType={partType} />
+  return <InventoryListBody partType={partType} />
+}
+
+function InventoryListBody({ partType }) {
   const navigate = useNavigate()
   const [parts, setParts]               = useState([])
   const [loading, setLoading]           = useState(true)
