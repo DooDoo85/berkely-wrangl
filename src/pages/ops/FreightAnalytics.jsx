@@ -289,8 +289,15 @@ export default function FreightAnalytics() {
       custSort === 'units' ? b.units - a.units :
                              b.cost - a.cost)   // highest cost first
 
-    // Per-carrier KPI bands — always both, regardless of the filter below
-    const bandFor = (subset) => {
+    // Per-carrier KPI bands — always both, regardless of the filter below.
+    // Cost tile = TOTAL carrier spend (all invoice lines); averages = billed
+    // orders only (cost attached to report orders ÷ those orders' units).
+    let fedexSpend = 0, ltlSpend = 0
+    for (const l of invoices) {
+      if (l.carrier === 'FedEx') fedexSpend += Number(l.net_charge || 0)
+      else ltlSpend += Number(l.net_charge || 0)
+    }
+    const bandFor = (subset, totalSpend) => {
       const mt = subset.filter(r => r.cost > 0)
       const cost = mt.reduce((a, r) => a + r.cost, 0)
       const mUnits = mt.reduce((a, r) => a + r.qty_shipped, 0)
@@ -299,7 +306,7 @@ export default function FreightAnalytics() {
         orders: subset.length,
         units: subset.reduce((a, r) => a + r.qty_shipped, 0),
         pkgs: subset.reduce((a, r) => a + r.n_shipments, 0),
-        cost,
+        cost: totalSpend,
         costPerUnit: mUnits > 0 ? cost / mUnits : 0,
         costPerPkg: mPkgs > 0 ? cost / mPkgs : 0,
       }
@@ -307,8 +314,8 @@ export default function FreightAnalytics() {
     const fedexRows = rows.filter(r => r.carrier === 'FedEx')
     const ltlRows = rows.filter(r => r.carrier !== 'FedEx')
     const bands = [
-      { label: 'FedEx', stats: bandFor(fedexRows) },
-      { label: 'Freight Track Services · LTL', stats: bandFor(ltlRows) },
+      { label: 'FedEx', stats: bandFor(fedexRows, fedexSpend) },
+      { label: 'Freight Track Services · LTL', stats: bandFor(ltlRows, ltlSpend) },
     ].filter(b => b.stats.orders > 0)
 
     return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines, bands }
@@ -391,7 +398,7 @@ export default function FreightAnalytics() {
                   ['Orders', b.stats.orders.toLocaleString(), 'shipped'],
                   ['Units', b.stats.units.toLocaleString(), 'shipped'],
                   ['Packages', b.stats.pkgs.toLocaleString(), 'shipped'],
-                  ['Freight cost', fmt$Full(b.stats.cost), 'billed to orders'],
+                  ['Freight cost', fmt$Full(b.stats.cost), 'all invoice lines'],
                   ['Avg cost / unit', `$${b.stats.costPerUnit.toFixed(2)}`, 'on billed orders'],
                   ['Avg cost / package', `$${b.stats.costPerPkg.toFixed(2)}`, 'on billed orders'],
                 ].map(([label, val, sub]) => (
@@ -405,7 +412,7 @@ export default function FreightAnalytics() {
             </div>
           ))}
           <p className="text-[10px] text-ink-muted mb-5 px-0.5">
-            Account fees & unreferenced lines: {fmt$Full(m.unmatchedCost)} ({m.unmatchedLines} lines) — not attributed to either carrier above.
+            Of the totals above, {fmt$Full(m.unmatchedCost)} ({m.unmatchedLines} lines) isn't attached to a report order — account fees, pre-window invoices, and unreferenced shipments. Averages exclude it.
           </p>
 
           {/* Monthly trend */}
