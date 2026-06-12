@@ -22,9 +22,6 @@ const fmt$Full = (n) => {
   return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
-// Assumed freight revenue per unit shipped — the accommodation built into
-// customer pricing. Change here and in v_freight_recovery if the rate moves.
-const FREIGHT_RATE_PER_UNIT = 14
 
 // ── Carrier bucket from ShipVia code (extend as carriers are added) ────
 function carrierFromShipVia(shipVia) {
@@ -186,7 +183,7 @@ export default function FreightAnalytics() {
         if (!('OrderNumber' in records[0]) || !('Units' in records[0]) || !('Packages' in records[0]))
           throw new Error('Expected the FedEx shipment report (OrderNumber, Units, Packages columns)')
         const rows = mapShipmentRows(records)
-        const n = await upsertBatched('freight_shipments', rows, 'order_number')
+        const n = await upsertBatched('freight_shipments', rows, 'order_number,carrier')
         setImportMsg({ ok: true, text: `Imported ${n} shipment rows` })
       } else {
         if (!('Invoice Number' in records[0]))
@@ -206,25 +203,29 @@ export default function FreightAnalytics() {
 
   // ═══ Aggregation ═══
   const model = useMemo(() => {
-    // cost per order from invoice lines
-    const costByOrder = new Map()
+    // Cost per order, split by carrier side: FedEx invoice lines fund FedEx
+    // shipment rows; LTL (Freight Track et al.) lines fund LTL rows. Keeps
+    // dual-shipped orders from double-attaching cost.
+    const fedexCost = new Map(), ltlCost = new Map()
     let unmatchedCost = 0, unmatchedLines = 0
     const orderNums = new Set(shipments.map(s => s.order_number))
     for (const l of invoices) {
       const ref = (l.order_ref || '').trim()
       if (ref && orderNums.has(ref)) {
-        costByOrder.set(ref, (costByOrder.get(ref) || 0) + Number(l.net_charge || 0))
+        const m2 = l.carrier === 'FedEx' ? fedexCost : ltlCost
+        m2.set(ref, (m2.get(ref) || 0) + Number(l.net_charge || 0))
       } else {
         unmatchedCost += Number(l.net_charge || 0); unmatchedLines++
       }
     }
+    const costForRow = (s) =>
+      (s.carrier === 'FedEx' ? fedexCost.get(s.order_number) : ltlCost.get(s.order_number)) || 0
 
     const rows = shipments.map(s => ({
       ...s,
       qty_shipped: Number(s.qty_shipped || 0),
       n_shipments: Number(s.n_shipments || 0),
-      revenue: Number(s.qty_shipped || 0) * FREIGHT_RATE_PER_UNIT,
-      cost: costByOrder.get(s.order_number) || 0,
+      cost: costForRow(s),
     }))
     const carriers = [...new Set(rows.map(r => r.carrier).filter(Boolean))].sort()
     const inScope = carrierFilter === 'all' ? rows : rows.filter(r => r.carrier === carrierFilter)
@@ -240,31 +241,26 @@ export default function FreightAnalytics() {
       matchedOrders: matched.length,
       matchedUnits: matched.reduce((a, r) => a + r.qty_shipped, 0),
       matchedPkgs: matched.reduce((a, r) => a + r.n_shipments, 0),
-      revenue: matched.reduce((a, r) => a + r.revenue, 0),
       cost: matched.reduce((a, r) => a + r.cost, 0),
     }
-    totals.margin = totals.revenue - totals.cost
     totals.costPerUnit = totals.matchedUnits > 0 ? totals.cost / totals.matchedUnits : 0
     totals.costPerPkg = totals.matchedPkgs > 0 ? totals.cost / totals.matchedPkgs : 0
     // Headline totals: full invoice cost (all lines, incl. unmatched) and
     // assumed revenue across ALL shipped units. Averages divide these two
     // headline figures so the band is internally consistent.
     totals.totalCost = totals.cost + unmatchedCost
-    totals.revenueAll = totals.units * FREIGHT_RATE_PER_UNIT
-    totals.avgCostPerUnit = totals.units > 0 ? totals.totalCost / totals.units : 0
-    totals.avgCostPerPkg = totals.pkgs > 0 ? totals.totalCost / totals.pkgs : 0
 
     // by month (matched orders, ship date)
     const byMonth = new Map()
     for (const r of matched) {
       const mo = (r.date_shipped || '').slice(0, 7)
       if (!mo) continue
-      const cur = byMonth.get(mo) || { month: mo, orders: 0, pkgs: 0, revenue: 0, cost: 0 }
-      cur.orders++; cur.pkgs += r.n_shipments; cur.revenue += r.revenue; cur.cost += r.cost
+      const cur = byMonth.get(mo) || { month: mo, orders: 0, pkgs: 0, cost: 0 }
+      cur.orders++; cur.pkgs += r.n_shipments; cur.cost += r.cost
       byMonth.set(mo, cur)
     }
     const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month))
-    const maxMonthCost = Math.max(1, ...months.map(mo => Math.max(mo.cost, mo.revenue)))
+    const maxMonthCost = Math.max(1, ...months.map(mo => mo.cost))
 
     // by service (matched)
     const byVia = new Map()
@@ -280,20 +276,18 @@ export default function FreightAnalytics() {
     const byCust = new Map()
     for (const r of matched) {
       const c = r.customer_name || '—'
-      const cur = byCust.get(c) || { customer: c, orders: 0, units: 0, pkgs: 0, revenue: 0, cost: 0 }
-      cur.orders++; cur.units += r.qty_shipped; cur.pkgs += r.n_shipments
-      cur.revenue += r.revenue; cur.cost += r.cost
+      const cur = byCust.get(c) || { customer: c, orders: 0, units: 0, pkgs: 0, cost: 0 }
+      cur.orders++; cur.units += r.qty_shipped; cur.pkgs += r.n_shipments; cur.cost += r.cost
       byCust.set(c, cur)
     }
     const customers = [...byCust.values()].map(c => ({
       ...c,
-      margin: c.revenue - c.cost,
       costPerUnit: c.units > 0 ? c.cost / c.units : 0,
     }))
     customers.sort((a, b) =>
-      custSort === 'cost'    ? b.cost - a.cost :
-      custSort === 'charged' ? b.revenue - a.revenue :
-                               a.margin - b.margin)   // worst margin first
+      custSort === 'unit'  ? b.costPerUnit - a.costPerUnit :
+      custSort === 'units' ? b.units - a.units :
+                             b.cost - a.cost)   // highest cost first
 
     return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines }
   }, [shipments, invoices, carrierFilter, custSort])
@@ -367,16 +361,16 @@ export default function FreightAnalytics() {
           )}
 
           {/* KPI band */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
             {[
               ['Orders', m.totals.orders.toLocaleString(), 'shipped'],
               ['Units', m.totals.units.toLocaleString(), 'shipped'],
               ['Packages', m.totals.pkgs.toLocaleString(), 'shipped'],
               ['Freight cost', fmt$Full(m.totals.totalCost), 'all invoice lines'],
-              ['Freight revenue', fmt$Full(m.totals.revenueAll), `${m.totals.units.toLocaleString()} units × $${FREIGHT_RATE_PER_UNIT}`],
-              ['Avg cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, 'on billed orders', m.totals.costPerUnit > FREIGHT_RATE_PER_UNIT],
+              ['Avg cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, 'on billed orders'],
               ['Avg cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on billed orders'],
             ].map(([label, val, sub, bad]) => (
+
 
 
               <div key={label} className="card p-3.5">
@@ -390,29 +384,20 @@ export default function FreightAnalytics() {
           {/* Monthly trend */}
           <div className="card p-4 mb-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-ink-strong">Monthly · cost vs assumed revenue</h3>
-              <span className="text-[10px] text-ink-muted">by ship date</span>
+              <h3 className="text-sm font-semibold text-ink-strong">Monthly freight cost</h3>
+              <span className="text-[10px] text-ink-muted">by ship date · billed orders</span>
             </div>
             <div className="space-y-2">
               {m.months.map(mo => (
                 <div key={mo.month} className="flex items-center gap-3 text-xs">
                   <span className="w-16 text-ink-mid tabular-nums flex-shrink-0">{mo.month}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="h-3 rounded-sm bg-accent-clay/80" style={{ width: `${(mo.cost / m.maxMonthCost) * 100}%`, minWidth: mo.cost > 0 ? 2 : 0 }} />
-                    <div className="h-3 rounded-sm bg-accent-gold/80 mt-0.5" style={{ width: `${(mo.revenue / m.maxMonthCost) * 100}%`, minWidth: mo.revenue > 0 ? 2 : 0 }} />
+                    <div className="h-4 rounded-sm bg-accent-clay/80" style={{ width: `${(mo.cost / m.maxMonthCost) * 100}%`, minWidth: mo.cost > 0 ? 2 : 0 }} />
                   </div>
-                  <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{fmt$(mo.cost)}</span>
-                  <span className="w-20 text-right tabular-nums text-ink-muted flex-shrink-0">{fmt$(mo.revenue)}</span>
-                  <span className={`w-20 text-right tabular-nums font-semibold flex-shrink-0 ${mo.revenue - mo.cost < 0 ? 'text-status-critical' : 'text-status-healthy'}`}>
-                    {fmt$(mo.revenue - mo.cost)}
-                  </span>
+                  <span className="w-16 text-right tabular-nums text-ink-muted flex-shrink-0">{mo.pkgs.toLocaleString()} pkgs</span>
+                  <span className="w-20 text-right tabular-nums text-ink-strong font-semibold flex-shrink-0">{fmt$(mo.cost)}</span>
                 </div>
               ))}
-              <div className="flex items-center gap-4 pt-1 text-[10px] text-ink-muted">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-accent-clay/80 inline-block" /> carrier cost</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-accent-gold/80 inline-block" /> assumed revenue</span>
-                <span className="ml-auto">columns: cost · revenue · margin</span>
-              </div>
             </div>
           </div>
 
@@ -445,9 +430,9 @@ export default function FreightAnalytics() {
             {/* Recovery by customer */}
             <div className="card p-4 lg:col-span-2">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <h3 className="text-sm font-semibold text-ink-strong">Freight margin by customer</h3>
+                <h3 className="text-sm font-semibold text-ink-strong">Freight cost by customer</h3>
                 <div className="flex gap-1.5">
-                  {[['margin', 'Worst margin'], ['cost', 'Highest cost'], ['charged', 'Most units']].map(([k, l]) => (
+                  {[['cost', 'Highest cost'], ['unit', 'Cost/unit'], ['units', 'Most units']].map(([k, l]) => (
                     <button key={k} onClick={() => setCustSort(k)}
                       className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${
                         custSort === k
@@ -466,10 +451,8 @@ export default function FreightAnalytics() {
                     <th className="text-right py-2">Orders</th>
                     <th className="text-right py-2">Units</th>
                     <th className="text-right py-2">Pkgs</th>
-                    <th className="text-right py-2">Cost/unit</th>
-                    <th className="text-right py-2">Revenue</th>
                     <th className="text-right py-2">Cost</th>
-                    <th className="text-right py-2">Margin</th>
+                    <th className="text-right py-2">Cost/unit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -479,14 +462,8 @@ export default function FreightAnalytics() {
                       <td className="py-2 text-right tabular-nums">{c.orders.toLocaleString()}</td>
                       <td className="py-2 text-right tabular-nums">{c.units.toLocaleString()}</td>
                       <td className="py-2 text-right tabular-nums">{c.pkgs.toLocaleString()}</td>
-                      <td className={`py-2 text-right tabular-nums ${c.costPerUnit > FREIGHT_RATE_PER_UNIT ? 'text-status-critical font-semibold' : 'text-ink-mid'}`}>
-                        ${c.costPerUnit.toFixed(2)}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">{fmt$(c.revenue)}</td>
-                      <td className="py-2 text-right tabular-nums">{fmt$(c.cost)}</td>
-                      <td className={`py-2 text-right tabular-nums font-semibold ${c.margin < 0 ? 'text-status-critical' : 'text-status-healthy'}`}>
-                        {fmt$(c.margin)}
-                      </td>
+                      <td className="py-2 text-right tabular-nums font-semibold text-ink-strong">{fmt$(c.cost)}</td>
+                      <td className="py-2 text-right tabular-nums text-ink-mid">${c.costPerUnit.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -498,9 +475,9 @@ export default function FreightAnalytics() {
           </div>
 
           <p className="text-[11px] text-ink-muted">
-            Revenue is assumed at ${FREIGHT_RATE_PER_UNIT}/unit shipped (the freight accommodation built into pricing) —
-            margin, cost/unit, and the chart use only orders with billed FedEx cost, so not-yet-billed shipments
-            don't fake profit. Excluded charges are account fees and pre-2026 invoice lines.
+            Cost tracker only — assumed customer freight revenue is not shown (oversize vs standard unit rates still
+            to be confirmed). Averages use orders with billed carrier cost; FedEx and LTL costs attach per carrier
+            side. Excluded charges are account fees, pre-window invoice lines, and unreferenced shipments.
           </p>
         </>
       )}
