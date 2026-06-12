@@ -326,12 +326,10 @@ export default function CooCockpit() {
       let freight = null
       try {
         const { data: fr } = await supabase.from('v_freight_recovery').select('*').maybeSingle()
-        if (fr && (Number(fr.charged) > 0 || Number(fr.cost) > 0 || Number(fr.program_cost) > 0)) {
+        if (fr && Number(fr.total_cost) > 0) {
           freight = {
-            charged: Number(fr.charged) || 0,
-            cost: Number(fr.cost) || 0,
-            recovery: (Number(fr.charged) || 0) - (Number(fr.cost) || 0),
-            programCost: Number(fr.program_cost) || 0,
+            totalCost: Number(fr.total_cost) || 0,
+            costPerUnit: Number(fr.units) > 0 ? Number(fr.cost) / Number(fr.units) : 0,
           }
         }
       } catch { freight = null }
@@ -599,14 +597,13 @@ export default function CooCockpit() {
                 <Tile label="Sales YTD" value={usd(d.salesYTD)} sub="from product-line sales" />
                 {d.freight ? (
                   <Tile
-                    label="Freight Margin YTD"
-                    value={usd(d.freight.recovery)}
-                    sub={`${usd(d.freight.charged)} assumed @ $14/unit vs ${usd(d.freight.cost)} cost${d.freight.programCost > 0 ? ` · ${usd(d.freight.programCost)} program` : ''}`}
-                    tone={d.freight.recovery < 0 ? 'bad' : 'good'}
+                    label="Freight Cost YTD"
+                    value={usd(d.freight.totalCost)}
+                    sub={`$${d.freight.costPerUnit.toFixed(2)}/unit avg on billed orders`}
                     onClick={() => navigate('/freight')}
                   />
                 ) : (
-                  <GapTile label="Freight Recovery" needs="import invoices on the Freight Costs page" />
+                  <GapTile label="Freight Cost" needs="import invoices on the Freight Costs page" />
                 )}
                 <Tile label="Remakes (30d)" value={d.remakeCount == null ? '—' : num(d.remakeCount)} sub="quality failures" tone={d.remakeCount > 0 ? 'warn' : 'normal'} />
                 <GapTile label="Gross Margin %" needs="cost feed wired to sales (use loaded cost)" />
