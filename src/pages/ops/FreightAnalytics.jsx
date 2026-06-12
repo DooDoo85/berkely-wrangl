@@ -289,7 +289,29 @@ export default function FreightAnalytics() {
       custSort === 'units' ? b.units - a.units :
                              b.cost - a.cost)   // highest cost first
 
-    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines }
+    // Per-carrier KPI bands — always both, regardless of the filter below
+    const bandFor = (subset) => {
+      const mt = subset.filter(r => r.cost > 0)
+      const cost = mt.reduce((a, r) => a + r.cost, 0)
+      const mUnits = mt.reduce((a, r) => a + r.qty_shipped, 0)
+      const mPkgs = mt.reduce((a, r) => a + r.n_shipments, 0)
+      return {
+        orders: subset.length,
+        units: subset.reduce((a, r) => a + r.qty_shipped, 0),
+        pkgs: subset.reduce((a, r) => a + r.n_shipments, 0),
+        cost,
+        costPerUnit: mUnits > 0 ? cost / mUnits : 0,
+        costPerPkg: mPkgs > 0 ? cost / mPkgs : 0,
+      }
+    }
+    const fedexRows = rows.filter(r => r.carrier === 'FedEx')
+    const ltlRows = rows.filter(r => r.carrier !== 'FedEx')
+    const bands = [
+      { label: 'FedEx', stats: bandFor(fedexRows) },
+      { label: 'Freight Track Services · LTL', stats: bandFor(ltlRows) },
+    ].filter(b => b.stats.orders > 0)
+
+    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines, bands }
   }, [shipments, invoices, carrierFilter, custSort])
 
   const m = model
@@ -360,26 +382,31 @@ export default function FreightAnalytics() {
             </div>
           )}
 
-          {/* KPI band */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-            {[
-              ['Orders', m.totals.orders.toLocaleString(), 'shipped'],
-              ['Units', m.totals.units.toLocaleString(), 'shipped'],
-              ['Packages', m.totals.pkgs.toLocaleString(), 'shipped'],
-              ['Freight cost', fmt$Full(m.totals.totalCost), 'all invoice lines'],
-              ['Avg cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, 'on billed orders'],
-              ['Avg cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on billed orders'],
-            ].map(([label, val, sub, bad]) => (
-
-
-
-              <div key={label} className="card p-3.5">
-                <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-1">{label}</p>
-                <p className={`text-lg font-semibold tabular-nums ${bad ? 'text-status-critical' : 'text-ink-strong'}`}>{val}</p>
-                <p className="text-[10px] text-ink-muted mt-0.5">{sub}</p>
+          {/* KPI bands — one row per carrier */}
+          {m.bands.map(b => (
+            <div key={b.label} className="mb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5 px-0.5">{b.label}</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {[
+                  ['Orders', b.stats.orders.toLocaleString(), 'shipped'],
+                  ['Units', b.stats.units.toLocaleString(), 'shipped'],
+                  ['Packages', b.stats.pkgs.toLocaleString(), 'shipped'],
+                  ['Freight cost', fmt$Full(b.stats.cost), 'billed to orders'],
+                  ['Avg cost / unit', `$${b.stats.costPerUnit.toFixed(2)}`, 'on billed orders'],
+                  ['Avg cost / package', `$${b.stats.costPerPkg.toFixed(2)}`, 'on billed orders'],
+                ].map(([label, val, sub]) => (
+                  <div key={label} className="card p-3.5">
+                    <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-lg font-semibold tabular-nums text-ink-strong">{val}</p>
+                    <p className="text-[10px] text-ink-muted mt-0.5">{sub}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+          <p className="text-[10px] text-ink-muted mb-5 px-0.5">
+            Account fees & unreferenced lines: {fmt$Full(m.unmatchedCost)} ({m.unmatchedLines} lines) — not attributed to either carrier above.
+          </p>
 
           {/* Monthly trend */}
           <div className="card p-4 mb-5">
