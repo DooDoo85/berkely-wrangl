@@ -22,6 +22,10 @@ const fmt$Full = (n) => {
   return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
+// Assumed freight revenue per unit shipped — the accommodation built into
+// customer pricing. Change here and in v_freight_recovery if the rate moves.
+const FREIGHT_RATE_PER_UNIT = 14
+
 // ── Carrier bucket from ShipVia code (extend as carriers are added) ────
 function carrierFromShipVia(shipVia) {
   const s = (shipVia || '').toUpperCase()
@@ -97,21 +101,21 @@ async function fetchAll(table, columns) {
 
 // ═══ Import mappers ═════════════════════════════════════════════════════
 
-// ePIC FREIGHT CHARGED report → freight_shipments
+// ePIC FedEx shipment report (OrderNumber, CustomerName, ShipDate, Units,
+// Packages, ShipVia) -> freight_shipments. Revenue is assumed at
+// FREIGHT_RATE_PER_UNIT, not imported.
 function mapShipmentRows(records) {
   return records
     .filter(r => r.OrderNumber)
     .map(r => ({
-      order_number:    String(r.OrderNumber).trim(),
-      customer_name:   r.CustomerName || null,
-      order_status:    r.OrderStatus || null,
-      ship_via:        r.ShipVia || null,
-      carrier:         carrierFromShipVia(r.ShipVia),
-      date_shipped:    cleanDate(r.DateShipped),
-      qty_shipped:     num(r.QtyShipped),
-      n_shipments:     Math.round(num(r.NShipments)),
-      freight_charged: num(r.FreightCharged),
-      updated_at:      new Date().toISOString(),
+      order_number:  String(r.OrderNumber).trim(),
+      customer_name: r.CustomerName || null,
+      ship_via:      r.ShipVia || null,
+      carrier:       carrierFromShipVia(r.ShipVia),
+      date_shipped:  cleanDate(r.ShipDate),
+      qty_shipped:   num(r.Units),
+      n_shipments:   Math.round(num(r.Packages)),
+      updated_at:    new Date().toISOString(),
     }))
 }
 
@@ -148,7 +152,6 @@ function mapFedexInvoiceRows(records) {
 export default function FreightAnalytics() {
   const [shipments, setShipments] = useState([])
   const [invoices, setInvoices]   = useState([])
-  const [programCustomers, setProgramCustomers] = useState(new Set())
   const [loading, setLoading]     = useState(true)
   const [importing, setImporting] = useState(null)   // 'shipments' | 'invoices'
   const [importMsg, setImportMsg] = useState(null)   // { ok, text }
@@ -161,15 +164,10 @@ export default function FreightAnalytics() {
     setLoading(true)
     try {
       const [s, i] = await Promise.all([
-        fetchAll('freight_shipments', 'order_number, customer_name, ship_via, carrier, date_shipped, qty_shipped, n_shipments, freight_charged'),
+        fetchAll('freight_shipments', 'order_number, customer_name, ship_via, carrier, date_shipped, qty_shipped, n_shipments'),
         fetchAll('freight_invoices',  'invoice_number, tracking_id, carrier, invoice_date, order_ref, net_charge, service_type, shipment_date'),
       ])
       setShipments(s); setInvoices(i)
-      // Freight-in-price customers — excluded from recovery, shown as program freight
-      try {
-        const { data: pc } = await supabase.from('freight_program_customers').select('customer_name')
-        setProgramCustomers(new Set((pc ?? []).map(r => (r.customer_name || '').toUpperCase())))
-      } catch { setProgramCustomers(new Set()) }
     } catch (e) {
       setImportMsg({ ok: false, text: `Load failed: ${e.message}. Has freight_analytics_setup.sql been run?` })
     }
@@ -185,8 +183,8 @@ export default function FreightAnalytics() {
       const records = parseCSV(text)
       if (!records.length) throw new Error('No data rows found in file')
       if (kind === 'shipments') {
-        if (!('OrderNumber' in records[0]) || !('FreightCharged' in records[0]))
-          throw new Error('Expected the FREIGHT CHARGED report (OrderNumber, FreightCharged columns)')
+        if (!('OrderNumber' in records[0]) || !('Units' in records[0]) || !('Packages' in records[0]))
+          throw new Error('Expected the FedEx shipment report (OrderNumber, Units, Packages columns)')
         const rows = mapShipmentRows(records)
         const n = await upsertBatched('freight_shipments', rows, 'order_number')
         setImportMsg({ ok: true, text: `Imported ${n} shipment rows` })
@@ -225,79 +223,73 @@ export default function FreightAnalytics() {
       ...s,
       qty_shipped: Number(s.qty_shipped || 0),
       n_shipments: Number(s.n_shipments || 0),
-      freight_charged: Number(s.freight_charged || 0),
+      revenue: Number(s.qty_shipped || 0) * FREIGHT_RATE_PER_UNIT,
       cost: costByOrder.get(s.order_number) || 0,
     }))
     const carriers = [...new Set(rows.map(r => r.carrier).filter(Boolean))].sort()
-    const carrierScoped = carrierFilter === 'all' ? rows : rows.filter(r => r.carrier === carrierFilter)
+    const inScope = carrierFilter === 'all' ? rows : rows.filter(r => r.carrier === carrierFilter)
 
-    // Freight-in-price program customers: excluded from recovery metrics,
-    // their carrier cost shown separately as "Program freight".
-    const isProgram = (r) => programCustomers.has((r.customer_name || '').toUpperCase())
-    const programRows = carrierScoped.filter(isProgram)
-    const inScope = carrierScoped.filter(r => !isProgram(r))
-    const program = {
-      cost: programRows.reduce((a, r) => a + r.cost, 0),
-      pkgs: programRows.reduce((a, r) => a + r.n_shipments, 0),
-      customers: [...new Set(programRows.map(r => r.customer_name))],
-    }
-
+    // Margin math uses COST-MATCHED orders only — shipments not yet billed
+    // (or billed outside the imported invoice window) carry assumed revenue
+    // but no cost, which would fake profit if included.
     const matched = inScope.filter(r => r.cost > 0)
     const totals = {
       orders: inScope.length,
-      units: inScope.reduce((a, r) => a + r.qty_shipped, 0),
       pkgs: inScope.reduce((a, r) => a + r.n_shipments, 0),
-      charged: inScope.reduce((a, r) => a + r.freight_charged, 0),
-      cost: inScope.reduce((a, r) => a + r.cost, 0),
+      units: inScope.reduce((a, r) => a + r.qty_shipped, 0),
       matchedOrders: matched.length,
+      matchedUnits: matched.reduce((a, r) => a + r.qty_shipped, 0),
       matchedPkgs: matched.reduce((a, r) => a + r.n_shipments, 0),
+      revenue: matched.reduce((a, r) => a + r.revenue, 0),
+      cost: matched.reduce((a, r) => a + r.cost, 0),
     }
-    totals.margin = totals.charged - totals.cost
+    totals.margin = totals.revenue - totals.cost
+    totals.costPerUnit = totals.matchedUnits > 0 ? totals.cost / totals.matchedUnits : 0
     totals.costPerPkg = totals.matchedPkgs > 0 ? totals.cost / totals.matchedPkgs : 0
-    totals.unitsPerPkg = totals.pkgs > 0 ? totals.units / totals.pkgs : 0
 
-    // by month (date_shipped)
+    // by month (matched orders, ship date)
     const byMonth = new Map()
-    for (const r of inScope) {
-      const m = (r.date_shipped || '').slice(0, 7)
-      if (!m) continue
-      const cur = byMonth.get(m) || { month: m, orders: 0, pkgs: 0, charged: 0, cost: 0 }
-      cur.orders++; cur.pkgs += r.n_shipments; cur.charged += r.freight_charged; cur.cost += r.cost
-      byMonth.set(m, cur)
+    for (const r of matched) {
+      const mo = (r.date_shipped || '').slice(0, 7)
+      if (!mo) continue
+      const cur = byMonth.get(mo) || { month: mo, orders: 0, pkgs: 0, revenue: 0, cost: 0 }
+      cur.orders++; cur.pkgs += r.n_shipments; cur.revenue += r.revenue; cur.cost += r.cost
+      byMonth.set(mo, cur)
     }
     const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month))
-    const maxMonthCost = Math.max(1, ...months.map(mo => Math.max(mo.cost, mo.charged)))
+    const maxMonthCost = Math.max(1, ...months.map(mo => Math.max(mo.cost, mo.revenue)))
 
-    // by service (ship_via)
+    // by service (matched)
     const byVia = new Map()
-    for (const r of inScope) {
+    for (const r of matched) {
       const v = r.ship_via || '—'
-      const cur = byVia.get(v) || { via: v, carrier: r.carrier, orders: 0, pkgs: 0, charged: 0, cost: 0 }
-      cur.orders++; cur.pkgs += r.n_shipments; cur.charged += r.freight_charged; cur.cost += r.cost
+      const cur = byVia.get(v) || { via: v, units: 0, pkgs: 0, cost: 0 }
+      cur.units += r.qty_shipped; cur.pkgs += r.n_shipments; cur.cost += r.cost
       byVia.set(v, cur)
     }
     const services = [...byVia.values()].sort((a, b) => b.cost - a.cost)
 
-    // by customer
+    // by customer (matched)
     const byCust = new Map()
-    for (const r of inScope) {
+    for (const r of matched) {
       const c = r.customer_name || '—'
-      const cur = byCust.get(c) || { customer: c, orders: 0, units: 0, pkgs: 0, charged: 0, cost: 0, costOrders: 0 }
+      const cur = byCust.get(c) || { customer: c, orders: 0, units: 0, pkgs: 0, revenue: 0, cost: 0 }
       cur.orders++; cur.units += r.qty_shipped; cur.pkgs += r.n_shipments
-      cur.charged += r.freight_charged; cur.cost += r.cost
-      if (r.cost > 0) cur.costOrders++
+      cur.revenue += r.revenue; cur.cost += r.cost
       byCust.set(c, cur)
     }
-    const customers = [...byCust.values()]
-      .map(c => ({ ...c, margin: c.charged - c.cost }))
-      .filter(c => c.cost > 0 || c.charged > 0)
+    const customers = [...byCust.values()].map(c => ({
+      ...c,
+      margin: c.revenue - c.cost,
+      costPerUnit: c.units > 0 ? c.cost / c.units : 0,
+    }))
     customers.sort((a, b) =>
       custSort === 'cost'    ? b.cost - a.cost :
-      custSort === 'charged' ? b.charged - a.charged :
-                               a.margin - b.margin)   // worst recovery first
+      custSort === 'charged' ? b.revenue - a.revenue :
+                               a.margin - b.margin)   // worst margin first
 
-    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines, program }
-  }, [shipments, invoices, carrierFilter, custSort, programCustomers])
+    return { carriers, totals, months, maxMonthCost, services, customers, unmatchedCost, unmatchedLines }
+  }, [shipments, invoices, carrierFilter, custSort])
 
   const m = model
   const hasData = shipments.length > 0 || invoices.length > 0
@@ -370,14 +362,15 @@ export default function FreightAnalytics() {
           {/* KPI band */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
             {[
-              ['Carrier cost', fmt$Full(m.totals.cost), `${m.totals.matchedOrders.toLocaleString()} orders matched`],
-              ['Freight charged', fmt$Full(m.totals.charged), 'billed to customers'],
-              ['Recovery', fmt$Full(m.totals.margin), m.totals.cost > 0 ? `${((m.totals.charged / m.totals.cost) * 100).toFixed(0)}% of cost` : '—', m.totals.margin < 0],
-              ['Program freight', fmt$Full(m.program.cost), m.program.customers.length ? `${m.program.customers.join(', ')} · in pricing` : 'freight-in-price agreements'],
-              ['Cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on matched orders'],
-              ['Units / package', m.totals.unitsPerPkg.toFixed(2), `${m.totals.pkgs.toLocaleString()} pkgs total`],
-              ['Excluded charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · pre-2026 & fees — not in recovery`],
+              ['Carrier cost', fmt$Full(m.totals.cost), `${m.totals.matchedOrders.toLocaleString()} of ${m.totals.orders.toLocaleString()} orders billed`],
+              ['Assumed revenue', fmt$Full(m.totals.revenue), `$${FREIGHT_RATE_PER_UNIT}/unit × ${m.totals.matchedUnits.toLocaleString()} units`],
+              ['Freight margin', fmt$Full(m.totals.margin), 'on billed orders', m.totals.margin < 0],
+              ['Cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, `vs $${FREIGHT_RATE_PER_UNIT.toFixed(2)} assumed`, m.totals.costPerUnit > FREIGHT_RATE_PER_UNIT],
+              ['Cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on billed orders'],
+              ['Units / package', m.totals.pkgs > 0 ? (m.totals.units / m.totals.pkgs).toFixed(2) : '—', `${m.totals.pkgs.toLocaleString()} pkgs · all orders`],
+              ['Excluded charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · pre-2026 & fees`],
             ].map(([label, val, sub, bad]) => (
+
               <div key={label} className="card p-3.5">
                 <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-1">{label}</p>
                 <p className={`text-lg font-semibold tabular-nums ${bad ? 'text-status-critical' : 'text-ink-strong'}`}>{val}</p>
@@ -389,7 +382,7 @@ export default function FreightAnalytics() {
           {/* Monthly trend */}
           <div className="card p-4 mb-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-ink-strong">Monthly · cost vs charged</h3>
+              <h3 className="text-sm font-semibold text-ink-strong">Monthly · cost vs assumed revenue</h3>
               <span className="text-[10px] text-ink-muted">by ship date</span>
             </div>
             <div className="space-y-2">
@@ -398,19 +391,19 @@ export default function FreightAnalytics() {
                   <span className="w-16 text-ink-mid tabular-nums flex-shrink-0">{mo.month}</span>
                   <div className="flex-1 min-w-0">
                     <div className="h-3 rounded-sm bg-accent-clay/80" style={{ width: `${(mo.cost / m.maxMonthCost) * 100}%`, minWidth: mo.cost > 0 ? 2 : 0 }} />
-                    <div className="h-3 rounded-sm bg-accent-gold/80 mt-0.5" style={{ width: `${(mo.charged / m.maxMonthCost) * 100}%`, minWidth: mo.charged > 0 ? 2 : 0 }} />
+                    <div className="h-3 rounded-sm bg-accent-gold/80 mt-0.5" style={{ width: `${(mo.revenue / m.maxMonthCost) * 100}%`, minWidth: mo.revenue > 0 ? 2 : 0 }} />
                   </div>
                   <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{fmt$(mo.cost)}</span>
-                  <span className="w-20 text-right tabular-nums text-ink-muted flex-shrink-0">{fmt$(mo.charged)}</span>
-                  <span className={`w-20 text-right tabular-nums font-semibold flex-shrink-0 ${mo.charged - mo.cost < 0 ? 'text-status-critical' : 'text-status-healthy'}`}>
-                    {fmt$(mo.charged - mo.cost)}
+                  <span className="w-20 text-right tabular-nums text-ink-muted flex-shrink-0">{fmt$(mo.revenue)}</span>
+                  <span className={`w-20 text-right tabular-nums font-semibold flex-shrink-0 ${mo.revenue - mo.cost < 0 ? 'text-status-critical' : 'text-status-healthy'}`}>
+                    {fmt$(mo.revenue - mo.cost)}
                   </span>
                 </div>
               ))}
               <div className="flex items-center gap-4 pt-1 text-[10px] text-ink-muted">
                 <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-accent-clay/80 inline-block" /> carrier cost</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-accent-gold/80 inline-block" /> charged</span>
-                <span className="ml-auto">columns: cost · charged · recovery</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-accent-gold/80 inline-block" /> assumed revenue</span>
+                <span className="ml-auto">columns: cost · revenue · margin</span>
               </div>
             </div>
           </div>
@@ -425,7 +418,7 @@ export default function FreightAnalytics() {
                     <th className="text-left py-2">Service</th>
                     <th className="text-right py-2">Pkgs</th>
                     <th className="text-right py-2">Cost</th>
-                    <th className="text-right py-2">$/pkg</th>
+                    <th className="text-right py-2">$/unit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -434,7 +427,7 @@ export default function FreightAnalytics() {
                       <td className="py-2 font-medium text-ink-strong">{s.via}</td>
                       <td className="py-2 text-right tabular-nums">{s.pkgs.toLocaleString()}</td>
                       <td className="py-2 text-right tabular-nums">{fmt$(s.cost)}</td>
-                      <td className="py-2 text-right tabular-nums text-ink-mid">{s.pkgs > 0 ? `$${(s.cost / s.pkgs).toFixed(2)}` : '—'}</td>
+                      <td className="py-2 text-right tabular-nums text-ink-mid">{s.units > 0 ? `$${(s.cost / s.units).toFixed(2)}` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -444,9 +437,9 @@ export default function FreightAnalytics() {
             {/* Recovery by customer */}
             <div className="card p-4 lg:col-span-2">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <h3 className="text-sm font-semibold text-ink-strong">Recovery by customer</h3>
+                <h3 className="text-sm font-semibold text-ink-strong">Freight margin by customer</h3>
                 <div className="flex gap-1.5">
-                  {[['margin', 'Worst recovery'], ['cost', 'Highest cost'], ['charged', 'Most charged']].map(([k, l]) => (
+                  {[['margin', 'Worst margin'], ['cost', 'Highest cost'], ['charged', 'Most units']].map(([k, l]) => (
                     <button key={k} onClick={() => setCustSort(k)}
                       className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${
                         custSort === k
@@ -463,26 +456,25 @@ export default function FreightAnalytics() {
                   <tr className="border-b border-surface-border text-[10px] text-ink-muted uppercase tracking-wider">
                     <th className="text-left py-2">Customer</th>
                     <th className="text-right py-2">Orders</th>
+                    <th className="text-right py-2">Units</th>
                     <th className="text-right py-2">Pkgs</th>
-                    <th className="text-right py-2">Charged</th>
+                    <th className="text-right py-2">Cost/unit</th>
+                    <th className="text-right py-2">Revenue</th>
                     <th className="text-right py-2">Cost</th>
-                    <th className="text-right py-2">Recovery</th>
+                    <th className="text-right py-2">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
                   {m.customers.slice(0, 25).map(c => (
                     <tr key={c.customer} className="border-b border-surface-border-soft">
-                      <td className="py-2 font-medium text-ink-strong">
-                        {c.customer}
-                        {c.costOrders < c.orders && c.cost > 0 && (
-                          <span className="ml-1.5 text-[9px] text-ink-muted" title="Some orders have no charge on our account — likely third-party billed">
-                            {c.orders - c.costOrders} 3rd-party
-                          </span>
-                        )}
-                      </td>
+                      <td className="py-2 font-medium text-ink-strong">{c.customer}</td>
                       <td className="py-2 text-right tabular-nums">{c.orders.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums">{c.units.toLocaleString()}</td>
                       <td className="py-2 text-right tabular-nums">{c.pkgs.toLocaleString()}</td>
-                      <td className="py-2 text-right tabular-nums">{fmt$(c.charged)}</td>
+                      <td className={`py-2 text-right tabular-nums ${c.costPerUnit > FREIGHT_RATE_PER_UNIT ? 'text-status-critical font-semibold' : 'text-ink-mid'}`}>
+                        ${c.costPerUnit.toFixed(2)}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">{fmt$(c.revenue)}</td>
                       <td className="py-2 text-right tabular-nums">{fmt$(c.cost)}</td>
                       <td className={`py-2 text-right tabular-nums font-semibold ${c.margin < 0 ? 'text-status-critical' : 'text-status-healthy'}`}>
                         {fmt$(c.margin)}
@@ -498,10 +490,9 @@ export default function FreightAnalytics() {
           </div>
 
           <p className="text-[11px] text-ink-muted">
-            Note: program customers (freight accommodated in their pricing agreement) are excluded from recovery,
-            the chart, and the customer table — their carrier cost shows as Program freight above. Excluded charges
-            are account-level fees and shipments for orders outside the imported window. Manage program customers
-            in the freight_program_customers table.
+            Revenue is assumed at ${FREIGHT_RATE_PER_UNIT}/unit shipped (the freight accommodation built into pricing) —
+            margin, cost/unit, and the chart use only orders with billed FedEx cost, so not-yet-billed shipments
+            don't fake profit. Excluded charges are account fees and pre-2026 invoice lines.
           </p>
         </>
       )}
