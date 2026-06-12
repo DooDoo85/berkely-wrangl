@@ -246,6 +246,13 @@ export default function FreightAnalytics() {
     totals.margin = totals.revenue - totals.cost
     totals.costPerUnit = totals.matchedUnits > 0 ? totals.cost / totals.matchedUnits : 0
     totals.costPerPkg = totals.matchedPkgs > 0 ? totals.cost / totals.matchedPkgs : 0
+    // Headline totals: full invoice cost (all lines, incl. unmatched) and
+    // assumed revenue across ALL shipped units. Averages divide these two
+    // headline figures so the band is internally consistent.
+    totals.totalCost = totals.cost + unmatchedCost
+    totals.revenueAll = totals.units * FREIGHT_RATE_PER_UNIT
+    totals.avgCostPerUnit = totals.units > 0 ? totals.totalCost / totals.units : 0
+    totals.avgCostPerPkg = totals.pkgs > 0 ? totals.totalCost / totals.pkgs : 0
 
     // by month (matched orders, ship date)
     const byMonth = new Map()
@@ -362,14 +369,15 @@ export default function FreightAnalytics() {
           {/* KPI band */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
             {[
-              ['Carrier cost', fmt$Full(m.totals.cost), `${m.totals.matchedOrders.toLocaleString()} of ${m.totals.orders.toLocaleString()} orders billed`],
-              ['Assumed revenue', fmt$Full(m.totals.revenue), `$${FREIGHT_RATE_PER_UNIT}/unit × ${m.totals.matchedUnits.toLocaleString()} units`],
-              ['Freight margin', fmt$Full(m.totals.margin), 'on billed orders', m.totals.margin < 0],
-              ['Cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, `vs $${FREIGHT_RATE_PER_UNIT.toFixed(2)} assumed`, m.totals.costPerUnit > FREIGHT_RATE_PER_UNIT],
-              ['Cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on billed orders'],
-              ['Units / package', m.totals.pkgs > 0 ? (m.totals.units / m.totals.pkgs).toFixed(2) : '—', `${m.totals.pkgs.toLocaleString()} pkgs · all orders`],
-              ['Excluded charges', fmt$Full(m.unmatchedCost), `${m.unmatchedLines} lines · pre-2026 & fees`],
+              ['Orders', m.totals.orders.toLocaleString(), 'shipped'],
+              ['Units', m.totals.units.toLocaleString(), 'shipped'],
+              ['Packages', m.totals.pkgs.toLocaleString(), 'shipped'],
+              ['Freight cost', fmt$Full(m.totals.totalCost), 'all invoice lines'],
+              ['Freight revenue', fmt$Full(m.totals.revenueAll), `${m.totals.units.toLocaleString()} units × $${FREIGHT_RATE_PER_UNIT}`],
+              ['Avg cost / unit', `$${m.totals.costPerUnit.toFixed(2)}`, 'on billed orders', m.totals.costPerUnit > FREIGHT_RATE_PER_UNIT],
+              ['Avg cost / package', `$${m.totals.costPerPkg.toFixed(2)}`, 'on billed orders'],
             ].map(([label, val, sub, bad]) => (
+
 
               <div key={label} className="card p-3.5">
                 <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-1">{label}</p>
