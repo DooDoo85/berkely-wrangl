@@ -209,6 +209,9 @@ function HeroCard({ label, accent, fill, data, shipped, sparkData, weekData, loa
           </p>
         </div>
       </div>
+      <p className="text-[9px] text-ink-muted text-center mt-1.5 leading-tight px-1">
+        WTD reflects what shipped; MTD/YTD reflect what's invoiced. Partial-ship orders bill once complete, so totals trail shipments.
+      </p>
     </div>
   );
 }
