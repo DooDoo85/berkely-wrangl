@@ -34,6 +34,7 @@ import TransactionLog from './pages/ops/TransactionLog'
 import ProductionHub from './pages/ops/ProductionHub'
 import CycleCounts from './pages/ops/CycleCounts'
 import FreightAnalytics from './pages/ops/FreightAnalytics'
+import FreightRateCalc from './pages/ops/FreightRateCalc'
 import OrdersOnHold from './pages/orders/OrdersOnHold'
 
 // Orders
@@ -193,6 +194,7 @@ function AppRoutes() {
 
         {/* Freight / Settings */}
         <Route path="/freight" element={<FreightAnalytics />} />
+        <Route path="/freight/rate-calculator" element={<FreightRateCalc />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />
         <Route path="/settings/email-preferences" element={<EmailPreferences />} />
 
