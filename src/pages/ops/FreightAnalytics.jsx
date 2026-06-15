@@ -346,6 +346,7 @@ export default function FreightAnalytics() {
           <button onClick={() => invFileRef.current?.click()} disabled={!!importing} className="btn-ghost text-sm">
             {importing === 'invoices' ? 'Importing…' : '⬆ FedEx invoice (detail CSV)'}
           </button>
+          <a href="/freight/rate-calculator" className="btn-ghost text-sm">🧮 Rate Estimator →</a>
         </div>
       </div>
 
