@@ -2210,26 +2210,64 @@ async function processDailyShipments(csvText, productLine) {
     return v
   }
 
-  const out = []
+  // The report may be per-DAY summary (one row per ShipDate) or per-ORDER detail
+  // (multiple rows per ShipDate, each with an OrderNumber). Group by date and SUM
+  // so daily_shipments always holds one correct total row per (line, day),
+  // regardless of which format ePIC sends.
+  const byDate = new Map()
+  const shippedOrders = []   // { order_number, ship_date } for actual_ship_date stamping
   for (const r of rows) {
     const date = cleanDate(r.ShipDate)
     if (!date) continue
-    out.push({
-      product_line:    productLine,
-      ship_date:       date,
-      day_of_week:     (r.DayOfWeek || '').trim() || null,
-      // Column aliases: roller summary uses UnitsFullyShipped/RevenueFullyShipped,
-      // the faux summary emits TotalUnitsShipped (+ revenue name TBD). Accept both.
-      units_shipped:   parseInt(r.UnitsFullyShipped ?? r.TotalUnitsShipped, 10) || 0,
-      revenue_shipped: Math.round(num(r.RevenueFullyShipped ?? r.RevenueShipped ?? r.TotalRevenueShipped ?? r.TotalSalesShipped ?? r.TotalSales) * 100) / 100,
-      updated_at:      new Date().toISOString(),
-    })
+    const units = parseInt(r.UnitsFullyShipped ?? r.TotalUnits ?? r.TotalUnitsShipped, 10) || 0
+    const rev = num(r.RevenueFullyShipped ?? r.Revenue ?? r.RevenueShipped ?? r.TotalRevenueShipped ?? r.TotalSalesShipped ?? r.TotalSales)
+    const cur = byDate.get(date) || { units: 0, rev: 0, dow: (r.DayOfWeek || '').trim() || null }
+    cur.units += units; cur.rev += rev
+    byDate.set(date, cur)
+
+    // Detail format carries OrderNumber — capture for ship-date stamping.
+    const ordNo = (r.OrderNumber || r.WorkOrder || '').toString().trim()
+    if (ordNo) shippedOrders.push({ order_number: ordNo, ship_date: date })
   }
+
+  const out = [...byDate.entries()].map(([date, v]) => ({
+    product_line:    productLine,
+    ship_date:       date,
+    day_of_week:     v.dow,
+    units_shipped:   v.units,
+    revenue_shipped: Math.round(v.rev * 100) / 100,
+    updated_at:      new Date().toISOString(),
+  }))
 
   if (!out.length) { console.log('  DAILY SHIPMENTS — no valid rows'); return 0 }
 
   const ok = await sbUpsert('daily_shipments', out)
-  console.log(`  DAILY SHIPMENTS (${productLine}) — upserted ${out.length} day rows (ok=${ok})`)
+  console.log(`  DAILY SHIPMENTS (${productLine}) — upserted ${out.length} day rows from ${rows.length} CSV rows (ok=${ok})`)
+
+  // Stamp actual_ship_date on each shipped order so it clears off the on-hold
+  // list (and feeds per-order ship tracking). Only sets the date when not
+  // already set, and never overwrites with an earlier value.
+  if (shippedOrders.length) {
+    let stamped = 0
+    for (const { order_number, ship_date } of shippedOrders) {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/orders?order_number=eq.${encodeURIComponent(order_number)}&or=(actual_ship_date.is.null,actual_ship_date.lt.${ship_date})`,
+          {
+            method: 'PATCH',
+            headers: {
+              apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/json', Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({ actual_ship_date: ship_date }),
+          }
+        )
+        if (res.ok) stamped++
+      } catch (e) { /* skip individual failures */ }
+    }
+    console.log(`  DAILY SHIPMENTS (${productLine}) — stamped actual_ship_date on ${stamped}/${shippedOrders.length} orders`)
+  }
+
   return out.length
 }
 
