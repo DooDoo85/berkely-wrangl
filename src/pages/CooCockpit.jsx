@@ -634,7 +634,7 @@ export default function CooCockpit() {
 
             {/* ── ROLLER SALES YTD BY LIFT TYPE ── */}
             {d.rollerTypes && d.rollerTypes.length > 0 && (() => {
-              const MONTHS_ELAPSED = 5   // completed months Jan–May (June partial, excluded)
+              const WEEKS_ELAPSED = 25   // completed weeks YTD
               const order = ['Motorized', 'Clutch', 'Cordless', 'Other Roller']
               const ranked = [...d.rollerTypes]
                 .sort((a, b) => (order.indexOf(a.type) - order.indexOf(b.type)) || (b.revenue - a.revenue))
@@ -645,26 +645,14 @@ export default function CooCockpit() {
                 <div>
                   <SectionLabel>Roller shade sales · YTD by lift type</SectionLabel>
                   <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                    {/* avg/month summary on top */}
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-200">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-ink-muted">YTD total</p>
-                        <p className="font-display font-bold text-2xl text-ink-strong leading-none mt-0.5">{usd(totalRev)}</p>
-                        <p className="text-[11px] text-ink-muted mt-0.5">{totalUnits.toLocaleString()} units</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] uppercase tracking-wider text-ink-muted">Avg / month</p>
-                        <p className="font-display font-bold text-2xl text-ink-strong leading-none mt-0.5">{usd(totalRev / MONTHS_ELAPSED)}</p>
-                        <p className="text-[11px] text-ink-muted mt-0.5">{Math.round(totalUnits / MONTHS_ELAPSED).toLocaleString()} units · over {MONTHS_ELAPSED} mo</p>
-                      </div>
-                    </div>
                     {/* header */}
                     <div className="flex items-center gap-3 text-[9px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
                       <span className="w-28 flex-shrink-0">Lift type</span>
                       <span className="flex-1" />
                       <span className="w-20 text-right flex-shrink-0">YTD sales</span>
-                      <span className="w-14 text-right flex-shrink-0">Units</span>
-                      <span className="w-20 text-right flex-shrink-0">Avg/mo</span>
+                      <span className="w-16 text-right flex-shrink-0">YTD units</span>
+                      <span className="w-20 text-right flex-shrink-0">Avg $/wk</span>
+                      <span className="w-16 text-right flex-shrink-0">Avg u/wk</span>
                       <span className="w-10 text-right flex-shrink-0">Mix</span>
                     </div>
                     <div className="space-y-2">
@@ -675,8 +663,9 @@ export default function CooCockpit() {
                             <div className="h-full bg-accent-clay/75" style={{ width: `${(r.revenue / maxRev) * 100}%` }} />
                           </div>
                           <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(r.revenue)}</span>
-                          <span className="w-14 text-right tabular-nums text-ink-muted flex-shrink-0">{r.units.toLocaleString()}</span>
-                          <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(r.revenue / MONTHS_ELAPSED)}</span>
+                          <span className="w-16 text-right tabular-nums text-ink-muted flex-shrink-0">{r.units.toLocaleString()}</span>
+                          <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(r.revenue / WEEKS_ELAPSED)}</span>
+                          <span className="w-16 text-right tabular-nums text-ink-mid flex-shrink-0">{Math.round(r.units / WEEKS_ELAPSED).toLocaleString()}</span>
                           <span className="w-10 text-right tabular-nums text-ink-muted flex-shrink-0">{totalRev > 0 ? Math.round(r.revenue / totalRev * 100) : 0}%</span>
                         </div>
                       ))}
@@ -684,12 +673,13 @@ export default function CooCockpit() {
                         <span className="w-28 flex-shrink-0 text-ink-strong">Total</span>
                         <div className="flex-1" />
                         <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(totalRev)}</span>
-                        <span className="w-14 text-right tabular-nums text-ink-mid flex-shrink-0">{totalUnits.toLocaleString()}</span>
-                        <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(totalRev / MONTHS_ELAPSED)}</span>
+                        <span className="w-16 text-right tabular-nums text-ink-mid flex-shrink-0">{totalUnits.toLocaleString()}</span>
+                        <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(totalRev / WEEKS_ELAPSED)}</span>
+                        <span className="w-16 text-right tabular-nums text-ink-mid flex-shrink-0">{Math.round(totalUnits / WEEKS_ELAPSED).toLocaleString()}</span>
                         <span className="w-10 flex-shrink-0" />
                       </div>
                     </div>
-                    <p className="text-[10px] text-ink-muted mt-2">Avg/month = YTD ÷ {MONTHS_ELAPSED} completed months (Jan–May; June partial, excluded).</p>
+                    <p className="text-[10px] text-ink-muted mt-2">Avg/wk = YTD ÷ {WEEKS_ELAPSED} weeks elapsed.</p>
                   </div>
                 </div>
             )})()}
