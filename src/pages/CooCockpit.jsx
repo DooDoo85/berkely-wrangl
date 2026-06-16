@@ -232,7 +232,6 @@ export default function CooCockpit() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastLoaded, setLastLoaded] = useState(null)
-  const [rollerPeriod, setRollerPeriod] = useState('ytd')   // wtd | mtd | ytd
 
   useEffect(() => { load() }, [])
 
@@ -322,18 +321,17 @@ export default function CooCockpit() {
         remakeCount = count
       } catch { remakeCount = null }
 
-      // Roller sub-product sales breakdown (ROLLER SHADE INVOICE BY PRODUCT).
-      let rollerSub = []
+      // Roller sales YTD by lift type (ROLLER SHADE YTD BY PRODUCT report).
+      let rollerTypes = []
       try {
-        const { data: rs } = await supabase.from('roller_subproduct_sales')
-          .select('product_line, units_wtd, sales_wtd, units_mtd, sales_mtd, units_ytd, sales_ytd')
-        rollerSub = (rs ?? []).map(r => ({
-          line: (r.product_line || '').trim(),
-          wtd: { units: Number(r.units_wtd) || 0, sales: Number(r.sales_wtd) || 0 },
-          mtd: { units: Number(r.units_mtd) || 0, sales: Number(r.sales_mtd) || 0 },
-          ytd: { units: Number(r.units_ytd) || 0, sales: Number(r.sales_ytd) || 0 },
+        const { data: rs } = await supabase.from('roller_type_sales')
+          .select('roller_type, units_ytd, revenue_ytd')
+        rollerTypes = (rs ?? []).map(r => ({
+          type: (r.roller_type || '').trim(),
+          units: Number(r.units_ytd) || 0,
+          revenue: Number(r.revenue_ytd) || 0,
         }))
-      } catch { rollerSub = [] }
+      } catch { rollerTypes = [] }
       // fed by the Freight Costs page imports). Null if view missing or empty.
       let freight = null
       try {
@@ -393,7 +391,7 @@ export default function CooCockpit() {
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
         aging, series,
         shippedUnitsWeek, shippedToday,
-        salesYTD, remakeCount, freight, rollerSub,
+        salesYTD, remakeCount, freight, rollerTypes,
         labor,
         fauxEff: eff(labor.faux),
         rollerEff: eff(labor.roller),
@@ -634,86 +632,64 @@ export default function CooCockpit() {
               </div>
             </div>
 
-            {/* ── ROLLER SUB-PRODUCT BREAKDOWN ── */}
-            {d.rollerSub && d.rollerSub.length > 0 && (() => {
-              const period = rollerPeriod
-              const ranked = [...d.rollerSub]
-                .map(r => ({ line: r.line, units: r[period].units, sales: r[period].sales }))
-                .filter(r => r.sales > 0 || r.units > 0)
-                .sort((a, b) => b.sales - a.sales)
-              const totalSales = ranked.reduce((s, r) => s + r.sales, 0)
-              const maxSales = Math.max(1, ...ranked.map(r => r.sales))
-              // Roll the 9 sub-products up to lift mechanism by name keyword.
-              const mechOf = (line) => {
-                const L = (line || '').toUpperCase()
-                if (L.includes('MOTORIZED')) return 'Motorized'
-                if (L.includes('CLUTCH'))    return 'Clutch'
-                if (L.includes('CORDLESS'))  return 'Cordless'
-                return 'Other'
-              }
-              const mechMap = {}
-              ranked.forEach(r => {
-                const m = mechOf(r.line)
-                const cur = mechMap[m] || { mech: m, sales: 0, units: 0 }
-                cur.sales += r.sales; cur.units += r.units; mechMap[m] = cur
-              })
-              const mechOrder = ['Motorized', 'Clutch', 'Cordless', 'Other']
-              const mechRows = mechOrder.filter(m => mechMap[m]).map(m => mechMap[m])
+            {/* ── ROLLER SALES YTD BY LIFT TYPE ── */}
+            {d.rollerTypes && d.rollerTypes.length > 0 && (() => {
+              const MONTHS_ELAPSED = 5   // completed months Jan–May (June partial, excluded)
+              const order = ['Motorized', 'Clutch', 'Cordless', 'Other Roller']
+              const ranked = [...d.rollerTypes]
+                .sort((a, b) => (order.indexOf(a.type) - order.indexOf(b.type)) || (b.revenue - a.revenue))
+              const totalRev = ranked.reduce((s, r) => s + r.revenue, 0)
+              const totalUnits = ranked.reduce((s, r) => s + r.units, 0)
+              const maxRev = Math.max(1, ...ranked.map(r => r.revenue))
               return (
                 <div>
-                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                    <SectionLabel>Roller shade sales by product</SectionLabel>
-                    <div className="flex gap-1">
-                      {[['wtd','WTD'],['mtd','MTD'],['ytd','YTD']].map(([k,l]) => (
-                        <button key={k} onClick={() => setRollerPeriod(k)}
-                          className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${
-                            rollerPeriod === k
-                              ? 'bg-accent-clay text-white border-accent-clay'
-                              : 'bg-white text-ink-muted border-stone-200 hover:border-stone-300'}`}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <SectionLabel>Roller shade sales · YTD by lift type</SectionLabel>
                   <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                    {ranked.length === 0 ? (
-                      <p className="text-sm text-ink-muted text-center py-4">No {period.toUpperCase()} roller sales.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {ranked.map(r => (
-                          <div key={r.line} className="flex items-center gap-3 text-xs">
-                            <span className="w-48 truncate text-ink-strong flex-shrink-0" title={r.line}>{r.line}</span>
-                            <div className="flex-1 min-w-0 h-4 bg-stone-100 rounded-sm overflow-hidden">
-                              <div className="h-full bg-accent-clay/75" style={{ width: `${(r.sales / maxSales) * 100}%` }} />
-                            </div>
-                            <span className="w-16 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(r.sales)}</span>
-                            <span className="w-14 text-right tabular-nums text-ink-muted flex-shrink-0">{r.units} u</span>
-                            <span className="w-10 text-right tabular-nums text-ink-muted flex-shrink-0">{totalSales > 0 ? Math.round(r.sales / totalSales * 100) : 0}%</span>
-                          </div>
-                        ))}
-                        <div className="pt-2 mt-1 border-t border-stone-200">
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">By lift type</p>
-                          {mechRows.map(m => (
-                            <div key={m.mech} className="flex items-center gap-3 text-xs py-0.5">
-                              <span className="w-48 flex-shrink-0 text-ink-strong font-medium">{m.mech}</span>
-                              <div className="flex-1 min-w-0 h-3 bg-stone-100 rounded-sm overflow-hidden">
-                                <div className="h-full bg-accent-gold/70" style={{ width: `${(m.sales / maxSales) * 100}%` }} />
-                              </div>
-                              <span className="w-16 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(m.sales)}</span>
-                              <span className="w-14 text-right tabular-nums text-ink-muted flex-shrink-0">{m.units} u</span>
-                              <span className="w-10 text-right tabular-nums text-ink-muted flex-shrink-0">{totalSales > 0 ? Math.round(m.sales / totalSales * 100) : 0}%</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs pt-2 mt-1 border-t border-stone-200 font-semibold">
-                          <span className="w-48 flex-shrink-0 text-ink-strong">Total · {period.toUpperCase()}</span>
-                          <div className="flex-1" />
-                          <span className="w-16 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(totalSales)}</span>
-                          <span className="w-14 text-right tabular-nums text-ink-mid flex-shrink-0">{ranked.reduce((s,r)=>s+r.units,0)} u</span>
-                          <span className="w-10 flex-shrink-0" />
-                        </div>
+                    {/* avg/month summary on top */}
+                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-200">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-ink-muted">YTD total</p>
+                        <p className="font-display font-bold text-2xl text-ink-strong leading-none mt-0.5">{usd(totalRev)}</p>
+                        <p className="text-[11px] text-ink-muted mt-0.5">{totalUnits.toLocaleString()} units</p>
                       </div>
-                    )}
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase tracking-wider text-ink-muted">Avg / month</p>
+                        <p className="font-display font-bold text-2xl text-ink-strong leading-none mt-0.5">{usd(totalRev / MONTHS_ELAPSED)}</p>
+                        <p className="text-[11px] text-ink-muted mt-0.5">{Math.round(totalUnits / MONTHS_ELAPSED).toLocaleString()} units · over {MONTHS_ELAPSED} mo</p>
+                      </div>
+                    </div>
+                    {/* header */}
+                    <div className="flex items-center gap-3 text-[9px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
+                      <span className="w-28 flex-shrink-0">Lift type</span>
+                      <span className="flex-1" />
+                      <span className="w-20 text-right flex-shrink-0">YTD sales</span>
+                      <span className="w-14 text-right flex-shrink-0">Units</span>
+                      <span className="w-20 text-right flex-shrink-0">Avg/mo</span>
+                      <span className="w-10 text-right flex-shrink-0">Mix</span>
+                    </div>
+                    <div className="space-y-2">
+                      {ranked.map(r => (
+                        <div key={r.type} className="flex items-center gap-3 text-xs">
+                          <span className="w-28 truncate text-ink-strong font-medium flex-shrink-0" title={r.type}>{r.type}</span>
+                          <div className="flex-1 min-w-0 h-4 bg-stone-100 rounded-sm overflow-hidden">
+                            <div className="h-full bg-accent-clay/75" style={{ width: `${(r.revenue / maxRev) * 100}%` }} />
+                          </div>
+                          <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(r.revenue)}</span>
+                          <span className="w-14 text-right tabular-nums text-ink-muted flex-shrink-0">{r.units.toLocaleString()}</span>
+                          <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(r.revenue / MONTHS_ELAPSED)}</span>
+                          <span className="w-10 text-right tabular-nums text-ink-muted flex-shrink-0">{totalRev > 0 ? Math.round(r.revenue / totalRev * 100) : 0}%</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-3 text-xs pt-2 mt-1 border-t border-stone-200 font-semibold">
+                        <span className="w-28 flex-shrink-0 text-ink-strong">Total</span>
+                        <div className="flex-1" />
+                        <span className="w-20 text-right tabular-nums text-ink-strong flex-shrink-0">{usd(totalRev)}</span>
+                        <span className="w-14 text-right tabular-nums text-ink-mid flex-shrink-0">{totalUnits.toLocaleString()}</span>
+                        <span className="w-20 text-right tabular-nums text-ink-mid flex-shrink-0">{usd(totalRev / MONTHS_ELAPSED)}</span>
+                        <span className="w-10 flex-shrink-0" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-ink-muted mt-2">Avg/month = YTD ÷ {MONTHS_ELAPSED} completed months (Jan–May; June partial, excluded).</p>
                   </div>
                 </div>
             )})()}
