@@ -408,7 +408,7 @@ export default function CooCockpit() {
 
   return (
     <div className="min-h-screen bg-surface-page">
-      <div className="max-w-screen-xl mx-auto p-3 md:p-5 pb-12">
+      <div className="max-w-screen-xl mx-auto p-3 md:p-5 pb-28">
 
         {/* Header */}
         <div className="mb-5 flex items-start justify-between gap-3">
