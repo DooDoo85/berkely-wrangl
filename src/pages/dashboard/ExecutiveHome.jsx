@@ -1607,12 +1607,16 @@ export default function ExecutiveHome() {
       //   • status=printed/in_production + reason set → operational hold (e.g., Rene waiting on parts)
       // Exclude invoiced/cancelled — once shipped/closed, the hold is historical.
       const { data: heldOrders } = await supabase.from("orders")
-        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at, sales_rep, order_amount")
+        .select("id, order_number, customer_name, status, hold_reason, hold_note, wrangl_status_set_at, updated_at, epic_status_date, sales_rep, order_amount")
         .not("hold_reason", "is", null)
         .not("status", "in", "(invoiced,cancelled)");
       const heldOrdersAll = (heldOrders ?? []).map(o => {
         const holdDate = o.wrangl_status_set_at || o.updated_at;
         const days = holdDate ? daysSince(holdDate) : 0;
+        // Days since the order printed (epic_status_date). This is the real
+        // urgency signal — an order can be freshly "on hold" but have printed
+        // weeks ago and been sitting. null print date → null (show "—").
+        const daysSincePrinted = o.epic_status_date ? daysSince(o.epic_status_date) : null;
         return {
           key: `held-${o.id}`,
           order_id: o.id,
@@ -1620,12 +1624,13 @@ export default function ExecutiveHome() {
           customer: o.customer_name,
           status_label: o.status,
           days,
+          daysSincePrinted,
           hold_reason: o.hold_reason,
           hold_note: o.hold_note,
           sales_rep: o.sales_rep,
           order_amount: o.order_amount,
         };
-      }).sort((a, b) => b.days - a.days);
+      }).sort((a, b) => (b.daysSincePrinted ?? -1) - (a.daysSincePrinted ?? -1));
       // stuckOrders = top 5 for the inline list. heldOrdersAll = full list for the modal.
       const stuckOrders = heldOrdersAll.slice(0, 5);
 
@@ -2367,12 +2372,14 @@ export default function ExecutiveHome() {
                         <th className="font-semibold py-1 pr-2">Order</th>
                         <th className="font-semibold py-1 pr-2">Customer</th>
                         <th className="font-semibold py-1 pr-2">Reason</th>
-                        <th className="font-semibold py-1 text-right">Age</th>
+                        <th className="font-semibold py-1 text-right">Since printed</th>
+                        <th className="font-semibold py-1 text-right">On hold</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.stuckOrders.slice(0, 6).map(o => {
-                        const severe = o.days >= 8;
+                        const printedAge = o.daysSincePrinted;
+                        const severe = printedAge != null && printedAge >= 8;
                         return (
                           <tr key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
                             className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-amber-50/50 transition-colors">
@@ -2385,6 +2392,9 @@ export default function ExecutiveHome() {
                             <td className="py-1.5 pr-2 text-[12px] text-ink-mid truncate max-w-[120px]">{o.customer ?? "—"}</td>
                             <td className="py-1.5 pr-2 text-[12px] text-ink-muted truncate max-w-[110px]">{o.hold_reason || "—"}</td>
                             <td className={`py-1.5 text-right text-[12px] font-bold tabular-nums ${severe ? "text-red-700" : "text-amber-700"}`}>
+                              {printedAge != null ? `${printedAge}d` : "—"}
+                            </td>
+                            <td className="py-1.5 text-right text-[11px] text-ink-muted tabular-nums">
                               {o.days}d
                             </td>
                           </tr>
@@ -2611,7 +2621,8 @@ function OnHoldModal({ orders = [], onClose, onOrderClick }) {
                 <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Reason</th>
                 <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-left">Rep</th>
                 <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
-                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Days</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">Since printed</th>
+                <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase text-right">On hold</th>
               </tr>
             </thead>
             <tbody>
@@ -2640,11 +2651,14 @@ function OnHoldModal({ orders = [], onClose, onOrderClick }) {
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        o.days >= 8 ? "bg-red-100 text-red-600" :
-                        o.days >= 3 ? "bg-amber-100 text-amber-700" :
+                        o.daysSincePrinted != null && o.daysSincePrinted >= 8 ? "bg-red-100 text-red-600" :
+                        o.daysSincePrinted != null && o.daysSincePrinted >= 3 ? "bg-amber-100 text-amber-700" :
                                       "bg-gray-100 text-gray-600"}`}>
-                        {o.days}d
+                        {o.daysSincePrinted != null ? `${o.daysSincePrinted}d` : "—"}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-right text-xs text-gray-500 tabular-nums">
+                      {o.days}d
                     </td>
                   </tr>
                 );
