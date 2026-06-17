@@ -426,16 +426,16 @@ function OperationsStatusTable({
     <div className={embedded ? "" : "card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none"}>
 
       {/* Panel header — matches Daily Sales hero treatment */}
-      <div className="flex items-center justify-between mb-2.5 pb-2.5 border-b border-stone-200">
-        <div className="flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center flex-shrink-0">
+      <div className="flex items-center justify-between mb-2 pb-2 border-b border-stone-200">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                 strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
               <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4" />
               <rect x="9" y="2" width="6" height="9" rx="1" />
             </svg>
           </span>
-          <h3 className="font-display font-bold text-ink-strong text-base leading-none">Operations Status</h3>
+          <h3 className="font-display font-bold text-ink-strong text-sm leading-none">Operations Status</h3>
         </div>
         <p className="text-[11px] text-ink-muted">Live order flow by stage</p>
       </div>
@@ -443,14 +443,14 @@ function OperationsStatusTable({
       {/* Horizontal pipeline — three stages flow left→right (Credit OK → Printed →
           In Production), each a column with a chevron-connected header band on top
           and a Roller / Faux two-up beneath. */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 md:gap-3">
         {stages.map((s, i) => {
           const isFirst = i === 0;
           return (
             <div key={s.key} className={`min-w-0 relative ${!isFirst ? 'md:pl-4 md:border-l md:border-stone-200' : ''}`}>
               {/* Stage header band — centered icon + label + sub */}
-              <div className={`${s.bandBg} ring-1 ring-stone-200 rounded-md flex flex-col items-center justify-center text-center gap-1 py-2.5 px-3`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
+              <div className={`${s.bandBg} ring-1 ring-stone-200 rounded-md flex flex-col items-center justify-center text-center gap-0.5 py-2 px-3`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${s.iconCircle}`}>
                   {s.iconSvg}
                 </div>
                 <div className="min-w-0">
@@ -460,9 +460,9 @@ function OperationsStatusTable({
               </div>
 
               {/* Roller / Faux two-up beneath the stage */}
-              <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+              <div className="grid grid-cols-2 gap-1.5 mt-1">
                 <button onClick={s.roller.onClick}
-                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2.5 px-2 text-center hover:bg-white transition-colors">
+                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2 px-2 text-center hover:bg-white transition-colors">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] mb-1 truncate" style={{ color: ROLLER }}>
                     Roller Shades
                   </p>
@@ -474,7 +474,7 @@ function OperationsStatusTable({
                   )}
                 </button>
                 <button onClick={s.faux.onClick}
-                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2.5 px-2 text-center hover:bg-white transition-colors">
+                  className="group relative rounded-md ring-1 ring-stone-200 bg-white/50 py-2 px-2 text-center hover:bg-white transition-colors">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] mb-1 truncate" style={{ color: FAUX }}>
                     Faux Wood Blinds
                   </p>
