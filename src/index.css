@@ -20,7 +20,7 @@
   --surface-border:      #d9cfb8;     /* slightly stronger for edge definition */
   --surface-border-priority: #c9b894;
   --surface-border-soft: rgba(217,207,184,0.55);
-  --surface-topbar:      #f0e6d2;     /* parchment family, joins page warmth */
+  --surface-topbar:      #e8e7e3;     /* neutral light-gray header band */
   --card-shadow:         0 1px 2px rgba(74,42,18,0.04);
   --page-grain:          none;
   --h1-size:             1.75rem;     /* 28px */
@@ -28,20 +28,19 @@
 }
 
 [data-page-mode="executive"] {
-  /* Page surface paints as a flat fallback; the radial gradient lives in
-     --page-grain and applies via background-image. This lets us keep the
-     mix-blend-mode noise on a separate pseudo-element (see .page-surface). */
-  --surface-page:        #faf6f0;     /* clean cream — was the card surface; now the page */
+  /* Neutral light-gray page with white cards. Card edges defined by a
+     visible neutral border (page is light, so cards need a real edge). */
+  --surface-page:        #f1f0ed;     /* neutral light gray — the page surface */
   --surface-card:        #ffffff;     /* white cards */
   --surface-card-priority: #ffffff;   /* unified — same as card; red badge text signals priority */
-  --surface-card-soft:   var(--surface-page);   /* recedes into the cream page */
-  --surface-border:      rgba(92,67,42,0.10);   /* warm tan, barely visible */
-  --surface-border-priority: rgba(92,67,42,0.10);  /* unified with standard border */
-  --surface-border-soft: rgba(92,67,42,0.10);      /* unified with standard border */
-  --card-shadow:         none;        /* color contrast separates cards; no shadow needed */
+  --surface-card-soft:   var(--surface-page);   /* recedes into the gray page */
+  --surface-border:      #dcdad4;     /* defined neutral edge — visible white-on-gray */
+  --surface-border-priority: #dcdad4; /* unified with standard border */
+  --surface-border-soft: rgba(40,37,33,0.10);   /* faint — insets recede */
+  --surface-topbar:      #e8e7e3;     /* neutral gray header band, a touch deeper than page */
+  --card-shadow:         none;        /* edge contrast separates cards; no shadow needed */
 
-  /* Flattened — page is now a solid clean cream matching the card interiors.
-     (Previous cinnamon radial gradient removed so the page reads as one flat tone.) */
+  /* Flat — page is one solid neutral gray tone (no gradient). */
   --page-grain:          none;
 
   --h1-size:             2rem;        /* 32px */
