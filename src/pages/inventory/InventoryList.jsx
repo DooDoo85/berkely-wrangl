@@ -203,6 +203,7 @@ function InventoryListBody({ partType }) {
   const [parts, setParts]               = useState([])
   const [loading, setLoading]           = useState(true)
   const [type, setType]                 = useState(partType || 'all')
+  const [createOpen, setCreateOpen]     = useState(false)
   const [search, setSearch]             = useState('')
   const [counts, setCounts]             = useState({})
   const [category, setCategory]         = useState('all')
@@ -333,6 +334,14 @@ function InventoryListBody({ partType }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-accent-clay text-ink-inverse hover:bg-accent-clay-hover transition-colors"
+          >
+            ＋ New {locked
+              ? ({ fabric: 'Fabric', component: 'Component', extrusion: 'Extrusion', blind: 'Faux Blind' }[partType] || 'Part')
+              : 'Part'}
+          </button>
           {alertCount > 0 && (
             <button
               onClick={() => setAlertsOnly(v => !v)}
@@ -583,6 +592,15 @@ function InventoryListBody({ partType }) {
           onAdded={() => setReorderPart(null)}
         />
       )}
+
+      {createOpen && (
+        <CreatePartModal
+          defaultType={type !== 'all' ? type : 'extrusion'}
+          lockType={locked}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); fetchParts() }}
+        />
+      )}
     </div>
   )
 }
@@ -599,5 +617,158 @@ function CategoryTab({ label, count, active, onClick }) {
     >
       {label} <span className={`ml-1 ${active ? 'opacity-80' : 'opacity-55'}`}>({count})</span>
     </button>
+  )
+}
+
+// ─── CreatePartModal ─────────────────────────────────────────────────────
+// Inserts a new row into `parts`. Fields use only columns this page already
+// reads (name, part_type, category, qty_on_hand, reorder_level, vendor,
+// vendor_part_name, active) so the insert can't hit a missing column. id and
+// timestamps come from table defaults. A duplicate-name check guards ePIC's
+// name-based matching — a dup name silently breaks faux/fabric/part sync.
+const PART_TYPE_OPTIONS = [
+  { value: 'extrusion', label: 'Extrusion' },
+  { value: 'fabric',    label: 'Fabric'    },
+  { value: 'component', label: 'Component' },
+  { value: 'blind',     label: 'Faux Blind' },
+]
+
+function CreatePartModal({ defaultType = 'extrusion', lockType = false, onClose, onCreated }) {
+  const valid = PART_TYPE_OPTIONS.some(o => o.value === defaultType)
+  const [partType, setPartType]    = useState(valid ? defaultType : 'extrusion')
+  const [name, setName]            = useState('')
+  const [vendor, setVendor]        = useState('')
+  const [vendorPartName, setVPN]   = useState('')
+  const [qtyOnHand, setQty]        = useState('')
+  const [reorderLevel, setReorder] = useState('')
+  const [category, setCategory]    = useState('')
+  const [saving, setSaving]        = useState(false)
+  const [error, setError]          = useState('')
+  const [dupWarn, setDupWarn]      = useState(false)  // dup found; awaiting "create anyway"
+
+  const typeLabel = PART_TYPE_OPTIONS.find(o => o.value === partType)?.label || 'Part'
+
+  async function handleSave() {
+    setError('')
+    const cleanName = name.trim()
+    if (!cleanName) { setError('Name is required.'); return }
+    setSaving(true)
+    try {
+      // Duplicate-name guard (skip once the user has confirmed via "create anyway").
+      if (!dupWarn) {
+        const { data: dupes } = await supabase
+          .from('parts')
+          .select('id, name')
+          .eq('part_type', partType)
+          .ilike('name', cleanName)
+          .limit(1)
+        if (dupes && dupes.length) { setDupWarn(true); setSaving(false); return }
+      }
+      // Payload — confirmed columns only; let DB defaults fill id / timestamps.
+      const payload = {
+        name: cleanName,
+        part_type: partType,
+        active: true,
+        qty_on_hand: qtyOnHand === '' ? 0 : Number(qtyOnHand),
+      }
+      if (reorderLevel !== '')   payload.reorder_level = Number(reorderLevel)
+      if (vendor.trim())         payload.vendor = vendor.trim()
+      if (vendorPartName.trim()) payload.vendor_part_name = vendorPartName.trim()
+      if (partType === 'component' && category.trim()) payload.category = category.trim()
+
+      const { error: insErr } = await supabase.from('parts').insert(payload)
+      if (insErr) { setError(insErr.message); setSaving(false); return }
+      onCreated?.()
+    } catch (e) {
+      setError(e.message || 'Failed to create part.')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[88vh] overflow-y-auto"
+           onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">New {typeLabel}</h3>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">✕</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Type</label>
+            <select value={partType} disabled={lockType}
+              onChange={e => { setPartType(e.target.value); setDupWarn(false) }}
+              className="input w-full disabled:opacity-60 disabled:cursor-not-allowed">
+              {PART_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">
+              Name <span className="text-status-critical">*</span>
+            </label>
+            <input value={name} onChange={e => { setName(e.target.value); setDupWarn(false) }}
+              placeholder={partType === 'fabric' ? 'e.g. Orléans 0% - White/White'
+                : partType === 'extrusion' ? 'e.g. 1.5" Tube Taped' : 'Part name'}
+              className="input w-full" autoFocus />
+            <p className="text-[11px] text-ink-muted mt-1">Used to match ePIC reports — mirror ePIC's description naming.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Vendor</label>
+              <input value={vendor} onChange={e => setVendor(e.target.value)} placeholder="e.g. Rollease" className="input w-full" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Vendor Part Name</label>
+              <input value={vendorPartName} onChange={e => setVPN(e.target.value)} placeholder="optional" className="input w-full" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">On Hand</label>
+              <input type="number" value={qtyOnHand} onChange={e => setQty(e.target.value)} placeholder="0" className="input w-full" min="0" step="any" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Reorder Level</label>
+              <input type="number" value={reorderLevel} onChange={e => setReorder(e.target.value)} placeholder="optional" className="input w-full" min="0" step="any" />
+            </div>
+          </div>
+
+          {partType === 'component' && (
+            <div>
+              <label className="block text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Category</label>
+              <input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Motors, Brackets"
+                className="input w-full" list="component-cats" />
+              <datalist id="component-cats">
+                {COMPONENT_CATEGORY_ORDER.map(c => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+          )}
+
+          {dupWarn && (
+            <div className="rounded-lg bg-status-warning-soft border border-status-warning/30 px-3 py-2 text-xs text-ink-strong">
+              A {typeLabel.toLowerCase()} named “{name.trim()}” already exists. Duplicate names can break ePIC name matching — click <span className="font-semibold">Create anyway</span> only if you're sure.
+            </div>
+          )}
+          {error && (
+            <div className="rounded-lg bg-status-critical-soft border border-status-critical/30 px-3 py-2 text-xs text-status-critical">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="btn-ghost text-sm">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg bg-accent-clay text-ink-inverse hover:bg-accent-clay-hover transition-colors disabled:opacity-60">
+            {saving ? 'Saving…' : dupWarn ? 'Create anyway' : `Create ${typeLabel}`}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
