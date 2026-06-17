@@ -1484,8 +1484,8 @@ const SALES_PERF_SEED = {
 // through the current month; dashed grey = cumulative production goal across the
 // full year. Scales uniformly (no aspect distortion).
 function CumulativeGoalChart({ actualCum, goalCum, accent, fill }) {
-  const W = 360, H = 168;
-  const padL = 8, padR = 8, padTop = 12, padBot = 20;
+  const W = 640, H = 150;
+  const padL = 8, padR = 8, padTop = 10, padBot = 18;
   const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const n = 12;
   const lastActual = actualCum.length ? actualCum[actualCum.length - 1] : 0;
@@ -1514,7 +1514,7 @@ function CumulativeGoalChart({ actualCum, goalCum, accent, fill }) {
         <circle cx={x(lastI)} cy={y(actualCum[lastI])} r="4" fill={accent} stroke="#fff" strokeWidth="1.5" />
       )}
       {months.map((m, i) => (
-        <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#8c7758">{m}</text>
+        <text key={i} x={x(i)} y={H - 5} textAnchor="middle" fontSize="12" fill="#8c7758">{m}</text>
       ))}
     </svg>
   );
@@ -1558,8 +1558,8 @@ function SalesPerformanceCard({ line, label, accent, fill, monthly, isSeed }) {
   const periodLabel = isMtd ? (currentMonth ? MONTH_NAMES[currentMonth - 1] : "—") : "YTD";
 
   return (
-    <div className="card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
-      <div className="flex items-start justify-between gap-3 mb-3 pb-3 border-b border-stone-200">
+    <div className="card p-3 md:p-3.5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
+      <div className="flex items-start justify-between gap-3 mb-2 pb-2 border-b border-stone-200">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent }} />
           <div className="min-w-0">
@@ -1581,10 +1581,10 @@ function SalesPerformanceCard({ line, label, accent, fill, monthly, isSeed }) {
         </div>
       </div>
 
-      <div className="flex items-end justify-between gap-3 mb-3 flex-wrap">
+      <div className="flex items-end justify-between gap-3 mb-2 flex-wrap">
         <div>
           <p className="text-[10px] text-ink-muted uppercase tracking-wider">{periodLabel} · Revenue</p>
-          <p className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums leading-none mt-1">
+          <p className="text-xl md:text-2xl font-medium text-ink-strong tabular-nums leading-none mt-1">
             {fmt$Full(headlineRev)}
           </p>
         </div>
