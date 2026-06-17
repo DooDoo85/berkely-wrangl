@@ -97,7 +97,7 @@
   /* Inset corner vignette — elegant single-shadow approach.
      Subtle warm corner darkening for page-edge grounding. */
   [data-page-mode="executive"].page-surface {
-    box-shadow: inset 0 0 120px rgba(92,67,42,0.06);
+    box-shadow: none;
   }
 
   /* Paper texture overlay — real scanned cotton paper grain (768x768 tile).
@@ -112,7 +112,7 @@
     background-size: 768px 768px;
     background-repeat: repeat;
     mix-blend-mode: multiply;
-    opacity: 0.25;
+    opacity: 0;
     z-index: 0;
   }
 
