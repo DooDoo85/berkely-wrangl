@@ -329,6 +329,54 @@ async function processCombinedCSV(csvText) {
   return shipped.length
 }
 
+// ── MTD PRODUCTION → monthly_line_sales ──────────────────────────────────────
+// Monthly units + revenue per product line for the current sales year, plus a
+// SalesMonth=99 "YTD TOTAL" sentinel row per line. ePIC pre-aggregates this;
+// we store one row per (year, month, line) and SKIP the 99 totals (they're a
+// checksum — the months sum to them exactly, verified). Read by ExecutiveHome's
+// Sales Performance cards. Header: SalesYear,SalesMonth,ProductLine,Units,Revenue
+//   parseCSV already strips the UTF-8 BOM and surrounding quotes, so
+//   "FAUX WOOD" arrives as FAUX WOOD and row.SalesYear keys correctly.
+async function processMonthlySales(csvText) {
+  const rows = parseCSV(csvText)
+  console.log(`  MTD PRODUCTION: ${rows.length} rows`)
+
+  // Same line naming the rest of the dashboard uses (product_line_sales).
+  const normalizeLine = (raw) => {
+    const u = (raw || '').toUpperCase()
+    if (u.includes('FAUX'))   return 'Faux Wood Blinds'
+    if (u.includes('ROLLER')) return 'Roller Shades'
+    return null
+  }
+
+  const toUpsert = []
+  for (const row of rows) {
+    const month = parseInt(row.SalesMonth || '', 10)
+    // Skip the YTD-total sentinel (SalesMonth=99) and anything outside 1..12.
+    if (!Number.isFinite(month) || month < 1 || month > 12) continue
+    const year = parseInt(row.SalesYear || '', 10)
+    if (!Number.isFinite(year)) continue
+    const productLine = normalizeLine(row.ProductLine)
+    if (!productLine) continue
+    toUpsert.push({
+      sales_year:   year,
+      sales_month:  month,
+      product_line: productLine,
+      units:        parseInt(row.Units || 0, 10) || 0,
+      revenue:      parseCurrency(row.Revenue || 0),
+      updated_at:   new Date().toISOString(),
+    })
+  }
+
+  if (toUpsert.length) {
+    const ok = await sbUpsert('monthly_line_sales', toUpsert)
+    console.log(`  Wrote ${toUpsert.length} rows to monthly_line_sales (ok=${ok})`)
+  } else {
+    console.log('  No valid monthly rows to write')
+  }
+  return toUpsert.length
+}
+
 // ─── PromptAnswers decoder ────────────────────────────────────────────────
 // Format: "PromptID\fCode\fValue\f\vPromptID\fCode\fValue\f\v..."
 // where \f = 0x0c (form feed) and \v = 0x0b (vertical tab)
@@ -2405,6 +2453,15 @@ exports.handler = async function(event, context) {
           const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
           count = await processMasterSalesReport(csvText)
           await markProcessed(messageId, 'master_sales_report', count)
+          results.processed++
+
+        } else if (subject.includes('MTD PRODUCTION')) {
+          // Monthly units + revenue by product line → monthly_line_sales.
+          // Read by ExecutiveHome Sales Performance cards (MTD/YTD vs goal).
+          if (!hasCSV) { console.log('  No CSV attachment'); continue }
+          const csvText = await gmailGetAttachment(token, messageId, att.body.attachmentId)
+          count = await processMonthlySales(csvText)
+          await markProcessed(messageId, 'monthly_line_sales', count)
           results.processed++
 
         } else if (subject.includes('SALES REPORT')) {
