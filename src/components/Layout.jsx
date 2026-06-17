@@ -84,8 +84,8 @@ export default function Layout() {
           <header
             className={`h-12 min-h-[48px] flex items-center justify-between flex-shrink-0 border-b ${isMobile ? 'px-4' : 'px-5'}`}
             style={{
-              background: '#f4eee2',
-              borderColor: 'rgba(92,67,42,0.10)',
+              background: '#ffffff',
+              borderColor: '#e5e3de',
             }}
           >
             {/* Mobile: small Wrangl badge on the left so brand stays visible */}
