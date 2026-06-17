@@ -1447,6 +1447,230 @@ function ShippedWeekModal({ line, week, shipped, accent, onClose }) {
   );
 }
 
+// ─── Sales Performance (Row 3) ───────────────────────────────────────────────
+//
+// Annual production goals (units) by month, Jan→Dec, from the production plan.
+//   Roller annual 9,413 · Faux annual 63,015.
+// Cumulative pace = running sum; the chart compares cumulative actual units
+// (from monthly_line_sales) against this.
+const MONTHLY_GOALS = {
+  roller: [653, 700, 814, 750, 754, 829, 1078, 898, 898, 682, 653, 704],
+  faux:   [4700, 4800, 4900, 5000, 5050, 5100, 5300, 5400, 5705, 5800, 5700, 5560],
+};
+
+// Verified MTD_PRODUCTION figures (2026), used as PREVIEW until monthly_line_sales
+// populates from the ePIC feed. Sums reconcile exactly to ePIC YTD totals.
+// Remove once the table is reliably feeding (cards switch automatically).
+const SALES_PERF_SEED = {
+  roller: [
+    { sales_month: 1, units: 637, revenue: 85164.4366 },
+    { sales_month: 2, units: 615, revenue: 92201.5393 },
+    { sales_month: 3, units: 831, revenue: 138545.282 },
+    { sales_month: 4, units: 921, revenue: 134036.1256 },
+    { sales_month: 5, units: 621, revenue: 98076.7153 },
+    { sales_month: 6, units: 384, revenue: 99623.2524 },
+  ],
+  faux: [
+    { sales_month: 1, units: 4216, revenue: 96364.96 },
+    { sales_month: 2, units: 4633, revenue: 88406.33 },
+    { sales_month: 3, units: 5617, revenue: 106007.755 },
+    { sales_month: 4, units: 6356, revenue: 113049.5125 },
+    { sales_month: 5, units: 5733, revenue: 109355.35 },
+    { sales_month: 6, units: 3889, revenue: 61188.1638 },
+  ],
+};
+
+// Cumulative-units-vs-goal chart. Solid accent line = cumulative actual units
+// through the current month; dashed grey = cumulative production goal across the
+// full year. Scales uniformly (no aspect distortion).
+function CumulativeGoalChart({ actualCum, goalCum, accent, fill }) {
+  const W = 360, H = 168;
+  const padL = 8, padR = 8, padTop = 12, padBot = 20;
+  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const n = 12;
+  const lastActual = actualCum.length ? actualCum[actualCum.length - 1] : 0;
+  const max = Math.max(goalCum[n - 1] || 1, lastActual, 1);
+  const stepX = (W - padL - padR) / (n - 1);
+  const x = (i) => padL + i * stepX;
+  const y = (v) => padTop + (H - padTop - padBot) * (1 - v / max);
+
+  const goalPts = goalCum.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const actPts = actualCum.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const lastI = actualCum.length - 1;
+  const areaPts = actualCum.length
+    ? `${actPts} ${x(lastI).toFixed(1)},${y(0).toFixed(1)} ${x(0).toFixed(1)},${y(0).toFixed(1)}`
+    : '';
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', height: 'auto' }}>
+      <line x1={x(0)} y1={y(0)} x2={x(n - 1)} y2={y(0)} stroke="#e7e5e4" strokeWidth="1" />
+      <polyline points={goalPts} fill="none" stroke="#a8a29e" strokeWidth="1.5" strokeDasharray="4 3" />
+      {areaPts && <polygon points={areaPts} fill={fill} opacity="0.5" stroke="none" />}
+      {actualCum.length > 1 && (
+        <polyline points={actPts} fill="none" stroke={accent} strokeWidth="2.5"
+                  strokeLinejoin="round" strokeLinecap="round" />
+      )}
+      {actualCum.length > 0 && (
+        <circle cx={x(lastI)} cy={y(actualCum[lastI])} r="4" fill={accent} stroke="#fff" strokeWidth="1.5" />
+      )}
+      {months.map((m, i) => (
+        <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#8c7758">{m}</text>
+      ))}
+    </svg>
+  );
+}
+
+// One product line's performance card. MTD/YTD toggle drives the headline
+// (revenue + units vs goal); the chart shows the cumulative pace either way.
+function SalesPerformanceCard({ line, label, accent, fill, monthly, isSeed }) {
+  const [view, setView] = useState("ytd");  // 'mtd' | 'ytd'
+  const goals = MONTHLY_GOALS[line];
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const byMonth = {};
+  monthly.forEach(m => { byMonth[m.sales_month] = m; });
+  const currentMonth = monthly.length ? Math.max(...monthly.map(m => m.sales_month)) : 0;
+
+  // Cumulative actual units through the current month.
+  const actualCum = [];
+  let run = 0;
+  for (let mo = 1; mo <= currentMonth; mo++) {
+    run += Number(byMonth[mo]?.units || 0);
+    actualCum.push(run);
+  }
+  // Cumulative goal across all 12 months.
+  const goalCum = [];
+  let g = 0;
+  for (let i = 0; i < 12; i++) { g += goals[i]; goalCum.push(g); }
+
+  const ytdUnits = run;
+  const ytdRevenue = monthly.reduce((s, m) => s + Number(m.revenue || 0), 0);
+  const ytdGoal = currentMonth > 0 ? goalCum[currentMonth - 1] : 0;  // pace through current month
+  const mtdUnits = Number(byMonth[currentMonth]?.units || 0);
+  const mtdRevenue = Number(byMonth[currentMonth]?.revenue || 0);
+  const mtdGoal = currentMonth > 0 ? goals[currentMonth - 1] : 0;
+
+  const isMtd = view === "mtd";
+  const headlineRev = isMtd ? mtdRevenue : ytdRevenue;
+  const headlineUnits = isMtd ? mtdUnits : ytdUnits;
+  const headlineGoal = isMtd ? mtdGoal : ytdGoal;
+  const pct = headlineGoal > 0 ? Math.round((headlineUnits / headlineGoal) * 100) : null;
+  const periodLabel = isMtd ? (currentMonth ? MONTH_NAMES[currentMonth - 1] : "—") : "YTD";
+
+  return (
+    <div className="card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none">
+      <div className="flex items-start justify-between gap-3 mb-3 pb-3 border-b border-stone-200">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: accent }} />
+          <div className="min-w-0">
+            <h3 className="font-display font-bold text-ink-strong text-base leading-tight truncate">{label}</h3>
+            <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+              Units vs production goal{isSeed ? " · preview data" : ""}
+            </p>
+          </div>
+        </div>
+        <div className="flex rounded-md ring-1 ring-stone-200 overflow-hidden flex-shrink-0 text-[11px] font-medium">
+          {["mtd", "ytd"].map(v => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-2.5 py-1 uppercase tracking-wide transition-colors ${
+                view === v ? "text-white" : "text-ink-mid hover:bg-stone-50"}`}
+              style={view === v ? { background: accent } : {}}>
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-end justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <p className="text-[10px] text-ink-muted uppercase tracking-wider">{periodLabel} · Revenue</p>
+          <p className="text-2xl md:text-3xl font-medium text-ink-strong tabular-nums leading-none mt-1">
+            {fmt$Full(headlineRev)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-ink-muted uppercase tracking-wider">{periodLabel} · Units</p>
+          <p className="text-xl font-medium text-ink-strong tabular-nums leading-none mt-1">
+            {headlineUnits.toLocaleString()}
+            <span className="text-xs text-ink-muted font-normal ml-1">/ {headlineGoal.toLocaleString()}</span>
+          </p>
+          {pct !== null && (
+            <p className={`text-[11px] font-medium tabular-nums mt-0.5 ${
+              pct >= 100 ? "text-emerald-700" : pct >= 90 ? "text-amber-700" : "text-red-700"}`}>
+              {pct}% of {isMtd ? "month" : "YTD pace"} goal
+            </p>
+          )}
+        </div>
+      </div>
+
+      <CumulativeGoalChart actualCum={actualCum} goalCum={goalCum} accent={accent} fill={fill} />
+
+      <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-ink-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-0.5 rounded inline-block" style={{ background: accent }} /> Cumulative units
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 border-t border-dashed border-stone-400 inline-block" /> Goal pace
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Past-SLA Modal (Orders Past 5 Days) ─────────────────────────────────────
+// Full list of orders past their print→ship SLA (default 5d, per-customer
+// overrides). Mirrors the On Hold modal treatment.
+function OverdueModal({ orders = [], onClose, onOrderClick }) {
+  const total = orders.length;
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">Orders Past 5 Days</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{total} order{total !== 1 ? "s" : ""} past print→ship SLA</p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <tr>
+                {["Order", "Customer", "Sidemark", "Units", "Days", "Over"].map(h => (
+                  <th key={h} className={`px-5 py-3 text-xs font-bold text-gray-500 uppercase ${["Order", "Customer", "Sidemark"].includes(h) ? "text-left" : "text-right"}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orders.length === 0 ? (
+                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No orders past SLA</td></tr>
+              ) : orders.map(o => (
+                <tr key={o.key} onClick={() => onOrderClick?.(o.order_id)}
+                  className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
+                  <td className="px-5 py-3 font-mono text-sm font-semibold text-blue-600">#{o.order_no}</td>
+                  <td className="px-5 py-3 text-sm text-gray-700">{o.customer ?? "—"}</td>
+                  <td className="px-5 py-3 text-xs text-gray-500">{o.sidemark || "—"}</td>
+                  <td className="px-5 py-3 text-right text-sm text-gray-700 tabular-nums">{o.total_units || 0}</td>
+                  <td className="px-5 py-3 text-right text-sm text-gray-500 tabular-nums">{o.days_in_status}d</td>
+                  <td className="px-5 py-3 text-right">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      o.days_over >= 5 ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
+                      +{o.days_over}d
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ExecutiveHome() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -1457,6 +1681,8 @@ export default function ExecutiveHome() {
   const [inProductionModal, setInProductionModal] = useState(false);  // false|true|'roller'|'faux'
   const [onHoldModal, setOnHoldModal] = useState(false);
   const [shippedWeekModal, setShippedWeekModal] = useState(null);  // null|'roller'|'faux'
+  const [overdueModal, setOverdueModal] = useState(false);
+  const [monthlyRows, setMonthlyRows] = useState(null);  // null=loading; [] or rows after
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     stuckOrders: [], heldOrdersAll: [], avgDays: null, repOrders: [],
@@ -1821,8 +2047,7 @@ export default function ExecutiveHome() {
           };
         })
         .filter(r => r.days_over > 0)
-        .sort((a, b) => b.days_over - a.days_over)
-        .slice(0, 5);
+        .sort((a, b) => b.days_over - a.days_over);
 
       // ── Product line sales ────────────────────────────────────────────
       // The product_line_sales view is the authoritative source for product
@@ -2326,6 +2551,33 @@ export default function ExecutiveHome() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Sales Performance (Row 3) — monthly units + revenue per line, current year.
+  // Falls back to the verified SEED until monthly_line_sales feeds from ePIC.
+  useEffect(() => {
+    (async () => {
+      try {
+        const yr = new Date().getFullYear();
+        const { data: rows } = await supabase
+          .from("monthly_line_sales")
+          .select("sales_month, product_line, units, revenue")
+          .eq("sales_year", yr)
+          .order("sales_month", { ascending: true });
+        setMonthlyRows(rows || []);
+      } catch { setMonthlyRows([]); }
+    })();
+  }, []);
+
+  const liveRoller = (monthlyRows || [])
+    .filter(r => r.product_line === "Roller Shades")
+    .map(r => ({ sales_month: r.sales_month, units: Number(r.units), revenue: Number(r.revenue) }));
+  const liveFaux = (monthlyRows || [])
+    .filter(r => r.product_line === "Faux Wood Blinds")
+    .map(r => ({ sales_month: r.sales_month, units: Number(r.units), revenue: Number(r.revenue) }));
+  const rollerMonthly = liveRoller.length ? liveRoller : SALES_PERF_SEED.roller;
+  const fauxMonthly   = liveFaux.length   ? liveFaux   : SALES_PERF_SEED.faux;
+  const rollerSeed = liveRoller.length === 0;
+  const fauxSeed   = liveFaux.length === 0;
+
   const stuckTotal = data.heldOrdersAll?.length ?? 0;
   const overdueTotal = data.overdueOrders?.length ?? 0;
   const wipKey = s => s === "CREDIT OK" ? "creditOK" : "printed";
@@ -2401,7 +2653,7 @@ export default function ExecutiveHome() {
             value={loading ? "—" : overdueTotal}
             accent="#c0392b"
             linkHint="View all →"
-            onClick={() => setWipModal("PRINTED")}
+            onClick={() => setOverdueModal(true)}
           />
         </div>
 
@@ -2432,117 +2684,29 @@ export default function ExecutiveHome() {
           />
         </div>
 
-        {/* ═══ ROW 3 — Needs Attention ═════════════════════════════════════
-            The only actionable items on the page, elevated to their own row:
-            On Hold (left) + Past SLA (right) as separate cards. When both are
-            clear, collapses to a slim all-clear strip. */}
-
-          {/* Empty state — both clear */}
-          {stuckTotal === 0 && overdueTotal === 0 && (
-            <div className="rounded-lg bg-emerald-50/40 border border-emerald-100/60 py-3 px-4 flex items-center justify-center gap-2.5 ring-1 ring-stone-200">
-              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs flex-shrink-0">✓</div>
-              <p className="text-sm text-ink-mid">All clear — no holds, no SLA breaches.</p>
-            </div>
-          )}
-
-          {/* ── Alert cards: On Hold (left) + Past SLA (right) ── */}
-          {(stuckTotal > 0 || overdueTotal > 0) && (
-            <div className={`grid grid-cols-1 ${stuckTotal > 0 && overdueTotal > 0 ? 'lg:grid-cols-2' : ''} gap-3`}>
-
-              {/* On Hold card */}
-              {stuckTotal > 0 && (
-                <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                      On Hold <span className="text-ink-muted font-medium normal-case tracking-normal">· {stuckTotal}</span>
-                    </span>
-                    <button onClick={() => setOnHoldModal(true)}
-                      className="text-[11px] text-ink-muted hover:text-ink-mid font-medium">View all →</button>
-                  </div>
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted border-b border-stone-200">
-                        <th className="font-semibold py-1 pr-2">Order</th>
-                        <th className="font-semibold py-1 pr-2">Customer</th>
-                        <th className="font-semibold py-1 pr-2">Reason</th>
-                        <th className="font-semibold py-1 text-right">Since printed</th>
-                        <th className="font-semibold py-1 text-right">On hold</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.stuckOrders.slice(0, 6).map(o => {
-                        const printedAge = o.daysSincePrinted;
-                        const severe = printedAge != null && printedAge >= 8;
-                        return (
-                          <tr key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                            className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-amber-50/50 transition-colors">
-                            <td className="py-1.5 pr-2 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${severe ? "bg-red-500" : "bg-amber-500"}`} />
-                                <span className="text-[12.5px] font-semibold text-ink-strong tabular-nums">{o.order_no}</span>
-                              </span>
-                            </td>
-                            <td className="py-1.5 pr-2 text-[12px] text-ink-mid truncate max-w-[120px]">{o.customer ?? "—"}</td>
-                            <td className="py-1.5 pr-2 text-[12px] text-ink-muted truncate max-w-[110px]">{o.hold_reason || "—"}</td>
-                            <td className={`py-1.5 text-right text-[12px] font-bold tabular-nums ${severe ? "text-red-700" : "text-amber-700"}`}>
-                              {printedAge != null ? `${printedAge}d` : "—"}
-                            </td>
-                            <td className="py-1.5 text-right text-[11px] text-ink-muted tabular-nums">
-                              {o.days}d
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Past SLA card */}
-              {overdueTotal > 0 && (
-                <div className="card-priority p-3 md:p-4 !rounded-lg ring-1 ring-stone-200 shadow-none">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[13px] font-semibold uppercase tracking-[0.12em] text-red-700">
-                      Past SLA <span className="text-ink-muted font-medium normal-case tracking-normal">· {overdueTotal}</span>
-                    </span>
-                    <button onClick={() => setWipModal("PRINTED")}
-                      className="text-[11px] text-ink-muted hover:text-ink-mid font-medium">View all →</button>
-                  </div>
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted border-b border-stone-200">
-                        <th className="font-semibold py-1 pr-2">Order</th>
-                        <th className="font-semibold py-1 pr-2">Customer</th>
-                        <th className="font-semibold py-1 pr-2">Sidemark</th>
-                        <th className="font-semibold py-1 text-right">Over</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.overdueOrders.slice(0, 6).map(o => {
-                        const severe = o.days_over >= 5;
-                        return (
-                          <tr key={o.key} onClick={() => navigate(`/orders/${o.order_id}`)}
-                            className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-red-50/50 transition-colors">
-                            <td className="py-1.5 pr-2 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${severe ? "bg-red-600" : "bg-red-400"}`} />
-                                <span className="text-[12.5px] font-semibold text-ink-strong tabular-nums">{o.order_no}</span>
-                              </span>
-                            </td>
-                            <td className="py-1.5 pr-2 text-[12px] text-ink-mid truncate max-w-[120px]">{o.customer ?? "—"}</td>
-                            <td className="py-1.5 pr-2 text-[12px] text-ink-muted truncate max-w-[110px]">{o.sidemark || "—"}</td>
-                            <td className={`py-1.5 text-right text-[12px] font-bold tabular-nums ${severe ? "text-red-800" : "text-red-600"}`}>
-                              +{o.days_over}d
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+        {/* ═══ ROW 3 — Sales Performance ═══════════════════════════════════
+            Roller + Faux units vs production goal, MTD/YTD toggle, revenue
+            headline. Reads monthly_line_sales (verified seed until it feeds).
+            On Hold / Past 5 Days now live entirely in the Row 1 tiles, whose
+            "View all" opens the full-list modals. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3">
+          <SalesPerformanceCard
+            line="roller"
+            label="Roller Shades"
+            accent={ROLLER_ACCENT}
+            fill={ROLLER_FILL}
+            monthly={rollerMonthly}
+            isSeed={rollerSeed}
+          />
+          <SalesPerformanceCard
+            line="faux"
+            label="Faux Wood Blinds"
+            accent={FAUX_ACCENT}
+            fill={FAUX_FILL}
+            monthly={fauxMonthly}
+            isSeed={fauxSeed}
+          />
+        </div>
 
       </div>
 
@@ -2680,6 +2844,13 @@ export default function ExecutiveHome() {
           orders={data.heldOrdersAll}
           onClose={() => setOnHoldModal(false)}
           onOrderClick={(id) => { setOnHoldModal(false); navigate(`/orders/${id}`); }}
+        />
+      )}
+      {overdueModal && (
+        <OverdueModal
+          orders={data.overdueOrders}
+          onClose={() => setOverdueModal(false)}
+          onOrderClick={(id) => { setOverdueModal(false); navigate(`/orders/${id}`); }}
         />
       )}
     </div>
