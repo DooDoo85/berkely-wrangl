@@ -1370,6 +1370,83 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+// ─── KPI tile (Row 1 headline metrics) ──────────────────────────────────────
+//
+// Compact headline tile. Big primary value, optional small secondary unit
+// label, an optional WoW chip, and an optional sub line. `linkHint` renders a
+// top-right affordance ("Week →", "View all →") when the tile is clickable.
+//
+function KpiTile({ label, value, secondary, sub, wow, accent, icon, linkHint, onClick }) {
+  const clickable = !!onClick;
+  return (
+    <div onClick={onClick}
+      className={`card px-3 py-3 md:px-4 md:py-3.5 !rounded-lg ring-1 ring-stone-200 shadow-none ${clickable ? "cursor-pointer card-hover" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[10px] font-medium text-ink-mid uppercase tracking-wider leading-tight">{label}</p>
+        {icon && (
+          <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-semibold flex-shrink-0"
+            style={{ background: accent ? `${accent}1f` : undefined, color: accent }}>
+            {icon}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1.5 mt-1.5 flex-wrap">
+        <span className="text-2xl font-medium text-ink-strong tabular-nums leading-none">{value}</span>
+        {secondary && <span className="text-xs text-ink-muted tabular-nums">{secondary}</span>}
+      </div>
+      <div className="mt-1 min-h-[16px] flex items-center justify-between gap-2">
+        <span className="text-[11px] tabular-nums truncate">
+          {wow !== null && wow !== undefined ? (
+            <>
+              <span className={wow >= 0 ? "text-emerald-700 font-medium" : "text-red-700 font-medium"}>
+                {wow >= 0 ? "▲" : "▼"} {Math.abs(wow)}%
+              </span>
+              <span className="text-ink-muted ml-1">vs last week</span>
+            </>
+          ) : sub ? (
+            <span className="text-ink-mid">{sub}</span>
+          ) : null}
+        </span>
+        {clickable && linkHint && (
+          <span className="text-[11px] text-ink-muted flex-shrink-0">{linkHint}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Shipped-week modal (Roller / Faux Mon–Fri shipments) ────────────────────
+//
+// Opened from the Row 1 shipped tiles. Surfaces the same WeekdayTrend the hero
+// cards used to embed, now on its own so the tile stays compact. Read-only —
+// we only track weekly shipments here.
+//
+function ShippedWeekModal({ line, week, shipped, accent, onClose }) {
+  const label = line === "roller" ? "Roller Shades" : "Faux Wood Blinds";
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">{label} — Shipped This Week</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {(shipped?.units ?? 0).toLocaleString()} units · ${Math.round(shipped?.dollars ?? 0).toLocaleString()}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="px-6 py-6">
+          <WeekdayTrend data={week || []} color={accent} />
+          <p className="text-[11px] text-gray-400 text-center mt-3">Units shipped Mon–Fri · from daily_shipments</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ExecutiveHome() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -1379,6 +1456,7 @@ export default function ExecutiveHome() {
   const [fauxPrintedModal, setFauxPrintedModal] = useState(false);
   const [inProductionModal, setInProductionModal] = useState(false);  // false|true|'roller'|'faux'
   const [onHoldModal, setOnHoldModal] = useState(false);
+  const [shippedWeekModal, setShippedWeekModal] = useState(null);  // null|'roller'|'faux'
   const [creditOkRows, setCreditOkRows] = useState([]);
   const [data, setData] = useState({
     stuckOrders: [], heldOrdersAll: [], avgDays: null, repOrders: [],
@@ -2274,41 +2352,56 @@ export default function ExecutiveHome() {
           </div>
         </div>
 
-        {/* ═══ ROW 1 — Revenue & sales view ═══════════════════════════════
-            Business Overview KPIs on the left, product revenue cards on the right.
-            BO spans wider so the 4 KPIs have room; the two product cards share equal
-            remaining width. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-2.5 lg:gap-3 mb-3">
-          <BusinessOverviewCard
-            loading={loading}
-            todayEntered={data.todayEntered}
-            todaySales={data.todaySales}
-            salesInvoicedWTD={data.salesInvoicedWTD}
-            salesInvoicedWoW={data.salesInvoicedWoW}
-            soldWTD={data.soldWTD}
-            soldWoW={data.soldWoW}
+        {/* ═══ ROW 1 — Headline KPIs ═══════════════════════════════════════
+            Six at-a-glance tiles. Revenue (invoiced) and Sold (booked this week)
+            are read-only; the two shipped tiles open the Mon–Fri weekday chart;
+            On Hold and Past 5 Days open their respective lists. */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 lg:gap-3 mb-3">
+          <KpiTile
+            label="Revenue (WTD)"
+            value={loading ? "—" : fmt$Full(data.salesInvoicedWTD)}
+            wow={loading ? null : data.salesInvoicedWoW}
+            icon="$"
+            accent="#2f7a4d"
           />
-          <HeroCard
-            label="Roller Shades"
+          <KpiTile
+            label="Sold (WTD)"
+            value={loading ? "—" : fmt$Full(data.salesWTD)}
+            wow={loading ? null : data.salesWoW}
+            icon="✎"
+            accent="#b8862f"
+          />
+          <KpiTile
+            label="Roller · Shipped WTD"
+            value={loading ? "—" : (data.rollerShipped?.units ?? 0).toLocaleString()}
+            secondary="units"
+            sub={loading ? "" : `${fmt$Full(data.rollerShipped?.dollars ?? 0)} shipped`}
             accent={ROLLER_ACCENT}
-            fill={ROLLER_FILL}
-            data={data.roller}
-            shipped={data.rollerShipped}
-            sparkData={data.rollerSpark}
-            weekData={data.rollerWeek}
-            loading={loading}
-            onClick={() => navigate("/orders?product=roller")}
+            linkHint="Week →"
+            onClick={() => setShippedWeekModal("roller")}
           />
-          <HeroCard
-            label="Faux Wood Blinds"
+          <KpiTile
+            label="Faux · Shipped WTD"
+            value={loading ? "—" : (data.fauxShipped?.units ?? 0).toLocaleString()}
+            secondary="units"
+            sub={loading ? "" : `${fmt$Full(data.fauxShipped?.dollars ?? 0)} shipped`}
             accent={FAUX_ACCENT}
-            fill={FAUX_FILL}
-            data={data.faux}
-            shipped={data.fauxShipped}
-            sparkData={data.fauxSpark}
-            weekData={data.fauxWeek}
-            loading={loading}
-            onClick={() => navigate("/orders?product=faux")}
+            linkHint="Week →"
+            onClick={() => setShippedWeekModal("faux")}
+          />
+          <KpiTile
+            label="Orders on Hold"
+            value={loading ? "—" : stuckTotal}
+            accent="#c2913a"
+            linkHint="View all →"
+            onClick={() => setOnHoldModal(true)}
+          />
+          <KpiTile
+            label="Orders Past 5 Days"
+            value={loading ? "—" : overdueTotal}
+            accent="#c0392b"
+            linkHint="View all →"
+            onClick={() => setWipModal("PRINTED")}
           />
         </div>
 
@@ -2452,6 +2545,17 @@ export default function ExecutiveHome() {
           )}
 
       </div>
+
+      {/* ── Shipped-week Modal (Roller / Faux Mon–Fri) ──────────────────── */}
+      {shippedWeekModal && (
+        <ShippedWeekModal
+          line={shippedWeekModal}
+          week={shippedWeekModal === "roller" ? data.rollerWeek : data.fauxWeek}
+          shipped={shippedWeekModal === "roller" ? data.rollerShipped : data.fauxShipped}
+          accent={shippedWeekModal === "roller" ? ROLLER_ACCENT : FAUX_ACCENT}
+          onClose={() => setShippedWeekModal(null)}
+        />
+      )}
 
       {/* ── WIP Modal ─────────────────────────────────────────────────── */}
       {wipModal && (
