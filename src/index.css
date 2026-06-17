@@ -20,7 +20,7 @@
   --surface-border:      #d9cfb8;     /* slightly stronger for edge definition */
   --surface-border-priority: #c9b894;
   --surface-border-soft: rgba(217,207,184,0.55);
-  --surface-topbar:      #e8e7e3;     /* neutral light-gray header band */
+  --surface-topbar:      #ededeb;     /* subtle gray header band */
   --card-shadow:         0 1px 2px rgba(74,42,18,0.04);
   --page-grain:          none;
   --h1-size:             1.75rem;     /* 28px */
@@ -30,14 +30,14 @@
 [data-page-mode="executive"] {
   /* Neutral light-gray page with white cards. Card edges defined by a
      visible neutral border (page is light, so cards need a real edge). */
-  --surface-page:        #f1f0ed;     /* neutral light gray — the page surface */
+  --surface-page:        #f6f6f5;     /* slightly-darker-white page surface */
   --surface-card:        #ffffff;     /* white cards */
   --surface-card-priority: #ffffff;   /* unified — same as card; red badge text signals priority */
-  --surface-card-soft:   var(--surface-page);   /* recedes into the gray page */
-  --surface-border:      #dcdad4;     /* defined neutral edge — visible white-on-gray */
+  --surface-card-soft:   var(--surface-page);   /* recedes into the page */
+  --surface-border:      #dcdad4;     /* defined neutral edge — visible white-on-near-white */
   --surface-border-priority: #dcdad4; /* unified with standard border */
   --surface-border-soft: rgba(40,37,33,0.10);   /* faint — insets recede */
-  --surface-topbar:      #e8e7e3;     /* neutral gray header band, a touch deeper than page */
+  --surface-topbar:      #ededeb;     /* subtle gray header band, distinct from near-white page */
   --card-shadow:         none;        /* edge contrast separates cards; no shadow needed */
 
   /* Flat — page is one solid neutral gray tone (no gradient). */
