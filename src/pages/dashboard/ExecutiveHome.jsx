@@ -1909,22 +1909,12 @@ export default function ExecutiveHome() {
         else if (line === 'faux')   fauxWtdLastWk   += amt;
       });
 
-      // ── Invoiced (WTD) — all orders invoiced this week, split by line ──
-      // Event-based: orders whose invoice (epic_status_date) lands this week.
-      const { data: invoicedThisWkRows } = await supabase
-        .from('orders')
-        .select('order_amount, product_line')
-        .eq('status', 'invoiced')
-        .gte('epic_status_date', weekStartDate);
-      let invoicedWTD = 0, invoicedRoller = 0, invoicedFaux = 0;
-      (invoicedThisWkRows ?? []).forEach(r => {
-        const amt = Number(r.order_amount || 0);
-        const line = (r.product_line || '').toLowerCase();
-        invoicedWTD += amt;
-        if (line === 'roller')      invoicedRoller += amt;
-        else if (line === 'faux')   invoicedFaux   += amt;
-      });
-      const invoicedWoW = wow(invoicedWTD, salesInvoicedLastWk);
+      // ── Invoiced (WTD) ────────────────────────────────────────────────
+      // Sourced from product_line_sales (the authoritative invoiced figure,
+      // same source as the MTD/YTD footer) — set in the data object below
+      // from roller.sales_wtd / faux.sales_wtd. The orders.status='invoiced'
+      // flag lags ePIC badly (roller read ~$2k vs $64k actually shipped), so
+      // it is NOT used for this tile.
       // salesInvoicedWTD and the WoW values are computed AFTER the
       // product_line_sales view query lands (see the "Product line sales"
       // section below). For now they're placeholders.
@@ -2423,6 +2413,17 @@ export default function ExecutiveHome() {
       });
       const rollerShipped = { dollars: rollerShippedWtdDollars, units: rollerShippedWtdUnits };
       const fauxShipped   = { dollars: fauxShippedWtdDollars,   units: fauxShippedWtdUnits };
+      // Last-week shipped revenue (Mon–Fri) — baseline for the Invoiced WoW,
+      // from the same daily_shipments source so Invoiced mirrors Shipped.
+      const lastWkMonStr = new Date(mondayThisWeek.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+      const lastWkSatStr = new Date(mondayThisWeek.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+      const { data: shipRowsLastWk } = await supabase
+        .from("daily_shipments")
+        .select("revenue_shipped")
+        .gte("ship_date", lastWkMonStr)
+        .lt("ship_date", lastWkSatStr);
+      const shippedLastWkTotal = (shipRowsLastWk ?? [])
+        .reduce((s, r) => s + Number(r.revenue_shipped || 0), 0);
       const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       const rollerWeek = WD.map((label, i) => {
         const d = new Date(mondayThisWeek); d.setDate(d.getDate() + i);
@@ -2574,7 +2575,10 @@ export default function ExecutiveHome() {
         salesInvoicedWTD, salesInvoicedWoW,
         soldWTD, soldWoW,
         bookedWTD, bookedRoller, bookedFaux, bookedWoW,
-        invoicedWTD, invoicedRoller, invoicedFaux, invoicedWoW,
+        invoicedWTD: rollerShippedWtdDollars + fauxShippedWtdDollars,
+        invoicedRoller: rollerShippedWtdDollars,
+        invoicedFaux: fauxShippedWtdDollars,
+        invoicedWoW: wow(rollerShippedWtdDollars + fauxShippedWtdDollars, shippedLastWkTotal),
         leadTimeDays, leadTimeWindow,
         // (Legacy WTD fields kept for back-compat in case anything else reads them)
         salesWTD, unitsWTD, ordersWTD,
