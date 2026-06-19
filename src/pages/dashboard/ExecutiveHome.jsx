@@ -1376,7 +1376,7 @@ function TopCustomersList({ customers = [], loading, onCustomerClick }) {
 // label, an optional WoW chip, and an optional sub line. `linkHint` renders a
 // top-right affordance ("Week →", "View all →") when the tile is clickable.
 //
-function KpiTile({ label, value, secondary, sub, wow, accent, icon, linkHint, onClick }) {
+function KpiTile({ label, value, secondary, sub, wow, accent, icon, linkHint, onClick, breakdown }) {
   const clickable = !!onClick;
   return (
     <div onClick={onClick}
@@ -1411,6 +1411,9 @@ function KpiTile({ label, value, secondary, sub, wow, accent, icon, linkHint, on
           <span className="text-[11px] text-ink-muted flex-shrink-0">{linkHint}</span>
         )}
       </div>
+      {breakdown && (
+        <div className="text-[10px] text-ink-muted tabular-nums truncate leading-tight mt-0.5">{breakdown}</div>
+      )}
     </div>
   );
 }
@@ -1724,6 +1727,8 @@ export default function ExecutiveHome() {
     todayEntered: 0, todayShipped: 0, todaySales: 0,
     salesInvoicedWTD: 0, salesInvoicedWoW: null,
     soldWTD: 0, soldWoW: null,
+    bookedWTD: 0, bookedRoller: 0, bookedFaux: 0, bookedWoW: null,
+    invoicedWTD: 0, invoicedRoller: 0, invoicedFaux: 0, invoicedWoW: null,
     leadTimeDays: null, leadTimeWindow: null,
     salesWTD: 0, unitsWTD: 0, ordersWTD: 0,
     salesWoW: null, unitsWoW: null, ordersWoW: null,
@@ -1854,18 +1859,31 @@ export default function ExecutiveHome() {
         ]),
       ];
       let soldWTD = 0, soldLastWk = 0;
+      let bookedWTD = 0, bookedRoller = 0, bookedFaux = 0, bookedLastWk = 0;
       if (allCreditOkOrderNos.length) {
         const { data: creditOkOrderAmts } = await supabase.from('orders')
-          .select('order_number, order_amount')
+          .select('order_number, order_amount, product_line')
           .in('order_number', allCreditOkOrderNos);
-        const amtByOrder = {};
+        const amtByOrder = {}, lineByOrder = {};
         (creditOkOrderAmts ?? []).forEach(r => {
           amtByOrder[r.order_number] = Number(r.order_amount || 0);
+          lineByOrder[r.order_number] = (r.product_line || '').toLowerCase();
         });
         soldWTD = creditOkThisWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
         soldLastWk = creditOkLastWk.reduce((s, r) => s + (amtByOrder[r.order_number] || 0), 0);
+        // Orders Booked (WTD) — orders that hit credit_ok this week, deduped
+        // per order_number, split by product line.
+        [...new Set(creditOkThisWk.map(r => r.order_number))].forEach(on => {
+          const amt = amtByOrder[on] || 0;
+          bookedWTD += amt;
+          if (lineByOrder[on] === 'roller')    bookedRoller += amt;
+          else if (lineByOrder[on] === 'faux') bookedFaux   += amt;
+        });
+        bookedLastWk = [...new Set(creditOkLastWk.map(r => r.order_number))]
+          .reduce((s, on) => s + (amtByOrder[on] || 0), 0);
       }
       const soldWoW = wow(soldWTD, soldLastWk);
+      const bookedWoW = wow(bookedWTD, bookedLastWk);
 
       // Sales (Invoiced) — last-week comparison only.
       // We query the orders table here ONLY to get LAST WEEK's invoiced
@@ -1890,6 +1908,23 @@ export default function ExecutiveHome() {
         if (line === 'roller')      rollerWtdLastWk += amt;
         else if (line === 'faux')   fauxWtdLastWk   += amt;
       });
+
+      // ── Invoiced (WTD) — all orders invoiced this week, split by line ──
+      // Event-based: orders whose invoice (epic_status_date) lands this week.
+      const { data: invoicedThisWkRows } = await supabase
+        .from('orders')
+        .select('order_amount, product_line')
+        .eq('status', 'invoiced')
+        .gte('epic_status_date', weekStartDate);
+      let invoicedWTD = 0, invoicedRoller = 0, invoicedFaux = 0;
+      (invoicedThisWkRows ?? []).forEach(r => {
+        const amt = Number(r.order_amount || 0);
+        const line = (r.product_line || '').toLowerCase();
+        invoicedWTD += amt;
+        if (line === 'roller')      invoicedRoller += amt;
+        else if (line === 'faux')   invoicedFaux   += amt;
+      });
+      const invoicedWoW = wow(invoicedWTD, salesInvoicedLastWk);
       // salesInvoicedWTD and the WoW values are computed AFTER the
       // product_line_sales view query lands (see the "Product line sales"
       // section below). For now they're placeholders.
@@ -2538,6 +2573,8 @@ export default function ExecutiveHome() {
         // Business Overview KPIs — three executive metrics
         salesInvoicedWTD, salesInvoicedWoW,
         soldWTD, soldWoW,
+        bookedWTD, bookedRoller, bookedFaux, bookedWoW,
+        invoicedWTD, invoicedRoller, invoicedFaux, invoicedWoW,
         leadTimeDays, leadTimeWindow,
         // (Legacy WTD fields kept for back-compat in case anything else reads them)
         salesWTD, unitsWTD, ordersWTD,
@@ -2610,18 +2647,20 @@ export default function ExecutiveHome() {
             On Hold and Past 5 Days open their respective lists. */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 lg:gap-3 mb-3">
           <KpiTile
-            label="Revenue (WTD)"
-            value={loading ? "—" : fmt$Full(data.salesInvoicedWTD)}
-            wow={loading ? null : data.salesInvoicedWoW}
-            icon="$"
-            accent="#2f7a4d"
-          />
-          <KpiTile
-            label="Sold (WTD)"
-            value={loading ? "—" : fmt$Full(data.salesWTD)}
-            wow={loading ? null : data.salesWoW}
+            label="Orders Booked (WTD)"
+            value={loading ? "—" : fmt$Full(data.bookedWTD)}
+            wow={loading ? null : data.bookedWoW}
+            breakdown={loading ? "" : `Roller ${fmt$(data.bookedRoller)} · Faux ${fmt$(data.bookedFaux)}`}
             icon="✎"
             accent="#b8862f"
+          />
+          <KpiTile
+            label="Invoiced (WTD)"
+            value={loading ? "—" : fmt$Full(data.invoicedWTD)}
+            wow={loading ? null : data.invoicedWoW}
+            breakdown={loading ? "" : `Roller ${fmt$(data.invoicedRoller)} · Faux ${fmt$(data.invoicedFaux)}`}
+            icon="$"
+            accent="#2f7a4d"
           />
           <KpiTile
             label="Roller · Shipped WTD"
