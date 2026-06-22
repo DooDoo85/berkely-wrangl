@@ -362,12 +362,12 @@ function OperationsStatusTable({
       iconCircle: "bg-emerald-100/70 text-emerald-700 ring-1 ring-emerald-200/60",
       roller: {
         value: loading ? "—" : creditOkRoller.count,
-        sub: creditOkRoller.total > 0 ? `${fmt$(creditOkRoller.total)} pending` : null,
+        sub: creditOkRoller.units > 0 ? `${creditOkRoller.units.toLocaleString()} units` : null,
         onClick: onCreditOkRollerClick,
       },
       faux: {
         value: loading ? "—" : creditOkFaux.count,
-        sub: creditOkFaux.total > 0 ? `${fmt$(creditOkFaux.total)} pending` : null,
+        sub: creditOkFaux.units > 0 ? `${creditOkFaux.units.toLocaleString()} units` : null,
         onClick: onCreditOkFauxClick,
       },
     },
@@ -1695,9 +1695,9 @@ export default function ExecutiveHome() {
     fauxSpark: [], rollerSpark: [],
     rollerWeek: [], fauxWeek: [],
     wip: { creditOK: [], printed: [] },
-    creditOk: { count: 0, total: 0 },
-    creditOkRoller: { count: 0, total: 0 },
-    creditOkFaux: { count: 0, total: 0 },
+    creditOk: { count: 0, total: 0, units: 0 },
+    creditOkRoller: { count: 0, total: 0, units: 0 },
+    creditOkFaux: { count: 0, total: 0, units: 0 },
     printedTotal: { count: 0, units: 0 },
     fauxPrintedTotal: { count: 0, units: 0 },
     inProductionCount: 0,
@@ -1972,23 +1972,26 @@ export default function ExecutiveHome() {
       // then DROP.
       const { data: creditOkOrdersFromOrders } = await supabase
         .from("orders")
-        .select("order_number, sales_rep, customer_name, order_amount, order_date, product_line")
+        .select("order_number, sales_rep, customer_name, order_amount, order_date, product_line, total_units")
         .eq("status", "credit_ok")
         .order("order_date", { ascending: false });
       const creditAll = creditOkOrdersFromOrders ?? [];
       const creditOk = {
         count: creditAll.length,
         total: creditAll.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+        units: creditAll.reduce((s, r) => s + Number(r.total_units || 0), 0),
       };
       const creditOkRollerRows = creditAll.filter(r => r.product_line === 'roller');
       const creditOkFauxRows   = creditAll.filter(r => r.product_line === 'faux');
       const creditOkRoller = {
         count: creditOkRollerRows.length,
         total: creditOkRollerRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+        units: creditOkRollerRows.reduce((s, r) => s + Number(r.total_units || 0), 0),
       };
       const creditOkFaux = {
         count: creditOkFauxRows.length,
         total: creditOkFauxRows.reduce((s, r) => s + Number(r.order_amount || 0), 0),
+        units: creditOkFauxRows.reduce((s, r) => s + Number(r.total_units || 0), 0),
       };
 
       // For the Credit OK modal table — map to the legacy shape so the modal
