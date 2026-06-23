@@ -422,6 +422,24 @@ function OperationsStatusTable({
     },
   ];
 
+  // ── Total WIP per product line ────────────────────────────────────────
+  // Derived from the SAME per-line stage values rendered below, so each
+  // line's WIP equals exactly the sum of its three boxes (Credit OK +
+  // Printed + In Production). This deliberately reuses the card's existing
+  // numbers rather than a separate status-based query — In Production is a
+  // wrangl_status concept and Printed here is "idle" only, so a raw
+  // status IN (...) total would NOT match what these boxes show.
+  // Untagged (null product_line) orders are not in either line, consistent
+  // with every other per-line box on this card.
+  const rollerWip = {
+    count: (creditOkRoller?.count || 0) + (printedRoller?.count || 0) + (inProdRoller?.count || 0),
+    units: (creditOkRoller?.units || 0) + (printedRoller?.units || 0) + (inProdRoller?.units || 0),
+  };
+  const fauxWip = {
+    count: (creditOkFaux?.count || 0) + (printedFaux?.count || 0) + (inProdFaux?.count || 0),
+    units: (creditOkFaux?.units || 0) + (printedFaux?.units || 0) + (inProdFaux?.units || 0),
+  };
+
   return (
     <div className={embedded ? "" : "card p-4 md:p-5 h-full !rounded-lg ring-1 ring-stone-200 shadow-none"}>
 
@@ -438,6 +456,41 @@ function OperationsStatusTable({
           <h3 className="font-display font-bold text-ink-strong text-sm leading-none">Operations Status</h3>
         </div>
         <p className="text-[11px] text-ink-muted">Live order flow by stage</p>
+      </div>
+
+      {/* Total WIP summary — Roller / Faux. Each figure is the sum of that
+          line's three stage boxes below (Credit OK + Printed + In Production). */}
+      <div className="grid grid-cols-2 gap-2.5 md:gap-3 mb-3">
+        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex items-center justify-between">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: ROLLER }}>
+            Roller WIP
+          </span>
+          <span className="text-right">
+            <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
+              {loading ? "—" : rollerWip.count.toLocaleString()}
+            </span>
+            {!loading && rollerWip.units > 0 && (
+              <span className="block text-[10px] text-ink-muted leading-tight mt-0.5">
+                {rollerWip.units.toLocaleString()} units
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex items-center justify-between">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: FAUX }}>
+            Faux WIP
+          </span>
+          <span className="text-right">
+            <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
+              {loading ? "—" : fauxWip.count.toLocaleString()}
+            </span>
+            {!loading && fauxWip.units > 0 && (
+              <span className="block text-[10px] text-ink-muted leading-tight mt-0.5">
+                {fauxWip.units.toLocaleString()} units
+              </span>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Horizontal pipeline — three stages flow left→right (Credit OK → Printed →
