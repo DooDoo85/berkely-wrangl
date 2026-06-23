@@ -461,35 +461,31 @@ function OperationsStatusTable({
       {/* Total WIP summary — Roller / Faux. Each figure is the sum of that
           line's three stage boxes below (Credit OK + Printed + In Production). */}
       <div className="grid grid-cols-2 gap-2.5 md:gap-3 mb-3">
-        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex items-center justify-between">
+        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex flex-col items-center justify-center text-center gap-0.5">
           <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: ROLLER }}>
             Roller WIP
           </span>
-          <span className="text-right">
-            <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
-              {loading ? "—" : rollerWip.count.toLocaleString()}
-            </span>
-            {!loading && rollerWip.units > 0 && (
-              <span className="block text-[10px] text-ink-muted leading-tight mt-0.5">
-                {rollerWip.units.toLocaleString()} units
-              </span>
-            )}
+          <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
+            {loading ? "—" : rollerWip.count.toLocaleString()}
           </span>
+          {!loading && rollerWip.units > 0 && (
+            <span className="text-[10px] text-ink-muted leading-tight">
+              {rollerWip.units.toLocaleString()} units
+            </span>
+          )}
         </div>
-        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex items-center justify-between">
+        <div className="rounded-md ring-1 ring-stone-200 bg-white/50 px-3 py-2 flex flex-col items-center justify-center text-center gap-0.5">
           <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: FAUX }}>
             Faux WIP
           </span>
-          <span className="text-right">
-            <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
-              {loading ? "—" : fauxWip.count.toLocaleString()}
-            </span>
-            {!loading && fauxWip.units > 0 && (
-              <span className="block text-[10px] text-ink-muted leading-tight mt-0.5">
-                {fauxWip.units.toLocaleString()} units
-              </span>
-            )}
+          <span className="text-lg font-semibold text-ink-strong tabular-nums leading-none">
+            {loading ? "—" : fauxWip.count.toLocaleString()}
           </span>
+          {!loading && fauxWip.units > 0 && (
+            <span className="text-[10px] text-ink-muted leading-tight">
+              {fauxWip.units.toLocaleString()} units
+            </span>
+          )}
         </div>
       </div>
 
