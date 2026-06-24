@@ -10,12 +10,17 @@ const STATUS_STYLES = {
   cancelled:  'bg-red-50 text-red-500',
 }
 
+// "Open" = placed with the vendor but not yet in hand. Anything draft (not sent),
+// received (done), or cancelled is excluded from the pickup list.
+const CLOSED_STATUSES = ['draft', 'received', 'cancelled']
+
 export default function PurchaseOrders() {
   const navigate = useNavigate()
   const [pos, setPOs] = useState([])
   const [loading, setLoading] = useState(true)
   const [queueCount, setQueueCount] = useState(0)
   const [filter, setFilter] = useState('all')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -30,6 +35,134 @@ export default function PurchaseOrders() {
     setLoading(false)
   }
 
+  async function exportPickupList() {
+    setExporting(true)
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select('wrangl_po_number, vendor_name, status, expected_date, purchase_order_items(part_name, stock_number, qty_ordered, qty_received)')
+      .order('vendor_name', { ascending: true })
+      .limit(5000)
+    setExporting(false)
+
+    if (error || !data) {
+      alert('Could not load purchase orders for the pickup list. Please try again.')
+      return
+    }
+
+    // Keep only open POs (submitted / exported / partial — never draft, received, cancelled)
+    const openPOs = data.filter(po => !CLOSED_STATUSES.includes(po.status))
+
+    // Group remaining line items by vendor. Remaining = ordered minus already received,
+    // so partially-received POs only show what's still owed; fully-received lines drop off.
+    const byVendor = {}
+    for (const po of openPOs) {
+      const vendor = po.vendor_name || 'Unknown Vendor'
+      for (const item of (po.purchase_order_items || [])) {
+        const remaining = (Number(item.qty_ordered) || 0) - (Number(item.qty_received) || 0)
+        if (remaining <= 0) continue
+        if (!byVendor[vendor]) byVendor[vendor] = []
+        byVendor[vendor].push({
+          name: item.part_name || '—',
+          stock: item.stock_number || '',
+          qty: remaining,
+          po: po.wrangl_po_number || '',
+        })
+      }
+    }
+
+    const vendors = Object.keys(byVendor).sort((a, b) => a.localeCompare(b))
+    if (vendors.length === 0) {
+      alert('No open items to pick up — everything on open POs is already received.')
+      return
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ))
+
+    const printedOn = new Date().toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    })
+
+    const sections = vendors.map(vendor => {
+      const lines = byVendor[vendor]
+      const rows = lines.map(line => `
+        <tr>
+          <td class="chk"></td>
+          <td class="desc">${esc(line.name)}</td>
+          <td class="stock">${esc(line.stock)}</td>
+          <td class="qty">${esc(line.qty)}</td>
+        </tr>`).join('')
+      const totalUnits = lines.reduce((s, l) => s + l.qty, 0)
+      return `
+        <section class="vendor">
+          <h2>${esc(vendor)}</h2>
+          <div class="meta">${lines.length} item${lines.length === 1 ? '' : 's'} &middot; ${totalUnits} unit${totalUnits === 1 ? '' : 's'}</div>
+          <table>
+            <thead>
+              <tr>
+                <th class="chk">&#10003;</th>
+                <th class="desc">Description</th>
+                <th class="stock">Part #</th>
+                <th class="qty">Qty</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </section>`
+    }).join('')
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vendor Pickup List</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1c1917; margin: 0; padding: 32px; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid #1c1917; padding-bottom: 10px; margin-bottom: 22px; }
+  .top h1 { font-size: 20px; margin: 0; }
+  .top .when { font-size: 12px; color: #78716c; margin-top: 2px; }
+  .printbtn { font-size: 13px; padding: 7px 14px; border: 1px solid #1c1917; background: #1c1917; color: #fff; border-radius: 6px; cursor: pointer; }
+  .vendor { margin-bottom: 26px; page-break-inside: avoid; }
+  .vendor h2 { font-size: 15px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .vendor .meta { font-size: 11px; color: #78716c; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #78716c; border-bottom: 1px solid #d6d3d1; padding: 5px 8px; }
+  td { font-size: 13px; padding: 7px 8px; border-bottom: 1px solid #f0eeec; vertical-align: top; }
+  th.chk { width: 28px; text-align: center; }
+  td.chk { width: 22px; height: 20px; border: 1px solid #d6d3d1; }
+  th.qty, td.qty { text-align: right; width: 60px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  th.stock, td.stock { width: 140px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #57534e; }
+  @media print {
+    .printbtn { display: none; }
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h1>Vendor Pickup List</h1>
+      <div class="when">Generated ${esc(printedOn)}</div>
+    </div>
+    <button class="printbtn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  ${sections}
+</body>
+</html>`
+
+    const win = window.open('', '_blank')
+    if (!win) {
+      alert('Please allow pop-ups for this site to open the pickup list.')
+      return
+    }
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+  }
+
   const filtered = filter === 'all' ? pos : pos.filter(p => p.status === filter)
 
   return (
@@ -40,6 +173,13 @@ export default function PurchaseOrders() {
           <p className="text-sm text-stone-500 mt-0.5">{pos.length} total orders</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={exportPickupList}
+            disabled={exporting}
+            className="text-sm font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 px-3 py-1.5 rounded hover:bg-stone-50 transition-colors disabled:opacity-50 disabled:cursor-default"
+          >
+            {exporting ? 'Building…' : 'Export Pickup List'}
+          </button>
           {queueCount > 0 ? (
             <button
               onClick={() => navigate('/purchasing/queue')}
