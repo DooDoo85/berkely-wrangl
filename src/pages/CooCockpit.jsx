@@ -306,26 +306,25 @@ export default function CooCockpit() {
         stockouts = count
       } catch { stockouts = null }
 
-      // ── First Pass Yield % — rolling 90 days, units-based ──
-      // FPY = 1 − (remakes ÷ units produced). Units produced = total_units on
-      // orders invoiced in the window. Each remake row counts as one defective
-      // unit (remakes is keyed by work order; no per-remake qty captured), so
-      // this reads slightly conservative if a remake covered multiple units.
+      // ── First Pass Yield % — roller, order-based, rolling 90 days ──
+      // FPY = 1 − (roller remake orders ÷ roller orders shipped). Both sides are
+      // order-level and roller-only: remakes are one row per remade work order,
+      // and roller_ship_times is one row per shipped roller order. Filtering
+      // remakes to product_line='roller' keeps numerator and denominator on the
+      // same line and avoids the orders.product_line roller undercount.
       let fpy = null
       try {
         const since90 = isoDaysAgo(90)
-        const { count: remakes90 } = await supabase.from('remakes')
+        const { count: remakeOrders } = await supabase.from('remakes')
           .select('remake_wo', { count: 'exact', head: true })
+          .eq('product_line', 'roller')
           .gte('remake_date', since90)
-        const { data: prodRows } = await supabase.from('orders')
-          .select('total_units')
-          .eq('status', 'invoiced')
-          .gte('epic_status_date', since90)
-          .limit(10000)
-        const unitsProduced = (prodRows ?? []).reduce((s, r) => s + (Number(r.total_units) || 0), 0)
-        if (unitsProduced > 0) {
-          const pct = Math.max(0, Math.min(100, (1 - ((remakes90 || 0) / unitsProduced)) * 100))
-          fpy = { pct, remakes: remakes90 || 0, units: unitsProduced }
+        const { count: shippedOrders } = await supabase.from('roller_ship_times')
+          .select('order_number', { count: 'exact', head: true })
+          .gte('shipped_date', since90)
+        if (shippedOrders && shippedOrders > 0) {
+          const pct = Math.max(0, Math.min(100, (1 - ((remakeOrders || 0) / shippedOrders)) * 100))
+          fpy = { pct, remakes: remakeOrders || 0, orders: shippedOrders }
         }
       } catch { fpy = null }
 
@@ -583,8 +582,8 @@ export default function CooCockpit() {
                 <Tile
                   label="First Pass Yield %"
                   value={d.fpy == null ? '—' : `${d.fpy.pct.toFixed(1)}%`}
-                  sub={d.fpy == null ? 'no production in window' : `${num(d.fpy.remakes)} remakes · ${num(d.fpy.units)} units · 90d`}
-                  tone={d.fpy == null ? 'normal' : d.fpy.pct >= 98 ? 'good' : d.fpy.pct >= 95 ? 'warn' : 'bad'}
+                  sub={d.fpy == null ? 'roller · no shipments in window' : `roller · ${num(d.fpy.remakes)} remakes ÷ ${num(d.fpy.orders)} orders · 90d`}
+                  tone={d.fpy == null ? 'normal' : d.fpy.pct >= 95 ? 'good' : d.fpy.pct >= 90 ? 'warn' : 'bad'}
                 />
               </div>
             </div>
