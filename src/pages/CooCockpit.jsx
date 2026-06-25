@@ -296,6 +296,63 @@ export default function CooCockpit() {
         remakeCount = count
       } catch { remakeCount = null }
 
+      // ── Material stockouts — parts in shortage (on-hand < committed) ──
+      // Straight count from v_committed_inventory.is_shortage. No timing dep.
+      let stockouts = null
+      try {
+        const { count } = await supabase.from('v_committed_inventory')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_shortage', true)
+        stockouts = count
+      } catch { stockouts = null }
+
+      // ── First Pass Yield % — rolling 90 days, units-based ──
+      // FPY = 1 − (remakes ÷ units produced). Units produced = total_units on
+      // orders invoiced in the window. Each remake row counts as one defective
+      // unit (remakes is keyed by work order; no per-remake qty captured), so
+      // this reads slightly conservative if a remake covered multiple units.
+      let fpy = null
+      try {
+        const since90 = isoDaysAgo(90)
+        const { count: remakes90 } = await supabase.from('remakes')
+          .select('remake_wo', { count: 'exact', head: true })
+          .gte('remake_date', since90)
+        const { data: prodRows } = await supabase.from('orders')
+          .select('total_units')
+          .eq('status', 'invoiced')
+          .gte('epic_status_date', since90)
+          .limit(10000)
+        const unitsProduced = (prodRows ?? []).reduce((s, r) => s + (Number(r.total_units) || 0), 0)
+        if (unitsProduced > 0) {
+          const pct = Math.max(0, Math.min(100, (1 - ((remakes90 || 0) / unitsProduced)) * 100))
+          fpy = { pct, remakes: remakes90 || 0, units: unitsProduced }
+        }
+      } catch { fpy = null }
+
+      // ── Roller ship performance — from roller_ship_times (ePIC DAYS TO SHIP) ──
+      // Avg business days printed→ship and on-time % (≤5 biz days), roller only,
+      // rolling 90 days by ship date. Negative business_days are bad source rows
+      // (ship date before print) and are excluded.
+      let shipPerf = null
+      try {
+        const { data: stRows } = await supabase.from('roller_ship_times')
+          .select('business_days, shipped_date')
+          .gte('shipped_date', isoDaysAgo(90))
+          .gte('business_days', 0)
+          .limit(10000)
+        if (stRows && stRows.length) {
+          const days = stRows.map(r => Number(r.business_days)).filter(v => !isNaN(v))
+          if (days.length) {
+            const onTime = days.filter(v => v <= 5).length
+            shipPerf = {
+              avgDays: days.reduce((a, b) => a + b, 0) / days.length,
+              onTimePct: (onTime / days.length) * 100,
+              n: days.length,
+            }
+          }
+        }
+      } catch { shipPerf = null }
+
       // Roller sales YTD by lift type (ROLLER SHADE YTD BY PRODUCT report).
       let rollerTypes = []
       try {
@@ -366,7 +423,7 @@ export default function CooCockpit() {
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
         series,
         shippedUnitsWeek, shippedToday,
-        salesYTD, remakeCount, freight, rollerTypes,
+        salesYTD, remakeCount, freight, rollerTypes, stockouts, fpy, shipPerf,
         labor,
         fauxEff: eff(labor.faux),
         rollerEff: eff(labor.roller),
@@ -504,11 +561,31 @@ export default function CooCockpit() {
             <div>
               <SectionLabel>Not yet tracked — instrumentation gaps</SectionLabel>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <GapTile label="Avg Days to Ship" needs="printed & invoiced captured as separate dated events (today they import same-batch)" />
-                <GapTile label="On-Time Delivery %" needs="requested_ship_date populated from ePIC" />
+                <Tile
+                  label="Avg Days to Ship"
+                  value={d.shipPerf == null ? '—' : d.shipPerf.avgDays.toFixed(1)}
+                  sub={d.shipPerf == null ? 'roller · no shipments in window' : `business days · roller · ${num(d.shipPerf.n)} shipped · 90d`}
+                  tone={d.shipPerf == null ? 'normal' : d.shipPerf.avgDays <= 5 ? 'good' : d.shipPerf.avgDays <= 7 ? 'warn' : 'bad'}
+                />
+                <Tile
+                  label="On-Time Delivery %"
+                  value={d.shipPerf == null ? '—' : `${d.shipPerf.onTimePct.toFixed(0)}%`}
+                  sub={d.shipPerf == null ? '≤5 business days · roller' : `≤5 business days · roller · 90d`}
+                  tone={d.shipPerf == null ? 'normal' : d.shipPerf.onTimePct >= 90 ? 'good' : d.shipPerf.onTimePct >= 75 ? 'warn' : 'bad'}
+                />
                 <GapTile label="Capacity Utilization" needs="work-center capacity + hours feed" />
-                <GapTile label="Material Stockouts" needs="on-hand vs. demand stockout events" />
-                <GapTile label="First Pass Yield %" needs="total production count vs. remakes" />
+                <Tile
+                  label="Material Stockouts"
+                  value={d.stockouts == null ? '—' : num(d.stockouts)}
+                  sub="parts short vs. committed"
+                  tone={d.stockouts > 0 ? 'bad' : 'good'}
+                />
+                <Tile
+                  label="First Pass Yield %"
+                  value={d.fpy == null ? '—' : `${d.fpy.pct.toFixed(1)}%`}
+                  sub={d.fpy == null ? 'no production in window' : `${num(d.fpy.remakes)} remakes · ${num(d.fpy.units)} units · 90d`}
+                  tone={d.fpy == null ? 'normal' : d.fpy.pct >= 98 ? 'good' : d.fpy.pct >= 95 ? 'warn' : 'bad'}
+                />
               </div>
             </div>
 
