@@ -5,7 +5,6 @@ import AddToReorderModal from '../../components/AddToReorderModal'
 import FauxUsage from './FauxUsage'
 import RackLocations from './RackLocations'
 import TimberInventory from './TimberInventory'
-import OffsiteFabric from './OffsiteFabric'
 
 // =====================================================================
 // InventoryList — operational page (page-mode = operational)
@@ -161,10 +160,14 @@ function FauxBlindsHub() {
   )
 }
 
-// ── Fabric hub — two tabs: the standard fabric list + Offsite Fabric ─────
+// ── Fabric hub — two tabs: the standard fabric list + Discontinued ───────
+// Discontinued reuses the list body in a read-only mode that reads only the
+// parts flagged discontinued = true. Those lines stay active (still cuttable
+// on the floor, still deduct stock) but are pulled out of the main list and
+// reorder checks since we're using them up, not ordering more.
 const FABRIC_TABS = [
-  ['stock',   'Fabric Stock'],
-  ['offsite', 'Offsite Fabric'],
+  ['stock',        'Fabric Stock'],
+  ['discontinued', 'Discontinued'],
 ]
 
 function FabricHub({ partType }) {
@@ -184,8 +187,8 @@ function FabricHub({ partType }) {
           ))}
         </div>
       </div>
-      {tab === 'stock'   && <InventoryListBody partType={partType} />}
-      {tab === 'offsite' && <OffsiteFabric />}
+      {tab === 'stock'        && <InventoryListBody partType={partType} />}
+      {tab === 'discontinued' && <InventoryListBody partType={partType} mode="discontinued" />}
     </div>
   )
 }
@@ -198,7 +201,8 @@ export default function InventoryList({ partType }) {
   return <InventoryListBody partType={partType} />
 }
 
-function InventoryListBody({ partType }) {
+function InventoryListBody({ partType, mode }) {
+  const discMode = mode === 'discontinued'
   const navigate = useNavigate()
   const [parts, setParts]               = useState([])
   const [loading, setLoading]           = useState(true)
@@ -229,10 +233,13 @@ function InventoryListBody({ partType }) {
 
     if (type !== 'all') query = query.eq('part_type', type)
 
+    // Discontinued tab shows only flagged lines; every other view hides them.
+    query = discMode ? query.eq('discontinued', true) : query.not('discontinued', 'is', true)
+
     const { data } = await query
     setParts(data || [])
 
-    const { data: all } = await supabase.from('parts').select('part_type').eq('active', true)
+    const { data: all } = await supabase.from('parts').select('part_type').eq('active', true).not('discontinued', 'is', true)
     const c = { all: all?.length || 0 }
     all?.forEach(p => { c[p.part_type] = (c[p.part_type] || 0) + 1 })
     setCounts(c)
@@ -328,11 +335,14 @@ function InventoryListBody({ partType }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h1>{locked ? (TYPE_CONFIG[partType]?.label || 'Inventory') : 'Inventory'}</h1>
+          <h1>{discMode ? 'Discontinued Fabrics' : (locked ? (TYPE_CONFIG[partType]?.label || 'Inventory') : 'Inventory')}</h1>
           <p className="text-sm text-ink-muted mt-1">
-            {locked ? (counts[partType] || 0) : (counts.all || 0)} parts tracked
+            {discMode
+              ? `${parts.length} discontinued ${parts.length === 1 ? 'fabric' : 'fabrics'} — using up stock, not reordering`
+              : `${locked ? (counts[partType] || 0) : (counts.all || 0)} parts tracked`}
           </p>
         </div>
+        {!discMode && (
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCreateOpen(true)}
@@ -365,6 +375,7 @@ function InventoryListBody({ partType }) {
             🚢 Containers →
           </button>
         </div>
+        )}
       </div>
 
       {/* Type tabs — hidden when locked to a specific type */}
@@ -565,12 +576,14 @@ function InventoryListBody({ partType }) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={e => { e.stopPropagation(); setReorderPart(p) }}
-                          className="opacity-0 group-hover:opacity-100 font-semibold text-accent-clay bg-accent-clay-soft border border-accent-clay/30 px-2 py-1 rounded-lg hover:bg-accent-clay hover:text-ink-inverse transition-all whitespace-nowrap"
-                        >
-                          + Reorder
-                        </button>
+                        {!discMode && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setReorderPart(p) }}
+                            className="opacity-0 group-hover:opacity-100 font-semibold text-accent-clay bg-accent-clay-soft border border-accent-clay/30 px-2 py-1 rounded-lg hover:bg-accent-clay hover:text-ink-inverse transition-all whitespace-nowrap"
+                          >
+                            + Reorder
+                          </button>
+                        )}
                         <span
                           className="text-ink-muted cursor-pointer"
                           onClick={() => navigate(`/inventory/${p.id}`)}
