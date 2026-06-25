@@ -23,9 +23,6 @@ const C_AMBER = '#d9a441'
 const C_CLAY = '#c2682f'
 const C_RED = '#b3503e'
 const C_ACCENT = '#c2682f' // chart line accent
-// Age ramp for the printed pipeline — fresh → old, shared by both lines
-// (lines are separated into their own sections, so color encodes age only).
-const AGE = ['#6f9e7e', '#d9a441', '#c2682f', '#b3503e'] // 0–3 / 4–7 / 8–14 / 15+
 
 function startOfWeekISO() {
   const d = new Date(); d.setHours(0, 0, 0, 0)
@@ -276,28 +273,6 @@ export default function CooCockpit() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'in_production')
 
-      // Printed pipeline aging — orders that have been printed (Printed +
-      // In Production), split BY PRODUCT LINE and bucketed by days since printed
-      // (epic_status_date). Totals tie to the Printed + In-Production tiles
-      // (Roller 19+10, Faux 164+0). Null print date defaults to fresh so the
-      // per-line totals stay whole.
-      const { data: prodRows } = await supabase.from('orders')
-        .select('epic_status_date, product_line')
-        .in('status', ['printed', 'in_production'])
-      const today0 = new Date(); today0.setHours(0, 0, 0, 0)
-      const mkB = () => ({ b0_3: 0, b4_7: 0, b8_14: 0, b15: 0, total: 0 })
-      const aging = { roller: mkB(), faux: mkB() }
-      ;(prodRows ?? []).forEach((r) => {
-        const line = r.product_line === 'roller' ? 'roller' : (r.product_line === 'faux' ? 'faux' : null)
-        if (!line) return
-        let age = 0
-        if (r.epic_status_date) {
-          const od = new Date(r.epic_status_date + 'T00:00:00')
-          if (!isNaN(od)) age = Math.max(0, Math.floor((today0 - od) / 86400000))
-        }
-        const b = age <= 3 ? 'b0_3' : age <= 7 ? 'b4_7' : age <= 14 ? 'b8_14' : 'b15'
-        aging[line][b]++; aging[line].total++
-      })
 
       // Shipped this week (units) — from daily_shipments (both product lines)
       const { data: shipRows } = await supabase.from('daily_shipments')
@@ -389,7 +364,7 @@ export default function CooCockpit() {
       setD({
         rcvWeek, rcvMonth, backlog,
         holdRows: holdRows ?? [], creditHold, creditOk, printed, inProd,
-        aging, series,
+        series,
         shippedUnitsWeek, shippedToday,
         salesYTD, remakeCount, freight, rollerTypes,
         labor,
@@ -493,101 +468,6 @@ export default function CooCockpit() {
               </div>
             </div>
 
-            {/* ── PRINTED PIPELINE (by line & age) ── */}
-            <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-5">
-              <SectionLabel>Printed pipeline by line &amp; age</SectionLabel>
-              <p className="text-[11px] text-ink-muted -mt-1 mb-1">Orders by days since printed</p>
-
-              {[
-                { name: 'Roller Shades', key: 'roller' },
-                { name: 'Faux Wood Blinds', key: 'faux' },
-              ].map((line, li) => {
-                const a = d.aging[line.key]
-                const buckets = [
-                  { label: '0 – 3 days', v: a.b0_3, c: AGE[0] },
-                  { label: '4 – 7 days', v: a.b4_7, c: AGE[1] },
-                  { label: '8 – 14 days', v: a.b8_14, c: AGE[2] },
-                  { label: '15+ days', v: a.b15, c: AGE[3] },
-                ]
-                return (
-                  <div key={line.key}
-                    className={`flex flex-col lg:flex-row lg:items-center gap-5 py-5 ${li > 0 ? 'border-t border-stone-200/70' : ''}`}>
-                    <Donut size={120} segments={buckets.map((b) => ({ value: b.v, color: b.c }))} />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-display font-bold text-lg text-ink-strong mb-3">{line.name}</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                        {buckets.map((b) => {
-                          const pct = a.total > 0 ? Math.round((b.v / a.total) * 100) : 0
-                          return (
-                            <div key={b.label} className="rounded-lg ring-1 ring-stone-200/70 bg-stone-50/60 px-3 py-2.5">
-                              <div className="flex items-center gap-1.5 mb-1.5">
-                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: b.c }} />
-                                <span className="text-[11px] text-ink-mid">{b.label}</span>
-                              </div>
-                              <p className="font-display font-bold text-2xl text-ink-strong leading-none">{num(b.v)}</p>
-                              <p className="text-[11px] mt-1.5 font-medium" style={{ color: b.c }}>{pct}%</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-stone-100/70 ring-1 ring-stone-200/70 px-4 py-3 text-center shrink-0 self-stretch lg:self-center lg:w-[104px] flex flex-col justify-center">
-                      <p className="text-[10px] uppercase tracking-wider text-ink-muted leading-tight">Total orders</p>
-                      <p className="font-display font-bold text-3xl text-ink-strong mt-1 leading-none">{num(a.total)}</p>
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* shared age legend */}
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 border-t border-stone-200/70">
-                {[
-                  { label: '0 – 3 days', c: AGE[0] },
-                  { label: '4 – 7 days', c: AGE[1] },
-                  { label: '8 – 14 days', c: AGE[2] },
-                  { label: '15+ days', c: AGE[3] },
-                ].map((x) => (
-                  <div key={x.label} className="flex items-center gap-1.5 text-[11px] text-ink-mid">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: x.c }} />
-                    {x.label} since printed
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-ink-muted mt-3">Printed + in-production orders · color = days since printed (fresh → old)</p>
-            </div>
-
-            {/* ── ORDERS ON HOLD ── */}
-            <div className="card !rounded-xl ring-1 ring-stone-200/80 shadow-none p-4">
-                <SectionLabel>Orders needing attention</SectionLabel>
-                {d.holdRows.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-emerald-700 py-6 justify-center">
-                    <Icon name="check" className="w-5 h-5" />
-                    No orders on hold
-                    {d.creditHold > 0 && <span className="text-ink-muted">· {num(d.creditHold)} awaiting credit</span>}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto -mx-1">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="text-[10px] font-bold uppercase tracking-wider text-ink-muted border-b border-stone-200">
-                          <th className="px-2 py-2">Order</th>
-                          <th className="px-2 py-2">Customer</th>
-                          <th className="px-2 py-2">Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {d.holdRows.map((h, i) => (
-                          <tr key={i} className="border-b border-stone-100 last:border-0">
-                            <td className="px-2 py-2 text-[12px] font-mono text-ink-mid">{h.order_number || '—'}</td>
-                            <td className="px-2 py-2 text-[13px] text-ink-strong">{h.customer_name || '—'}</td>
-                            <td className="px-2 py-2 text-[12px] text-ink-muted">{h.hold_reason || h.hold_status || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
 
             {/* ── LABOR ── */}
             <div>
